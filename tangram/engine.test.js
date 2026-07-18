@@ -165,26 +165,38 @@ test('T1: segiempat is an exact gap-free, overlap-free square tiling', () => {
   assert.ok(coveredFrac > 0.99, `coverage ${coveredFrac.toFixed(4)} should be ~1.0 (no gaps)`);
 });
 
-test('kuda is a legal non-overlapping arrangement of the 7 pieces', () => {
-  const sol = S.SOLUTIONS.kuda;
-  assert.strictEqual(sol.length, 7);
-  const counts = {};
-  sol.forEach(s => counts[s.type] = (counts[s.type] || 0) + 1);
-  assert.deepStrictEqual(counts, { largeTri: 2, medTri: 1, smallTri: 2, square: 1, para: 1 });
-  const { overlap } = sampleCoverage(sol, 0.05);
-  assert.strictEqual(overlap, 0, 'kuda pieces must not overlap');
-  assert.strictEqual(E.isSolved(sol, sol, S.PIECE_POLYGONS), true);
-});
+for (const name of ['kuda', 'kucing']) {
+  test(`${name} is a legal non-overlapping arrangement of the 7 pieces`, () => {
+    const sol = S.SOLUTIONS[name];
+    assert.strictEqual(sol.length, 7);
+    const counts = {};
+    sol.forEach(s => counts[s.type] = (counts[s.type] || 0) + 1);
+    assert.deepStrictEqual(counts, { largeTri: 2, medTri: 1, smallTri: 2, square: 1, para: 1 });
+    const { overlap } = sampleCoverage(sol, 0.05);
+    assert.strictEqual(overlap, 0, `${name} pieces must not overlap`);
+    assert.strictEqual(E.isSolved(sol, sol, S.PIECE_POLYGONS), true);
+  });
+}
 
-// A solution being self-consistent (isSolved(sol,sol)) does NOT mean a student
-// can actually reach it: pieces are placed imperfectly and only edge/vertex
-// snapping pulls them into place. This test simulates a student dropping each
-// piece near its spot (deterministic seeded jitter, random order) and letting
-// snapPieceToNeighbors settle it, then asserts the arrangement solves the vast
-// majority of the time. It guards against authoring a shape whose pieces don't
-// actually lock together via the snap system.
+// In the game a dropped piece sticks to its target slot (position + orientation)
+// when released within SLOT_SNAP of it (tangram/ui.js snap()). This test mirrors
+// that: it drops each piece near its slot with deterministic jitter and a random
+// wrong angle, snaps it to the nearest free same-type slot, and asserts the
+// arrangement solves. It guards every solution (incl. rotated-piece shapes) as
+// reliably reachable via the on-board outline.
+const SLOT_SNAP = 1.4;
 function lcg(seed) { let s = seed >>> 0; return () => { s = (Math.imul(s, 1103515245) + 12345) >>> 0; return s / 0xffffffff; }; }
-function reachRate(sol, jitter, trials, rnd) {
+function slotSnap(p, slots, placed) {
+  let best = null, bestD = SLOT_SNAP;
+  for (const slot of slots) {
+    if (slot.type !== p.type) continue;
+    if (placed.some(q => Math.hypot(q.pos.x - slot.pos.x, q.pos.y - slot.pos.y) < 0.25)) continue;
+    const d = Math.hypot(p.pos.x - slot.pos.x, p.pos.y - slot.pos.y);
+    if (d < bestD) { bestD = d; best = slot; }
+  }
+  return best ? { type: p.type, pos: { x: best.pos.x, y: best.pos.y }, angle: best.angle, flipped: best.flipped } : p;
+}
+function slotReach(sol, jitter, trials, rnd) {
   let ok = 0;
   for (let t = 0; t < trials; t++) {
     const order = sol.map((_, i) => i);
@@ -192,19 +204,19 @@ function reachRate(sol, jitter, trials, rnd) {
     const placed = [];
     for (const idx of order) {
       const src = sol[idx];
-      const p = { type: src.type, angle: src.angle, flipped: src.flipped,
+      const p = { type: src.type, angle: src.angle + 90, flipped: !src.flipped, // deliberately wrong orientation
         pos: { x: src.pos.x + (rnd() * 2 - 1) * jitter, y: src.pos.y + (rnd() * 2 - 1) * jitter } };
-      placed.push(E.snapPieceToNeighbors(p, placed, S.PIECE_POLYGONS, E.SNAP_RADIUS, 3));
+      placed.push(slotSnap(p, sol, placed));
     }
     if (E.isSolved(placed, sol, S.PIECE_POLYGONS)) ok++;
   }
   return ok / trials;
 }
 
-test('both solutions are snap-reachable by a student at realistic jitter', () => {
+test('all solutions are reliably reachable by snapping to the target outline', () => {
   const rnd = lcg(0x1a2b3c4d);
-  const sq = reachRate(S.SOLUTIONS.segiempat, 0.15, 80, rnd);
-  const ku = reachRate(S.SOLUTIONS.kuda, 0.15, 80, rnd);
-  assert.ok(sq >= 0.9, `segiempat reachability ${(sq * 100).toFixed(0)}% should be >=90%`);
-  assert.ok(ku >= 0.9, `kuda reachability ${(ku * 100).toFixed(0)}% should be >=90%`);
+  for (const name of ['segiempat', 'kuda', 'kucing']) {
+    const rate = slotReach(S.SOLUTIONS[name], 0.35, 100, rnd);
+    assert.ok(rate >= 0.99, `${name} slot-reachability ${(rate * 100).toFixed(0)}% should be >=99%`);
+  }
 });

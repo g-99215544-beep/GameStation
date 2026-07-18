@@ -36,13 +36,16 @@
     // Target outline drawn ON the board (a fill-guide): the solution silhouette
     // translated to a fixed spot in the lower-middle of the board. Internal
     // piece lines stay hidden; the student drops pieces onto it to fill it.
-    let boardTargetPolys = null;
-    if (solution && boardTarget) {
+    let boardTargetPolys = null, targetSlots = null;
+    if (solution) {
       const worlds = solution.map(s => E.transformPolygon(polygons[s.type], s.pos, s.angle, s.flipped));
       const xs = worlds.flat().map(p => p.x), ys = worlds.flat().map(p => p.y);
       const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
       const ox = canvas.width / PPU / 2 - cx, oy = canvas.height / PPU * 0.56 - cy;
-      boardTargetPolys = worlds.map(poly => poly.map(v => ({ x: v.x + ox, y: v.y + oy })));
+      if (boardTarget) boardTargetPolys = worlds.map(poly => poly.map(v => ({ x: v.x + ox, y: v.y + oy })));
+      // Each target slot = a solution piece translated onto the board. Dropping
+      // a piece near its slot snaps it exactly into place (position + orientation).
+      targetSlots = solution.map(s => ({ type: s.type, angle: s.angle, flipped: s.flipped, pos: { x: s.pos.x + ox, y: s.pos.y + oy } }));
     }
 
     function draw() {
@@ -106,7 +109,23 @@
       return p2u({ x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy });
     };
     const hit = u => { for (let i = pieces.length - 1; i >= 0; i--) if (E.pointInPolygon(u, wp(pieces[i]))) return pieces[i]; return null; };
+    var SLOT_SNAP = 1.4; // how close (in units) a piece must be dropped to stick to its target slot
     function snap(p) {
+      // 1) Stick to the gray target: snap onto the nearest free slot of the same
+      //    type within range (position + orientation), so pieces click into the
+      //    silhouette. This is the "assist" the outline provides.
+      if (targetSlots) {
+        let best = null, bestD = SLOT_SNAP;
+        for (const slot of targetSlots) {
+          if (slot.type !== p.type) continue;
+          const occupied = pieces.some(q => q !== p && Math.hypot(q.pos.x - slot.pos.x, q.pos.y - slot.pos.y) < 0.25);
+          if (occupied) continue;
+          const d = Math.hypot(p.pos.x - slot.pos.x, p.pos.y - slot.pos.y);
+          if (d < bestD) { bestD = d; best = slot; }
+        }
+        if (best) { p.pos = { x: best.pos.x, y: best.pos.y }; p.angle = best.angle; p.flipped = best.flipped; return; }
+      }
+      // 2) Otherwise assemble edge-to-edge against neighbours.
       const others = pieces.filter(q => q !== p);
       const settled = E.snapPieceToNeighbors(p, others, polygons, E.SNAP_RADIUS, 3);
       p.pos = settled.pos; p.angle = settled.angle;

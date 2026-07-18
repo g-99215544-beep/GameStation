@@ -604,15 +604,20 @@ function checkGrid(){
   gameState.correct = correct===total?1:0; gameState.total=1;
   finishGame();
 }
-// Tangram station: every student builds TWO shapes in sequence (square, then
-// horse), one shared timer, after a clear instructions screen. Scoring out of
-// 200: 25 per shape completed, plus a time bonus of (timeLeft/total)*150 only
-// if both are completed. The admin "Uji" path runs this exact same flow.
+// Tangram station: every student builds THREE shapes in sequence (square, then
+// horse, then cat), one shared timer, after a clear instructions screen. Marks
+// out of 200: 40 per shape completed, plus a time bonus of (timeLeft/total)*80
+// once all three are done. The admin "Uji" path runs this exact same flow.
+const TG_STAGE_MARK = 40, TG_TIME_BONUS = 80;
 function startTangram(st){
   const S = window.TangramShapes;
   gameState.type='tangram'; gameState.total=1; gameState.correct=0;
   const totalSec = (st.timeLimitMin||10)*60;
-  const SHAPES = [{id:'segiempat', name:'Segi Empat', guide:true}, {id:'kuda', name:'Kuda', guide:false}];
+  const SHAPES = [
+    {id:'segiempat', name:'Segi Empat', guide:true},
+    {id:'kuda',      name:'Kuda',       guide:false},
+    {id:'kucing',    name:'Kucing',     guide:false},
+  ];
   let idx = 0;    // shape currently being built
   let done = 0;   // shapes completed so far
   const card = document.getElementById('gameCard');
@@ -628,13 +633,12 @@ function startTangram(st){
       <div class="card" style="text-align:left;box-shadow:none;border:2px solid #eee;">
         <h3 style="margin-top:0;">📋 Arahan</h3>
         <ol style="padding-left:20px;line-height:1.7;margin:0;">
-          <li>Anda perlu bina <b>2 bentuk</b>: mula-mula <b>Segi Empat</b>, kemudian <b>Kuda</b>.</li>
-          <li>Bayang bentuk ada dalam kotak — <b>seret keping</b> ke dalam bayang untuk memenuhinya.</li>
-          <li><b>Ketik</b> keping untuk pusing 45°. Keping akan melekat pada tepi keping lain.</li>
-          <li>Bentuk siap secara <b>automatik</b> apabila susunan betul.</li>
+          <li>Anda perlu bina <b>3 bentuk</b> mengikut urutan: <b>Segi Empat</b> → <b>Kuda</b> → <b>Kucing</b>.</li>
+          <li>Bayang bentuk (kelabu) ada dalam kotak — <b>seret keping</b> ke dalam bayang; keping akan <b>melekat</b> ke tempatnya.</li>
+          <li><b>Ketik</b> keping untuk pusing 45°. Bentuk siap secara <b>automatik</b> apabila lengkap.</li>
         </ol>
         <div class="msg ok" style="font-weight:700;margin-top:12px;">
-          🏆 Markah penuh <b>200</b> · Siap 1 bentuk = 25 · Siap 2 bentuk = 50 + bonus masa (makin cepat, makin tinggi) · Gagal dua-dua = 0.<br>
+          🏆 Markah penuh <b>200</b> · Setiap bentuk siap = <b>${TG_STAGE_MARK}</b> markah · Siap semua 3 = bonus masa sehingga <b>${TG_TIME_BONUS}</b> (makin cepat, makin tinggi).<br>
           ⏱️ Masa: <b>${Math.round(totalSec/60)} minit</b> — bermula bila anda tekan Mula.
         </div>
       </div>
@@ -654,7 +658,7 @@ function startTangram(st){
     const shp = SHAPES[idx];
     card.innerHTML = testBanner() + `
       <h2>🧩 ${st.name}</h2>
-      <div style="font-weight:800;color:var(--gold);background:var(--navy);display:inline-block;padding:5px 14px;border-radius:6px;">Bentuk ${idx+1}/2: ${shp.name}</div>
+      <div style="font-weight:800;color:var(--gold);background:var(--navy);display:inline-block;padding:5px 14px;border-radius:6px;">Bentuk ${idx+1}/3: ${shp.name} · Markah: ${done*TG_STAGE_MARK}</div>
       <canvas id="tgBoard" width="360" height="460" style="background:#fff;border:3px solid #d4a94e;border-radius:12px;touch-action:none;max-width:100%;display:block;margin:10px auto;"></canvas>
       <p style="color:#555;font-size:13px;">Seret keping ke dalam bayang. Ketik keping = putar.</p>
       <button id="tgFlip" class="secondary" style="display:none;" onclick="window._tgCtrl && window._tgCtrl.flipSelected()">↔ Balik</button>`;
@@ -670,9 +674,9 @@ function startTangram(st){
     if(idx < SHAPES.length){
       card.innerHTML = testBanner() + `<div class="finalbox">
         <div style="font-size:56px;">✅</div>
-        <h2 style="color:var(--green);">Bentuk ${done} Selesai!</h2>
-        <p>Seterusnya: bina <b>${SHAPES[idx].name}</b>.</p>
-        <p style="color:#888;font-size:13px;">⏱️ Masa masih berjalan — teruskan cepat!</p>
+        <h2 style="color:var(--green);">Bentuk ${done}/3 Selesai! <span style="color:var(--gold);">+${TG_STAGE_MARK} markah</span></h2>
+        <p>Markah setakat ini: <b>${done*TG_STAGE_MARK}</b>. Seterusnya: bina <b>${SHAPES[idx].name}</b>.</p>
+        <p style="color:#888;font-size:13px;">⏱️ Masa masih berjalan — teruskan cepat untuk bonus masa!</p>
         <button class="big" onclick="window._tgNext()">➡️ Bina ${SHAPES[idx].name}</button>
       </div>`;
     } else {
@@ -684,10 +688,11 @@ function startTangram(st){
     if(window._gameOver) return; window._gameOver=true;
     if(timerInterval) clearInterval(timerInterval);
     const remain = Math.max(0, timeLeftSec);
-    const score = done*25 + (done>=2 ? Math.round((remain/totalSec)*150) : 0);
+    const allDone = done >= SHAPES.length;
+    const score = done*TG_STAGE_MARK + (allDone ? Math.round((remain/totalSec)*TG_TIME_BONUS) : 0);
     const timeTakenSec = Math.round((Date.now()-window._startedAt)/1000);
-    if(window._testMode){ showTangramTestResult(done, score, timeTakenSec); return; }
-    submitCompletion(done>=2, score, timeTakenSec);
+    if(window._testMode){ showTangramTestResult(done, SHAPES.length, score, timeTakenSec); return; }
+    submitCompletion(allDone, score, timeTakenSec);
   }
 
   window._tgStart = startActivity;
@@ -695,10 +700,10 @@ function startTangram(st){
   window._tgTimeout = complete;   // invoked by tick() when the timer hits 0
   showInstructions();
 }
-function showTangramTestResult(done, score, timeTakenSec){
+function showTangramTestResult(done, total, score, timeTakenSec){
   show('view-result');
   document.getElementById('timer').style.display='none';
-  const msg = done>=2 ? 'Kedua-dua bentuk siap! 🎉' : done===1 ? '1 bentuk siap, 1 belum' : 'Tiada bentuk siap';
+  const msg = done>=total ? `Semua ${total} bentuk siap! 🎉` : done>0 ? `${done}/${total} bentuk siap` : 'Tiada bentuk siap';
   document.getElementById('resultCard').innerHTML=`<div class="finalbox">
     <div style="font-size:50px;">🧪</div>
     <h2>Ujian Selesai</h2>
