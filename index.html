@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Station Matematik</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{--navy:#1e2a4a;--gold:#d4a94e;--cream:#faf6ee;--green:#3a7d5c;--red:#c0453a;}
+  *{box-sizing:border-box;}
+  body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--cream);margin:0;padding:0;color:var(--navy);min-height:100vh;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .topbar{background:var(--navy);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;}
+  .topbar h1{margin:0;font-size:18px;color:var(--gold);}
+  #timer{font-size:22px;font-weight:800;background:#fff2;padding:4px 14px;border-radius:10px;}
+  #timer.warn{color:#ffb3b3;animation:pulse 1s infinite;}
+  @keyframes pulse{50%{opacity:.4;}}
+  .wrap{max-width:640px;margin:0 auto;padding:20px;}
+  .card{background:#fff;border-radius:14px;padding:22px;box-shadow:0 4px 14px rgba(0,0,0,.08);margin-bottom:16px;}
+  select,input,textarea{width:100%;padding:12px;border:2px solid #ddd;border-radius:10px;font-size:16px;margin-top:6px;}
+  label{font-weight:700;font-size:14px;color:#555;display:block;margin-top:10px;}
+  button{background:var(--navy);color:#fff;border:none;padding:12px 20px;border-radius:10px;font-weight:700;font-size:15px;cursor:pointer;margin-top:14px;margin-right:8px;}
+  button:hover{background:var(--gold);color:var(--navy);}
+  button.secondary{background:var(--green);}
+  button.big{width:100%;font-size:18px;padding:16px;}
+  .msg{padding:12px;border-radius:10px;margin-top:12px;font-weight:600;}
+  .err{background:#fbe4e2;color:var(--red);}
+  .ok{background:#dff5e5;color:var(--green);}
+  .role-btn{display:block;width:100%;padding:20px;font-size:18px;margin-bottom:10px;background:#fff;color:var(--navy);border:3px solid var(--navy);}
+  .role-btn:hover{background:var(--navy);color:#fff;}
+  .clue{background:var(--navy);color:var(--gold);padding:18px;border-radius:12px;font-size:19px;font-weight:700;margin-top:12px;text-align:center;}
+  #reader{width:100%;border-radius:14px;overflow:hidden;border:4px solid var(--gold);margin-top:10px;}
+  .keyrow{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:16px 0;}
+  .key{width:46px;height:46px;border-radius:10px;background:var(--gold);color:var(--navy);font-size:20px;display:flex;align-items:center;justify-content:center;font-weight:800;}
+  .key.empty{background:#eee;color:#bbb;}
+  .qitem{border:2px solid #eee;border-radius:10px;padding:14px;margin-bottom:10px;}
+  .chip{display:inline-block;background:var(--gold);color:var(--navy);font-weight:800;padding:10px 16px;border-radius:8px;margin:4px;cursor:pointer;font-size:18px;}
+  .match-btn{display:block;width:100%;text-align:left;background:#f5f2e8;border:2px solid #ddd;margin-top:6px;color:var(--navy);}
+  .match-btn.selected{border-color:var(--gold);background:#fdf3d8;}
+  .match-btn.matched{border-color:var(--green);background:#e4f7ea;opacity:.6;pointer-events:none;}
+  .grid3{display:grid;gap:8px;justify-content:center;margin:16px 0;}
+  .grid3 input{text-align:center;font-size:18px;padding:8px;}
+  .finalbox{text-align:center;padding:20px;}
+  .chest{font-size:80px;margin:20px 0;cursor:pointer;transition:transform .2s;}
+  .chest:hover{transform:scale(1.1);}
+  .station-block{border:2px solid #eee;border-radius:10px;padding:14px;margin-bottom:12px;}
+  .station-block h3{margin:0 0 8px;color:var(--gold);background:var(--navy);display:inline-block;padding:4px 12px;border-radius:6px;}
+  table{width:100%;border-collapse:collapse;margin-top:10px;}
+  th,td{padding:8px;text-align:left;border-bottom:1px solid #eee;font-size:13px;}
+  th{background:var(--gold);}
+  .badge{padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700;}
+  .badge.done{background:#dff5e5;color:var(--green);}
+  .badge.idle{background:#fdf3d8;color:#b8860b;}
+  .qr-print{display:inline-block;text-align:center;border:2px dashed #999;padding:14px;margin:6px;border-radius:10px;}
+  .linkbtn{background:none;border:none;color:var(--navy);text-decoration:underline;font-weight:600;padding:0;margin:0;cursor:pointer;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1 id="topTitle">🎯 Game Station Matematik</h1>
+  <div id="timer" style="display:none;">--:--</div>
+</div>
+<div class="wrap">
+
+  <!-- LOGIN / ROLE SELECT -->
+  <div class="view" id="view-login">
+    <div class="card">
+      <h2>Log Masuk</h2>
+      <button class="role-btn" onclick="showAdminLogin()">⚙️ Admin / Guru</button>
+      <label>Atau pilih Kumpulan</label>
+      <select id="groupLoginSelect"></select>
+      <label>Password Kumpulan</label>
+      <input id="groupLoginPass" placeholder="Masukkan password kumpulan anda">
+      <button class="big" onclick="loginAsGroup()">Masuk sebagai Kumpulan</button>
+      <div id="groupLoginMsg"></div>
+    </div>
+    <div class="card" id="adminLoginCard" style="display:none;">
+      <label>PIN Admin</label>
+      <input id="adminPin" type="password" placeholder="Masukkan PIN">
+      <button onclick="loginAsAdmin()">Masuk Admin</button>
+      <div id="adminLoginMsg"></div>
+    </div>
+  </div>
+
+  <!-- ADMIN VIEW -->
+  <div class="view" id="view-admin">
+    <div class="card">
+      <button class="linkbtn" onclick="logout()">← Log keluar</button>
+      <h2>⚙️ Setup Stesen (6)</h2>
+      <div id="stationsArea"></div>
+      <button class="secondary" onclick="pushConfig()">🚀 Push Config & Reset Progress</button>
+      <button onclick="generateQRs()">🖨️ Generate QR Tersembunyi</button>
+      <button onclick="showLoginPasswords()">🔑 Papar Password Login Kumpulan</button>
+      <div id="pushStatus"></div>
+      <div id="loginPassArea"></div>
+    </div>
+    <div class="card" id="printArea">
+      <h3>QR Tersembunyi — Print & Sorok di Lokasi</h3>
+      <div id="qrOutput"></div>
+    </div>
+    <div class="card">
+      <h2>📊 Dashboard Live (14 Kumpulan)</h2>
+      <table id="dashTable"><thead><tr><th>Kump</th><th>Status</th><th>Stesen</th><th>Selesai</th><th>Kunci</th><th>Markah</th></tr></thead><tbody id="dashRows"></tbody></table>
+    </div>
+  </div>
+
+  <!-- GROUP: CLUE / SCAN VIEW -->
+  <div class="view" id="view-clue">
+    <div class="card">
+      <button class="linkbtn" onclick="logout()">← Log keluar</button>
+      <h2 id="clueGroupName"></h2>
+      <div class="keyrow" id="keyrowMini"></div>
+      <div class="clue" id="clueText"></div>
+      <button class="big" onclick="openScanner()">📷 Scan QR Tersembunyi</button>
+      <div id="reader" style="display:none;"></div>
+      <div id="scanResultArea" style="display:none;">
+        <label>Password (semak & sahkan)</label>
+        <input id="passInput">
+        <button class="big secondary" onclick="checkPassword()">✅ Sahkan Password</button>
+      </div>
+      <div id="passMsg"></div>
+    </div>
+  </div>
+
+  <!-- GROUP: GAME VIEW -->
+  <div class="view" id="view-game">
+    <div class="card" id="gameCard"></div>
+  </div>
+
+  <!-- GROUP: STATION RESULT -->
+  <div class="view" id="view-result">
+    <div class="card" id="resultCard"></div>
+  </div>
+
+  <!-- GROUP: TREASURE CHEST FINALE -->
+  <div class="view" id="view-chest">
+    <div class="card finalbox">
+      <h2>🎉 Semua 6 Kunci Dikumpul!</h2>
+      <div class="keyrow" id="chestKeyRow"></div>
+      <div class="chest" id="chestIcon" onclick="openChest()">🔒📦</div>
+      <p>Ketik peti untuk buka!</p>
+      <div id="chestResult"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const GAME_TYPES = [
+  {id:'quiz', name:'Quiz Pantas'},
+  {id:'susun_nombor', name:'Susun Nombor'},
+  {id:'padan', name:'Padan Jawapan'},
+  {id:'pilihan', name:'Pilihan Bergambar'},
+  {id:'grid_nombor', name:'Grid Nombor'},
+  {id:'puzzle_susun', name:'Puzzle Cantum Nombor'}
+];
+const NUM_GROUPS = 14;
+const ADMIN_PIN = '1234';
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBSWbXoKgQt1E8xvJa9zaKyw3e9V_EMxAE",
+  authDomain: "sk-sri-aman-database.firebaseapp.com",
+  databaseURL: "https://sk-sri-aman-database-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "sk-sri-aman-database",
+  storageBucket: "sk-sri-aman-database.firebasestorage.app",
+  messagingSenderId: "810640165554",
+  appId: "1:810640165554:web:b3ad2dc6f1583ec2a657ab"
+};
+const PATH = 'gamestation2026';
+let db, stations, groups, currentGroupId, progress={}, timerInterval, timeLeftSec, timeUp=false, gameState={}, html5QrCode;
+
+function show(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ---------- FIREBASE SETUP (auto-connect, hardcoded) ----------
+function connectFirebase(){
+  try{
+    if(!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    initApp();
+  }catch(e){
+    document.body.innerHTML = '<div class="wrap"><div class="card"><h2>❌ Ralat Sambungan Firebase</h2><p>'+e.message+'</p></div></div>';
+  }
+}
+
+function initApp(){
+  const sel = document.getElementById('groupLoginSelect');
+  sel.innerHTML='';
+  for(let i=1;i<=NUM_GROUPS;i++) sel.innerHTML += `<option value="${i}">Kumpulan ${i}</option>`;
+  loadConfigCache().then(()=>tryRestoreSession());
+}
+
+const SESSION_DURATION_MS = 12*60*60*1000; // 12 hours
+
+function saveSession(role, gid){
+  localStorage.setItem('gs_session', JSON.stringify({role, groupId:gid||null, ts:Date.now()}));
+}
+function clearSession(){
+  localStorage.removeItem('gs_session');
+}
+function tryRestoreSession(){
+  const raw = localStorage.getItem('gs_session');
+  if(!raw){ show('view-login'); return; }
+  let session;
+  try{ session = JSON.parse(raw); }catch(e){ show('view-login'); return; }
+  const age = Date.now() - (session.ts||0);
+  if(age > SESSION_DURATION_MS){
+    clearSession();
+    show('view-login');
+    return;
+  }
+  if(session.role==='admin'){
+    show('view-admin');
+    document.getElementById('topTitle').innerText='⚙️ Admin Panel';
+    watchDashboard();
+  } else if(session.role==='group' && session.groupId && groups[session.groupId]){
+    currentGroupId = session.groupId;
+    document.getElementById('topTitle').innerText='Kumpulan '+currentGroupId;
+    loadGroupProgress();
+  } else {
+    clearSession();
+    show('view-login');
+  }
+}
+
+function loadConfigCache(){
+  return db.ref(PATH+'/config').once('value').then(snap=>{
+    const cfg = snap.val()||{};
+    stations = cfg.stations || {};
+    groups = cfg.groups || {};
+    buildStationsUI(stations);
+  });
+}
+
+// ---------- LOGIN ----------
+function showAdminLogin(){ document.getElementById('adminLoginCard').style.display='block'; }
+function loginAsAdmin(){
+  if(document.getElementById('adminPin').value === ADMIN_PIN){
+    saveSession('admin');
+    show('view-admin');
+    document.getElementById('topTitle').innerText='⚙️ Admin Panel';
+    watchDashboard();
+  } else {
+    document.getElementById('adminLoginMsg').innerHTML='<div class="msg err">PIN salah</div>';
+  }
+}
+function loginAsGroup(){
+  const gid = document.getElementById('groupLoginSelect').value;
+  const inputPass = document.getElementById('groupLoginPass').value.trim().toUpperCase();
+  const g = groups[gid];
+  const msg = document.getElementById('groupLoginMsg');
+  if(!g || !g.loginPassword){
+    msg.innerHTML='<div class="msg err">Config kumpulan belum di-push oleh admin.</div>';
+    return;
+  }
+  if(inputPass !== String(g.loginPassword).toUpperCase()){
+    msg.innerHTML='<div class="msg err">❌ Password kumpulan salah.</div>';
+    return;
+  }
+  msg.innerHTML='';
+  currentGroupId = gid;
+  saveSession('group', gid);
+  document.getElementById('topTitle').innerText='Kumpulan '+currentGroupId;
+  loadGroupProgress();
+}
+function logout(){
+  if(timerInterval) clearInterval(timerInterval);
+  if(html5QrCode){ html5QrCode.stop().catch(()=>{}); }
+  clearSession();
+  document.getElementById('topTitle').innerText='🎯 Game Station Matematik';
+  document.getElementById('timer').style.display='none';
+  show('view-login');
+}
+
+// ---------- ADMIN: STATION CONFIG ----------
+function buildStationsUI(existing){
+  const area = document.getElementById('stationsArea');
+  area.innerHTML='';
+  for(let i=1;i<=6;i++){
+    const s = existing[i] || {};
+    const opts = GAME_TYPES.map(g=>`<option value="${g.id}" ${s.gameType===g.id?'selected':''}>${g.name}</option>`).join('');
+    area.innerHTML += `
+    <div class="station-block">
+      <h3>Stesen ${i}</h3>
+      <label>Nama Stesen</label><input id="st_name_${i}" value="${s.name||''}" placeholder="cth: Stesen Sifir">
+      <label>Lokasi (teks clue)</label><input id="st_loc_${i}" value="${s.location||''}" placeholder="cth: Tempat membaca buku">
+      <label>Password QR (sama untuk semua kumpulan)</label><input id="st_pass_${i}" value="${s.password||('PASS'+i+Math.floor(Math.random()*900+100))}">
+      <label>Jenis Game</label><select id="st_gametype_${i}">${opts}</select>
+      <label>Data Game (JSON)</label><input id="st_gamedata_${i}" value='${(s.gameDataRaw||"{}").replace(/'/g,"&apos;")}'>
+    </div>`;
+  }
+}
+function collectStations(){
+  const out={};
+  for(let i=1;i<=6;i++){
+    out[i]={id:i,
+      name:document.getElementById('st_name_'+i).value,
+      location:document.getElementById('st_loc_'+i).value,
+      password:document.getElementById('st_pass_'+i).value,
+      timeLimitMin:10,
+      gameType:document.getElementById('st_gametype_'+i).value,
+      gameDataRaw:document.getElementById('st_gamedata_'+i).value};
+  }
+  return out;
+}
+// rotation: group i starts at station ((i-1)%6)+1, so groups 1,7,13 share start=1; 2,8,14 share start=2 etc (2 groups per station approx, since 14 groups /6)
+function rotationFor(startStation){
+  const order=[];
+  for(let k=0;k<6;k++) order.push(((startStation-1+k)%6)+1);
+  return order;
+}
+function randomLoginPassword(gid){
+  const rand = Math.floor(1000+Math.random()*9000);
+  return 'K'+gid+'-'+rand;
+}
+function collectGroups(){
+  const out={};
+  for(let i=1;i<=NUM_GROUPS;i++){
+    const start = ((i-1)%6)+1;
+    // preserve existing login password if already assigned, so re-pushing config mid-event doesn't lock groups out
+    const existingPass = (groups && groups[i] && groups[i].loginPassword) ? groups[i].loginPassword : randomLoginPassword(i);
+    out[i]={id:i, name:'Kumpulan '+i, order:rotationFor(start), loginPassword:existingPass};
+  }
+  return out;
+}
+function pushConfig(){
+  const st = collectStations();
+  const gr = collectGroups();
+  const prog={};
+  Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
+  db.ref(PATH+'/config/stations').set(st);
+  db.ref(PATH+'/config/groups').set(gr);
+  db.ref(PATH+'/progress').set(prog).then(()=>{
+    stations=st; groups=gr;
+    let listHtml = '<h4>Password Login Kumpulan (beri kepada setiap kumpulan)</h4><table><tr><th>Kumpulan</th><th>Password</th></tr>';
+    Object.values(gr).forEach(g=>{ listHtml += `<tr><td>${g.name}</td><td><b>${g.loginPassword}</b></td></tr>`; });
+    listHtml += '</table>';
+    document.getElementById('pushStatus').innerHTML='<div class="msg ok">✅ Config di-push. 14 kumpulan sedia.</div>'+listHtml;
+  });
+}
+function showLoginPasswords(){
+  if(!groups || !Object.keys(groups).length){ alert('Tiada config kumpulan lagi. Push config dulu.'); return; }
+  let html = '<h4>Password Login Kumpulan</h4><table><tr><th>Kumpulan</th><th>Password</th></tr>';
+  Object.values(groups).forEach(g=>{ html += `<tr><td>${g.name}</td><td><b>${g.loginPassword||'-'}</b></td></tr>`; });
+  html += '</table>';
+  document.getElementById('loginPassArea').innerHTML = html;
+}
+function generateQRs(){
+  const st = collectStations();
+  stations = st;
+  const out = document.getElementById('qrOutput');
+  out.innerHTML='';
+  Object.values(st).forEach(s=>{
+    const div=document.createElement('div');
+    div.className='qr-print';
+    div.innerHTML=`<div style="font-weight:700;">Stesen ${s.id}: ${s.name}</div><div id="qr_${s.id}"></div><div style="font-size:11px;color:#888;">Sorok di: ${s.location}</div>`;
+    out.appendChild(div);
+    setTimeout(()=>new QRCode(document.getElementById('qr_'+s.id), {text:s.password, width:130, height:130}), 0);
+  });
+}
+function watchDashboard(){
+  db.ref(PATH+'/progress').on('value', snap=>{
+    const prog = snap.val()||{};
+    const rows = document.getElementById('dashRows');
+    rows.innerHTML='';
+    Object.keys(groups).forEach(gid=>{
+      const g = groups[gid];
+      const p = prog[gid]||{currentIndex:0,keys:[],totalScore:0,status:'idle'};
+      const curSt = p.status==='won' ? '🏆 Menang' : p.status==='done' ? '📦 Peti Harta' : (stations[g.order[p.currentIndex]]?.name || '-');
+      rows.innerHTML += `<tr><td>${gid}</td><td><span class="badge ${p.status==='idle'?'idle':'done'}">${p.status}</span></td><td>${curSt}</td><td>${p.currentIndex||0}/6</td><td>${'🔑'.repeat((p.keys||[]).length)}</td><td>${p.totalScore||0}</td></tr>`;
+    });
+  });
+}
+
+// ---------- GROUP FLOW ----------
+function loadGroupProgress(){
+  db.ref(PATH+'/progress/'+currentGroupId).once('value').then(snap=>{
+    const p = snap.val() || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
+    progress = p;
+    if(p.status==='won'){ showWon(); return; }
+    if(p.currentIndex>=6){ showChest(); return; }
+    showClueScreen();
+  });
+}
+function showClueScreen(){
+  show('view-clue');
+  document.getElementById('clueGroupName').innerText = 'Kumpulan '+currentGroupId;
+  renderKeyrowMini();
+  const g = groups[currentGroupId];
+  const stId = g.order[progress.currentIndex];
+  const st = stations[stId];
+  document.getElementById('clueText').innerText = '📍 Pergi cari QR di: '+ st.location;
+  document.getElementById('reader').style.display='none';
+  document.getElementById('scanResultArea').style.display='none';
+  document.getElementById('passMsg').innerHTML='';
+}
+function renderKeyrowMini(){
+  const row = document.getElementById('keyrowMini');
+  row.innerHTML='';
+  const keys = progress.keys||[];
+  for(let i=1;i<=6;i++){
+    row.innerHTML += `<div class="key ${keys.includes(i)?'':'empty'}">${keys.includes(i)?'🔑':'▫️'}</div>`;
+  }
+}
+function openScanner(){
+  document.getElementById('reader').style.display='block';
+  html5QrCode = new Html5Qrcode("reader");
+  Html5Qrcode.getCameras().then(cams=>{
+    const camId = cams.length ? (cams.find(c=>/back|rear/i.test(c.label))||cams[cams.length-1]).id : null;
+    html5QrCode.start(camId||{facingMode:"environment"}, {fps:10, qrbox:220}, onScan);
+  }).catch(()=>{ html5QrCode.start({facingMode:"environment"},{fps:10,qrbox:220}, onScan); });
+}
+function onScan(decodedText){
+  document.getElementById('passInput').value = decodedText;
+  document.getElementById('scanResultArea').style.display='block';
+  html5QrCode.stop().catch(()=>{});
+  document.getElementById('reader').style.display='none';
+  if(navigator.vibrate) navigator.vibrate(200);
+}
+function checkPassword(){
+  const g = groups[currentGroupId];
+  const stId = g.order[progress.currentIndex];
+  const st = stations[stId];
+  const input = document.getElementById('passInput').value.trim();
+  const msg = document.getElementById('passMsg');
+  if(input.toUpperCase() === String(st.password).toUpperCase()){
+    msg.innerHTML='<div class="msg ok">✅ Password betul! Game bermula...</div>';
+    setTimeout(()=>startGame(stId), 600);
+  } else {
+    msg.innerHTML='<div class="msg err">❌ Password salah. Pastikan QR yang discan betul untuk lokasi ini.</div>';
+  }
+}
+
+// ---------- GAME ----------
+function startGame(stId){
+  show('view-game');
+  const st = stations[stId];
+  timeUp=false;
+  timeLeftSec = (st.timeLimitMin||10)*60;
+  window._startedAt = Date.now();
+  window._curStId = stId;
+  document.getElementById('timer').style.display='block';
+  timerInterval = setInterval(tick,1000);
+  renderGame(st);
+}
+function tick(){
+  timeLeftSec--;
+  const m=Math.floor(timeLeftSec/60), s=timeLeftSec%60;
+  const t=document.getElementById('timer');
+  t.innerText=`${m}:${String(s).padStart(2,'0')}`;
+  if(timeLeftSec<=30) t.classList.add('warn');
+  if(timeLeftSec<=0){ clearInterval(timerInterval); timeUp=true; t.innerText='HABIS'; }
+}
+function renderGame(st){
+  const card = document.getElementById('gameCard');
+  let data={}; try{ data=JSON.parse(st.gameDataRaw||'{}'); }catch(e){ data={}; }
+  gameState={type:st.gameType, correct:0, total:0, matched:0, selectedQ:null};
+
+  if(st.gameType==='quiz' || st.gameType==='pilihan'){
+    const qs = data.questions || [{q:'5 + 3',a:'8',choices:['7','8','9']}];
+    gameState.total=qs.length; gameState.answers=new Array(qs.length).fill(null); gameState.qs=qs;
+    let html=`<h2>${st.name}</h2>`;
+    qs.forEach((q,i)=>{
+      if(st.gameType==='pilihan' && q.choices){
+        html+=`<div class="qitem"><b>${i+1}. ${q.q}</b><div id="choices_${i}">`;
+        q.choices.forEach(c=>{ html+=`<button onclick="pickChoice(${i},'${c}')" style="margin:4px;">${c}</button>`; });
+        html+=`</div></div>`;
+      } else {
+        html+=`<div class="qitem"><b>${i+1}. ${q.q}</b><input id="ans_${i}" placeholder="Jawapan"></div>`;
+      }
+    });
+    html+=`<button class="big" onclick="finishGame()">Hantar Semua Jawapan</button>`;
+    card.innerHTML=html;
+  }
+  else if(st.gameType==='susun_nombor'){
+    const nums = data.numbers || [5,2,8,1,9,3];
+    gameState.correctOrder=[...nums].sort((a,b)=>a-b); gameState.total=1; gameState.picked=[];
+    let html=`<h2>${st.name}</h2><p>Klik nombor mengikut turutan menaik.</p><div id="chipArea">`;
+    nums.forEach(n=>{ html+=`<span class="chip" onclick="pickNum(this,${n})">${n}</span>`; });
+    html+=`</div><div style="margin-top:14px;">Jawapan: <span id="orderResult" style="font-weight:800;"></span></div><button class="big" onclick="checkOrder()">Semak Turutan</button>`;
+    card.innerHTML=html;
+  }
+  else if(st.gameType==='padan' || st.gameType==='puzzle_susun'){
+    const pairs = data.pairs || [{q:'5+5',a:'10'},{q:'3x3',a:'9'},{q:'10-4',a:'6'}];
+    gameState.pairs=pairs; gameState.total=pairs.length;
+    const answers=[...pairs.map(p=>p.a)].sort(()=>Math.random()-.5);
+    let html=`<h2>${st.name}</h2><p>Padankan soalan dengan jawapan.</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div><b>Soalan</b>`;
+    pairs.forEach((p,i)=>{ html+=`<button class="match-btn" onclick="selectQ(${i})">${p.q}</button>`; });
+    html+=`</div><div><b>Jawapan</b>`;
+    answers.forEach(a=>{ html+=`<button class="match-btn" onclick="selectA('${a}',this)">${a}</button>`; });
+    html+=`</div></div><div id="matchMsg"></div>`;
+    card.innerHTML=html;
+  }
+  else if(st.gameType==='grid_nombor'){
+    const size=data.size||3;
+    const grid=data.grid || [[1,2,null],[null,5,6],[7,null,9]];
+    gameState.grid=grid; gameState.total=1; gameState.solution=data.solution||grid;
+    let html=`<h2>${st.name}</h2><p>Isi ruang kosong.</p><div class="grid3" style="grid-template-columns:repeat(${size},60px);">`;
+    grid.forEach((row,r)=>row.forEach((cell,c)=>{
+      html += cell===null ? `<input id="cell_${r}_${c}">` : `<div class="key" style="background:#eee;color:#333;">${cell}</div>`;
+    }));
+    html+=`</div><button class="big" onclick="checkGrid()">Semak Grid</button>`;
+    card.innerHTML=html;
+  }
+  else {
+    card.innerHTML=`<h2>${st.name}</h2><p>Game belum dikonfigurasi.</p><button class="big" onclick="finishGame(true)">Selesai</button>`;
+  }
+}
+function pickChoice(i,c){
+  gameState.answers[i]=c;
+  document.querySelectorAll(`#choices_${i} button`).forEach(b=>b.style.background=b.innerText===c?'#d4a94e':'');
+}
+function pickNum(el,n){ gameState.picked.push(n); el.style.opacity=.3; el.onclick=null; document.getElementById('orderResult').innerText=gameState.picked.join(', '); }
+function checkOrder(){ gameState.correct = JSON.stringify(gameState.picked)===JSON.stringify(gameState.correctOrder)?1:0; finishGame(); }
+function selectQ(i){ gameState.selectedQ=i; document.querySelectorAll('.match-btn').forEach((b,idx)=>{ if(idx<gameState.pairs.length) b.classList.toggle('selected', idx===i); }); }
+function selectA(a,el){
+  if(gameState.selectedQ===null) return;
+  const p = gameState.pairs[gameState.selectedQ];
+  if(String(p.a)===String(a)){
+    gameState.matched++;
+    document.querySelectorAll('.match-btn')[gameState.selectedQ].classList.add('matched');
+    el.classList.add('matched');
+    if(gameState.matched===gameState.total){
+      document.getElementById('matchMsg').innerHTML='<div class="msg ok">Semua padan!</div>';
+      gameState.correct=gameState.total;
+      setTimeout(()=>finishGame(),500);
+    }
+  } else { el.style.background='#fbe4e2'; setTimeout(()=>el.style.background='',400); }
+  gameState.selectedQ=null;
+}
+function checkGrid(){
+  let correct=0,total=0;
+  gameState.grid.forEach((row,r)=>row.forEach((cell,c)=>{
+    if(cell===null){ total++; const val=document.getElementById(`cell_${r}_${c}`).value.trim(); if(Number(val)===Number(gameState.solution[r][c])) correct++; }
+  }));
+  gameState.correct = correct===total?1:0; gameState.total=1;
+  finishGame();
+}
+function finishGame(forceOk){
+  if(gameState.type==='quiz'||gameState.type==='pilihan'){
+    let correct=0;
+    gameState.qs.forEach((q,i)=>{
+      const given = gameState.type==='pilihan'? gameState.answers[i] : (document.getElementById('ans_'+i)?.value||'').trim();
+      if(String(given).toLowerCase()===String(q.a).toLowerCase()) correct++;
+    });
+    gameState.correct=correct;
+  }
+  if(forceOk){ gameState.correct=gameState.total=1; }
+  clearInterval(timerInterval);
+  const onTime = !timeUp;
+  const timeTakenSec = Math.round((Date.now()-window._startedAt)/1000);
+  const pct = gameState.total? gameState.correct/gameState.total : 1;
+  let score = Math.round(pct*100);
+  if(!onTime) score -= 20;
+  if(score<0) score=0;
+  submitCompletion(onTime, score, timeTakenSec);
+}
+function submitCompletion(onTime, score, timeTakenSec){
+  const stId = window._curStId;
+  const progRef = db.ref(PATH+'/progress/'+currentGroupId);
+  progRef.once('value').then(snap=>{
+    const p = snap.val();
+    const newIndex = p.currentIndex+1;
+    const keys = p.keys||[]; keys.push(stId);
+    const completedStations = p.completedStations||{};
+    completedStations[stId]={score, onTime, timeTakenSec, ts:Date.now()};
+    const totalScore=(p.totalScore||0)+score;
+    const done = newIndex>=6;
+    progRef.update({currentIndex:newIndex, keys, completedStations, totalScore, status:done?'ready_chest':'idle'})
+      .then(()=>{ progress={...p,currentIndex:newIndex,keys,completedStations,totalScore}; showResult(onTime,score,done); });
+  });
+}
+function showResult(onTime, score, done){
+  show('view-result');
+  document.getElementById('timer').style.display='none';
+  const g = groups[currentGroupId];
+  let nextHtml='';
+  if(done){ nextHtml=`<button class="big" onclick="showChest()">📦 Teruskan ke Peti Harta</button>`; }
+  else { nextHtml=`<button class="big" onclick="showClueScreen()">➡️ Lihat Clue Seterusnya</button>`; }
+  document.getElementById('resultCard').innerHTML=`<div class="finalbox">
+    <div style="font-size:50px;">🔑</div>
+    <h2>${onTime?'Tepat Masa!':'Masa Tamat — Markah Ditolak'}</h2>
+    <p>Markah stesen ini: <b>${score}</b></p>
+    ${nextHtml}
+  </div>`;
+}
+
+// ---------- TREASURE CHEST ----------
+function showChest(){
+  show('view-chest');
+  document.getElementById('timer').style.display='none';
+  const row = document.getElementById('chestKeyRow');
+  row.innerHTML='';
+  for(let i=1;i<=6;i++) row.innerHTML+=`<div class="key">🔑</div>`;
+  document.getElementById('chestIcon').innerText='🔒📦';
+  document.getElementById('chestResult').innerHTML='';
+}
+function openChest(){
+  document.getElementById('chestIcon').innerText='🎉📦✨';
+  document.getElementById('chestResult').innerHTML=`<h2 style="color:var(--green);">TAHNIAH KUMPULAN ${currentGroupId}!</h2><p>Semua 6 kunci sepadan — Kumpulan anda MENANG! 🏆</p>`;
+  db.ref(PATH+'/progress/'+currentGroupId).update({status:'won'});
+}
+function showWon(){
+  show('view-chest');
+  document.getElementById('chestKeyRow').innerHTML='<div class="key">🔑</div>'.repeat(6);
+  document.getElementById('chestIcon').innerText='🎉📦✨';
+  document.getElementById('chestResult').innerHTML=`<h2 style="color:var(--green);">TAHNIAH KUMPULAN ${currentGroupId}!</h2><p>Kumpulan anda telah MENANG! 🏆</p>`;
+}
+
+window.onload=()=>{
+  connectFirebase();
+};
+</script>
+</body>
+</html>
