@@ -1,0 +1,37 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "gamestation2026": {
+      ".read": true,
+      ".write": "now < 1798761600000",
+
+      "config": {
+        "stations": {
+          "$sid": {
+            ".validate": "newData.hasChildren(['name','gameType'])",
+            "name":        { ".validate": "newData.isString() && newData.val().length <= 120" },
+            "location":    { ".validate": "newData.isString() && newData.val().length <= 200" },
+            "password":    { ".validate": "newData.isString() && newData.val().length <= 60" },
+            "gameType":    { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "gameDataRaw": { ".validate": "newData.isString() && newData.val().length <= 5000" },
+            "$other":      { ".validate": true }
+          }
+        },
+        "groups": {
+          "$gid": { ".validate": "newData.hasChildren(['loginPassword'])", "$other": { ".validate": true } }
+        }
+      },
+
+      "progress": {
+        "$gid": {
+          "currentIndex": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 6" },
+          "totalScore":   { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000" },
+          "status":       { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "$other":       { ".validate": true }
+        }
+      }
+    }
+  }
+}

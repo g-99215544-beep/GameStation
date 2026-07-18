@@ -293,6 +293,7 @@ function buildStationsUI(existing){
       <label>Password QR (sama untuk semua kumpulan)</label><input id="st_pass_${i}" value="${s.password||('PASS'+i+Math.floor(Math.random()*900+100))}">
       <label>Jenis Game</label><select id="st_gametype_${i}">${opts}</select>
       <label>Data Game (JSON)</label><input id="st_gamedata_${i}" value='${(s.gameDataRaw||"{}").replace(/'/g,"&apos;")}'>
+      <button class="secondary" onclick="testStation(${i})">▶️ Uji Cara Main Stesen Ini</button>
     </div>`;
   }
 }
@@ -437,10 +438,44 @@ function checkPassword(){
   }
 }
 
+// ---------- ADMIN: TEST A STATION ----------
+// Lets admin play through any station using the current (unsaved) form values,
+// without scanning a QR. Nothing is written to Firebase progress.
+function testStation(i){
+  const st = {
+    id:i,
+    name:document.getElementById('st_name_'+i).value || ('Stesen '+i),
+    location:document.getElementById('st_loc_'+i).value,
+    password:document.getElementById('st_pass_'+i).value,
+    timeLimitMin:10,
+    gameType:document.getElementById('st_gametype_'+i).value,
+    gameDataRaw:document.getElementById('st_gamedata_'+i).value
+  };
+  window._testMode = true;
+  startGame(st.id, st);
+}
+function endTest(){
+  if(timerInterval) clearInterval(timerInterval);
+  window._testMode = false;
+  document.getElementById('timer').style.display='none';
+  show('view-admin');
+}
+function showTestResult(onTime, score, timeTakenSec){
+  show('view-result');
+  document.getElementById('timer').style.display='none';
+  document.getElementById('resultCard').innerHTML=`<div class="finalbox">
+    <div style="font-size:50px;">🧪</div>
+    <h2>Ujian Selesai</h2>
+    <p>${onTime?'Tepat masa':'Masa tamat'} — Markah: <b>${score}</b> <span style="color:#888;">(${timeTakenSec}s)</span></p>
+    <p style="color:#888;font-size:13px;">Mod ujian — tiada markah disimpan ke Firebase.</p>
+    <button class="big" onclick="endTest()">← Kembali ke Admin</button>
+  </div>`;
+}
+
 // ---------- GAME ----------
-function startGame(stId){
+function startGame(stId, testSt){
   show('view-game');
-  const st = stations[stId];
+  const st = testSt || stations[stId];
   timeUp=false;
   timeLeftSec = (st.timeLimitMin||10)*60;
   window._startedAt = Date.now();
@@ -448,6 +483,15 @@ function startGame(stId){
   document.getElementById('timer').style.display='block';
   timerInterval = setInterval(tick,1000);
   renderGame(st);
+  if(window._testMode){
+    const card = document.getElementById('gameCard');
+    const banner = document.createElement('div');
+    banner.className='msg';
+    banner.style.background='#fdf3d8';
+    banner.style.marginTop='0';
+    banner.innerHTML='🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">← Kembali ke Admin</button>';
+    card.insertBefore(banner, card.firstChild);
+  }
 }
 function tick(){
   timeLeftSec--;
@@ -560,6 +604,7 @@ function finishGame(forceOk){
   let score = Math.round(pct*100);
   if(!onTime) score -= 20;
   if(score<0) score=0;
+  if(window._testMode){ showTestResult(onTime, score, timeTakenSec); return; }
   submitCompletion(onTime, score, timeTakenSec);
 }
 function submitCompletion(onTime, score, timeTakenSec){
