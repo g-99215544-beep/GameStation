@@ -58,3 +58,22 @@ test('each piece polygon is centroid-centered at origin', () => {
     assert.ok(Math.hypot(c.x, c.y) < 1e-9, t + ' not centered');
   }
 });
+
+test('snapAngle rounds to nearest 45 and wraps', () => {
+  assert.strictEqual(E.snapAngle(25), 45);
+  assert.strictEqual(E.snapAngle(10), 0);
+  assert.strictEqual(E.snapAngle(350), 0);
+  assert.strictEqual(E.snapAngle(-45), 315);
+});
+
+test('snapToGrid rounds to grid', () => {
+  assert.deepStrictEqual(E.snapToGrid({ x: 1.2, y: 0.9 }, 0.5), { x: 1.0, y: 1.0 });
+});
+
+test('findVertexSnap returns offset within radius, else null', () => {
+  const mine = [{ x: 0.1, y: 0.1 }];
+  const others = [{ x: 0, y: 0 }, { x: 5, y: 5 }];
+  assert.deepStrictEqual(E.findVertexSnap(mine, others, 0.4),
+    { dx: -0.1, dy: -0.1 });
+  assert.strictEqual(E.findVertexSnap([{ x: 2, y: 2 }], others, 0.4), null);
+});

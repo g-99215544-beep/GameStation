@@ -38,7 +38,23 @@
     }
     return inside;
   }
+  function snapAngle(deg) {
+    return ((Math.round(deg / 45) * 45) % 360 + 360) % 360;
+  }
+  function snapToGrid(pos, grid) {
+    return { x: Math.round(pos.x / grid) * grid, y: Math.round(pos.y / grid) * grid };
+  }
+  function findVertexSnap(myVerts, otherVerts, radius) {
+    let best = null, bestD = radius;
+    for (const m of myVerts) {
+      for (const o of otherVerts) {
+        const d = Math.hypot(m.x - o.x, m.y - o.y);
+        if (d <= bestD) { bestD = d; best = { dx: o.x - m.x, dy: o.y - m.y }; }
+      }
+    }
+    return best;
+  }
 
   return { rotatePoint, transformPolygon, polygonArea, polygonCentroid,
-    pointInPolygon, POS_TOL, GRID_SIZE, SNAP_RADIUS };
+    pointInPolygon, snapAngle, snapToGrid, findVertexSnap, POS_TOL, GRID_SIZE, SNAP_RADIUS };
 });
