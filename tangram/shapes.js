@@ -48,16 +48,17 @@
       { type: 'smallTri', pos: { x: 3.6667, y: 7.1618 }, angle: 90,  flipped: false }, // hind leg (points down)
       { type: 'para',     pos: { x: 5.7678, y: 6.4749 }, angle: 45,  flipped: false }, // tail (down-right)
     ],
-    // Sitting cat: two ears, medium-triangle face, two large triangles as the
-    // seated body, a square paw, and a parallelogram tail curving up-right.
+    // Cat: face = square (rotated to a diamond), the two ears = small triangles
+    // on the diamond's top edges, a medium-triangle neck, two large triangles as
+    // the body, and a parallelogram tail.
     kucing: [
-      { type: 'smallTri', pos: { x: 1.3333, y: 2.6667 }, angle: 270, flipped: false }, // left ear
-      { type: 'smallTri', pos: { x: 2.6667, y: 2.6667 }, angle: 180, flipped: false }, // right ear
-      { type: 'medTri',   pos: { x: 2,      y: 3.3333 }, angle: 225, flipped: false }, // face
-      { type: 'largeTri', pos: { x: 1.3333, y: 5.3333 }, angle: 180, flipped: false }, // body (left)
-      { type: 'largeTri', pos: { x: 2.6667, y: 5.3333 }, angle: 270, flipped: false }, // body (right)
-      { type: 'square',   pos: { x: 3.5,    y: 6.5 },    angle: 0,   flipped: false }, // paw
-      { type: 'para',     pos: { x: 4.5,    y: 5 },      angle: 90,  flipped: false }, // tail (up-right)
+      { type: 'square',   pos: { x: 3,      y: 2 },      angle: 45,  flipped: false }, // face (diamond)
+      { type: 'smallTri', pos: { x: 2.5286, y: 1.2929 }, angle: 135, flipped: false }, // left ear
+      { type: 'smallTri', pos: { x: 3.4714, y: 1.2929 }, angle: 315, flipped: false }, // right ear
+      { type: 'medTri',   pos: { x: 3,      y: 3.3738 }, angle: 45,  flipped: false }, // neck
+      { type: 'largeTri', pos: { x: 3.3333, y: 4.3738 }, angle: 90,  flipped: false }, // chest
+      { type: 'largeTri', pos: { x: 4.4714, y: 5.1213 }, angle: 135, flipped: false }, // hindquarter
+      { type: 'para',     pos: { x: 5.7678, y: 6.182 },  angle: 45,  flipped: false }, // tail
     ],
   };
 
