@@ -55,6 +55,53 @@
     return best;
   }
 
+  function _translate(poly, dx, dy) { return poly.map(p => ({ x: p.x + dx, y: p.y + dy })); }
+  function _rotate(poly, deg) { return poly.map(p => rotatePoint(p, deg)); }
+  function _avg(pts) {
+    let x = 0, y = 0; pts.forEach(p => { x += p.x; y += p.y; });
+    return { x: x / pts.length, y: y / pts.length };
+  }
+  function _polysMatch(a, b, tol) {
+    if (a.length !== b.length) return false;
+    const used = new Array(b.length).fill(false);
+    for (const va of a) {
+      let found = -1;
+      for (let j = 0; j < b.length; j++) {
+        if (!used[j] && Math.hypot(va.x - b[j].x, va.y - b[j].y) <= tol) { found = j; break; }
+      }
+      if (found < 0) return false;
+      used[found] = true;
+    }
+    return true;
+  }
+  function isSolved(current, solution, polygons, posTol) {
+    posTol = posTol == null ? POS_TOL : posTol;
+    if (current.length !== solution.length) return false;
+    const cw = current.map(p => transformPolygon(polygons[p.type], p.pos, p.angle, p.flipped));
+    const tw = solution.map(s => transformPolygon(polygons[s.type], s.pos, s.angle, s.flipped));
+    const Ccur = _avg(current.map(p => p.pos));
+    const Ctar = _avg(solution.map(s => s.pos));
+    const tarN = tw.map(poly => _translate(poly, -Ctar.x, -Ctar.y));
+    for (let a = 0; a < 360; a += 45) {
+      const curN = cw.map(poly => _rotate(_translate(poly, -Ccur.x, -Ccur.y), -a));
+      const used = new Array(tarN.length).fill(false);
+      const assign = (i) => {
+        if (i === curN.length) return true;
+        for (let j = 0; j < tarN.length; j++) {
+          if (used[j] || current[i].type !== solution[j].type) continue;
+          if (_polysMatch(curN[i], tarN[j], posTol)) {
+            used[j] = true;
+            if (assign(i + 1)) return true;
+            used[j] = false;
+          }
+        }
+        return false;
+      };
+      if (assign(0)) return true;
+    }
+    return false;
+  }
+
   return { rotatePoint, transformPolygon, polygonArea, polygonCentroid,
-    pointInPolygon, snapAngle, snapToGrid, findVertexSnap, POS_TOL, GRID_SIZE, SNAP_RADIUS };
+    pointInPolygon, snapAngle, snapToGrid, findVertexSnap, isSolved, POS_TOL, GRID_SIZE, SNAP_RADIUS };
 });

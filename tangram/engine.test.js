@@ -77,3 +77,42 @@ test('findVertexSnap returns offset within radius, else null', () => {
     { dx: -0.1, dy: -0.1 });
   assert.strictEqual(E.findVertexSnap([{ x: 2, y: 2 }], others, 0.4), null);
 });
+
+// Small synthetic fixture: two distinct-type pieces + a duplicate pair.
+const FIX = {
+  a: [{x:0,y:0},{x:1,y:0},{x:0,y:1}],
+  b: [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}],
+};
+const SOL = [
+  { type: 'a', pos: { x: 0, y: 0 }, angle: 0, flipped: false },
+  { type: 'b', pos: { x: 3, y: 0 }, angle: 0, flipped: false },
+  { type: 'a', pos: { x: 0, y: 3 }, angle: 0, flipped: false },
+];
+function rigid(arr, dx, dy, rot) {
+  const E2 = E;
+  return arr.map(p => {
+    const rp = E2.rotatePoint(p.pos, rot);
+    return { type: p.type, pos: { x: rp.x + dx, y: rp.y + dy },
+      angle: p.angle + rot, flipped: p.flipped };
+  });
+}
+
+test('isSolved: exact solution solves', () => {
+  assert.strictEqual(E.isSolved(SOL, SOL, FIX), true);
+});
+
+test('isSolved: globally translated+rotated solution still solves', () => {
+  const moved = rigid(SOL, 12, -7, 45);
+  assert.strictEqual(E.isSolved(moved, SOL, FIX), true);
+});
+
+test('isSolved: one piece displaced does NOT solve', () => {
+  const bad = SOL.map(p => ({ ...p, pos: { ...p.pos } }));
+  bad[1].pos.x += 1.0; // beyond POS_TOL
+  assert.strictEqual(E.isSolved(bad, SOL, FIX), false);
+});
+
+test('isSolved: swapping the two duplicate "a" pieces still solves', () => {
+  const swapped = [SOL[2], SOL[1], SOL[0]];
+  assert.strictEqual(E.isSolved(swapped, SOL, FIX), true);
+});
