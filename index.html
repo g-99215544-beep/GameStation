@@ -8,6 +8,9 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="tangram/engine.js"></script>
+<script src="tangram/shapes.js"></script>
+<script src="tangram/ui.js"></script>
 <style>
   :root{--navy:#1e2a4a;--gold:#d4a94e;--cream:#faf6ee;--green:#3a7d5c;--red:#c0453a;}
   *{box-sizing:border-box;}
@@ -157,7 +160,8 @@ const GAME_TYPES = [
   {id:'padan', name:'Padan Jawapan'},
   {id:'pilihan', name:'Pilihan Bergambar'},
   {id:'grid_nombor', name:'Grid Nombor'},
-  {id:'puzzle_susun', name:'Puzzle Cantum Nombor'}
+  {id:'puzzle_susun', name:'Puzzle Cantum Nombor'},
+  {id:'tangram', name:'Tangram Challenge'}
 ];
 const NUM_GROUPS = 14;
 const ADMIN_PIN = '1234';
@@ -553,6 +557,10 @@ function renderGame(st){
     html+=`</div><button class="big" onclick="checkGrid()">Semak Grid</button>`;
     card.innerHTML=html;
   }
+  else if(st.gameType==='tangram'){
+    startTangram(st, data.shape || 'segiempat');
+    return;
+  }
   else {
     card.innerHTML=`<h2>${st.name}</h2><p>Game belum dikonfigurasi.</p><button class="big" onclick="finishGame(true)">Selesai</button>`;
   }
@@ -586,6 +594,21 @@ function checkGrid(){
   }));
   gameState.correct = correct===total?1:0; gameState.total=1;
   finishGame();
+}
+function startTangram(st, shapeId){
+  const S = window.TangramShapes;
+  gameState.total = 1; gameState.correct = 0;
+  const sol = S.SOLUTIONS[shapeId] || S.SOLUTIONS.segiempat;
+  const card = document.getElementById('gameCard');
+  card.innerHTML = `<h2>${st.name}</h2>
+    <canvas id="tgBoard" width="340" height="380" style="background:#fff;border:3px solid #d4a94e;border-radius:12px;touch-action:none;"></canvas>
+    <p style="color:#555;font-size:13px;">Ketik keping = putar. Seret untuk gerak.</p>
+    <button id="tgFlip" class="secondary" style="display:none;" onclick="window._tgCtrl && window._tgCtrl.flipSelected()">↔ Balik</button>`;
+  window._tgCtrl = window.TangramUI.attachTangram(document.getElementById('tgBoard'), {
+    solution: sol, ppu: 34,
+    onSolve: () => { gameState.correct = 1; finishGame(); },
+    onSelect: (p) => { document.getElementById('tgFlip').style.display = (p && p.type === 'para') ? 'inline-block' : 'none'; }
+  });
 }
 function finishGame(forceOk){
   if(gameState.type==='quiz'||gameState.type==='pilihan'){
