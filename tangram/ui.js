@@ -14,6 +14,7 @@
     const solution = opts.solution || null;
     const PPU = opts.ppu || 38;
     const refCanvas = opts.refCanvas || null;
+    const boardTarget = opts.boardTarget !== false; // draw target outline on the board (fill guide)
     const onSolve = opts.onSolve || function () {};
     const onSelect = opts.onSelect || function () {};
     const ctx = canvas.getContext('2d');
@@ -31,8 +32,30 @@
     const u2p = p => ({ x: p.x * PPU, y: p.y * PPU });
     const p2u = p => ({ x: p.x / PPU, y: p.y / PPU });
 
+    // Target outline drawn ON the board (a fill-guide): the solution silhouette
+    // translated to a fixed spot in the lower-middle of the board. Internal
+    // piece lines stay hidden; the student drops pieces onto it to fill it.
+    let boardTargetPolys = null;
+    if (solution && boardTarget) {
+      const worlds = solution.map(s => E.transformPolygon(polygons[s.type], s.pos, s.angle, s.flipped));
+      const xs = worlds.flat().map(p => p.x), ys = worlds.flat().map(p => p.y);
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      const ox = canvas.width / PPU / 2 - cx, oy = canvas.height / PPU * 0.56 - cy;
+      boardTargetPolys = worlds.map(poly => poly.map(v => ({ x: v.x + ox, y: v.y + oy })));
+    }
+
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (boardTargetPolys) {
+        ctx.save();
+        ctx.fillStyle = '#c7cedb'; ctx.strokeStyle = '#c7cedb'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+        boardTargetPolys.forEach(poly => {
+          ctx.beginPath();
+          poly.forEach((v, i) => { const p = u2p(v); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+        });
+        ctx.restore();
+      }
       pieces.forEach(p => {
         const poly = wp(p).map(u2p);
         ctx.beginPath();
