@@ -612,7 +612,7 @@ function startTangram(st){
   const S = window.TangramShapes;
   gameState.type='tangram'; gameState.total=1; gameState.correct=0;
   const totalSec = (st.timeLimitMin||10)*60;
-  const SHAPES = [{id:'segiempat', name:'Segi Empat'}, {id:'kuda', name:'Kuda'}];
+  const SHAPES = [{id:'segiempat', name:'Segi Empat', guide:true}, {id:'kuda', name:'Kuda', guide:false}];
   let idx = 0;    // shape currently being built
   let done = 0;   // shapes completed so far
   const card = document.getElementById('gameCard');
@@ -659,7 +659,7 @@ function startTangram(st){
       <p style="color:#555;font-size:13px;">Seret keping ke dalam bayang. Ketik keping = putar.</p>
       <button id="tgFlip" class="secondary" style="display:none;" onclick="window._tgCtrl && window._tgCtrl.flipSelected()">↔ Balik</button>`;
     window._tgCtrl = window.TangramUI.attachTangram(document.getElementById('tgBoard'), {
-      solution: S.SOLUTIONS[shp.id], ppu: 51,
+      solution: S.SOLUTIONS[shp.id], ppu: 51, targetGuideLines: shp.guide,
       onSolve: onShapeSolved,
       onSelect: (p) => { const f=document.getElementById('tgFlip'); if(f) f.style.display=(p&&p.type==='para')?'inline-block':'none'; }
     });

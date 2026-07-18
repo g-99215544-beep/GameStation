@@ -15,6 +15,7 @@
     const PPU = opts.ppu || 38;
     const refCanvas = opts.refCanvas || null;
     const boardTarget = opts.boardTarget !== false; // draw target outline on the board (fill guide)
+    const targetGuideLines = !!opts.targetGuideLines; // also show internal piece cut-lines in the target
     const onSolve = opts.onSolve || function () {};
     const onSelect = opts.onSelect || function () {};
     const ctx = canvas.getContext('2d');
@@ -48,7 +49,12 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (boardTargetPolys) {
         ctx.save();
-        ctx.fillStyle = '#c7cedb'; ctx.strokeStyle = '#c7cedb'; ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
+        // Solid slate fill. With targetGuideLines, stroke each piece in white to
+        // reveal the internal cut-lines (a guided hint); otherwise stroke in the
+        // fill colour so only the outer silhouette shows (harder).
+        ctx.fillStyle = '#c7cedb';
+        ctx.strokeStyle = targetGuideLines ? '#ffffff' : '#c7cedb';
+        ctx.lineWidth = targetGuideLines ? 2 : 1.5; ctx.lineJoin = 'round';
         boardTargetPolys.forEach(poly => {
           ctx.beginPath();
           poly.forEach((v, i) => { const p = u2p(v); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
