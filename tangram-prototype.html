@@ -13,7 +13,9 @@
 <select id="shapeSel"><option value="segiempat">Segi empat</option><option value="kuda">Kuda</option></select>
 <button id="flipBtn" style="display:none;">↔ Balik</button>
 <div id="status"></div>
-<canvas id="board" width="360" height="380"></canvas>
+<div style="font-weight:700;font-size:13px;">Bina bentuk ini:</div>
+<canvas id="ref" style="margin:6px auto;display:block;"></canvas>
+<canvas id="board" width="360" height="460"></canvas>
 <div>
   <button id="dumpBtn">📋 Dump state</button>
   <button id="resetBtn">↺ Reset</button>
@@ -33,6 +35,7 @@ function build(){
   document.getElementById('status').textContent = '';
   ctrl = TangramUI.attachTangram(cv, {
     solution: S.SOLUTIONS[shape] || null,
+    ppu: 51, refCanvas: document.getElementById('ref'),
     onSolve: () => { document.getElementById('status').textContent = '🎉 BERJAYA!'; },
     onSelect: (p) => { document.getElementById('flipBtn').style.display = (p && p.type === 'para') ? 'inline-block' : 'none'; }
   });

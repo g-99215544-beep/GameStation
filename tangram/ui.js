@@ -13,13 +13,17 @@
     const pieceSet = opts.pieceSet || S.PIECE_SET;
     const solution = opts.solution || null;
     const PPU = opts.ppu || 38;
+    const refCanvas = opts.refCanvas || null;
     const onSolve = opts.onSolve || function () {};
     const onSelect = opts.onSelect || function () {};
     const ctx = canvas.getContext('2d');
 
+    // Scatter pieces in a grid that fits the board width, spaced so the larger
+    // pieces don't start overlapping. Assembly happens by dragging them together.
+    const perRow = Math.max(1, Math.floor((canvas.width / PPU - 0.6) / 2.1));
     let pieces = pieceSet.map((t, i) => ({
       id: i, type: t, angle: 0, flipped: false,
-      pos: { x: 1.4 + (i % 4) * 2, y: 1.4 + Math.floor(i / 4) * 3 }
+      pos: { x: 1.2 + (i % perRow) * 2.1, y: 1.3 + Math.floor(i / perRow) * 2.2 }
     }));
     let selected = null, dragging = false, startPx = null, grab = null, solved = false;
 
@@ -38,21 +42,33 @@
         ctx.strokeStyle = (p === selected) ? '#000' : '#fff';
         ctx.lineWidth = (p === selected) ? 3 : 2; ctx.stroke();
       });
-      if (solution) {
-        const c = solution.reduce((a, s) => ({ x: a.x + s.pos.x, y: a.y + s.pos.y }), { x: 0, y: 0 });
-        c.x /= solution.length; c.y /= solution.length;
-        ctx.save(); ctx.fillStyle = 'rgba(30,42,74,.85)';
-        solution.forEach(s => {
-          const poly = E.transformPolygon(polygons[s.type], s.pos, s.angle, s.flipped);
-          ctx.beginPath();
-          poly.forEach((v, i) => {
-            const x = canvas.width - 64 + (v.x - c.x) * 9, y = 12 + (v.y - c.y) * 9 + 26;
-            i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
-          });
-          ctx.closePath(); ctx.fill();
+    }
+    // Draw the target silhouette on a SEPARATE canvas (above the board) at full
+    // (100%) scale — the same PPU as the pieces — so it reads as a true-size hint.
+    function drawReference() {
+      if (!refCanvas || !solution) return;
+      const worlds = solution.map(s => E.transformPolygon(polygons[s.type], s.pos, s.angle, s.flipped));
+      const xs = worlds.flat().map(p => p.x), ys = worlds.flat().map(p => p.y);
+      const minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
+      const pad = 6;
+      refCanvas.width = Math.ceil((maxx - minx) * PPU) + pad * 2;
+      refCanvas.height = Math.ceil((maxy - miny) * PPU) + pad * 2;
+      const rctx = refCanvas.getContext('2d');
+      rctx.clearRect(0, 0, refCanvas.width, refCanvas.height);
+      // Solid silhouette only — internal piece boundaries stay hidden so the
+      // student still has to work out which piece goes where (the puzzle).
+      // Stroke each piece in the SAME colour as the fill to cover sub-pixel
+      // anti-aliasing seams where adjacent pieces meet.
+      rctx.fillStyle = '#1e2a4a'; rctx.strokeStyle = '#1e2a4a'; rctx.lineWidth = 1.5;
+      rctx.lineJoin = 'round';
+      worlds.forEach(poly => {
+        rctx.beginPath();
+        poly.forEach((v, i) => {
+          const x = (v.x - minx) * PPU + pad, y = (v.y - miny) * PPU + pad;
+          i ? rctx.lineTo(x, y) : rctx.moveTo(x, y);
         });
-        ctx.restore();
-      }
+        rctx.closePath(); rctx.fill(); rctx.stroke();
+      });
     }
     const evtU = e => { const r = canvas.getBoundingClientRect(); return p2u({ x: e.clientX - r.left, y: e.clientY - r.top }); };
     const hit = u => { for (let i = pieces.length - 1; i >= 0; i--) if (E.pointInPolygon(u, wp(pieces[i]))) return pieces[i]; return null; };
@@ -64,7 +80,7 @@
     function check() { if (solved || !solution) return; if (E.isSolved(pieces, solution, polygons)) { solved = true; onSolve(); } }
 
     function onDown(e) {
-      if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+      try { if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId); } catch (_) {}
       const u = evtU(e); selected = hit(u); dragging = false; startPx = { x: e.clientX, y: e.clientY };
       if (selected) { pieces = pieces.filter(q => q !== selected); pieces.push(selected); grab = { x: u.x - selected.pos.x, y: u.y - selected.pos.y }; }
       onSelect(selected); draw();
@@ -83,6 +99,7 @@
     canvas.addEventListener('pointermove', onMove);
     canvas.addEventListener('pointerup', onUp);
     draw();
+    drawReference();
 
     return {
       getPieces: () => pieces.map(p => ({ type: p.type, pos: { x: +p.pos.x.toFixed(4), y: +p.pos.y.toFixed(4) }, angle: p.angle, flipped: p.flipped })),

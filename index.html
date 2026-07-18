@@ -607,11 +607,13 @@ function startTangram(st, shapeId){
   const sol = S.SOLUTIONS[shapeId] || S.SOLUTIONS.segiempat;
   const card = document.getElementById('gameCard');
   card.innerHTML = `<h2>${st.name}</h2>
-    <canvas id="tgBoard" width="340" height="380" style="background:#fff;border:3px solid #d4a94e;border-radius:12px;touch-action:none;"></canvas>
+    <div style="font-size:13px;color:#555;font-weight:700;">Bina bentuk ini:</div>
+    <canvas id="tgRef" style="margin:6px 0 12px;"></canvas>
+    <canvas id="tgBoard" width="360" height="460" style="background:#fff;border:3px solid #d4a94e;border-radius:12px;touch-action:none;max-width:100%;"></canvas>
     <p style="color:#555;font-size:13px;">Ketik keping = putar. Seret untuk gerak.</p>
     <button id="tgFlip" class="secondary" style="display:none;" onclick="window._tgCtrl && window._tgCtrl.flipSelected()">↔ Balik</button>`;
   window._tgCtrl = window.TangramUI.attachTangram(document.getElementById('tgBoard'), {
-    solution: sol, ppu: 34,
+    solution: sol, ppu: 51, refCanvas: document.getElementById('tgRef'),
     onSolve: () => { gameState.correct = 1; finishGame(); },
     onSelect: (p) => { document.getElementById('tgFlip').style.display = (p && p.type === 'para') ? 'inline-block' : 'none'; }
   });

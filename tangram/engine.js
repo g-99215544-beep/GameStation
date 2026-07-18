@@ -55,12 +55,39 @@
     return best;
   }
 
-  // Settle a piece on release: quantize its angle to 45deg, then repeatedly
-  // pull its nearest vertex onto the nearest vertex of already-placed pieces
-  // ("assist stick to side"). Pure edge/vertex assembly — no absolute grid,
-  // because tangram vertices do not lie on any rational grid. This is the
-  // single source of snap truth, used by the UI (tangram/ui.js) and the
-  // reachability test. Returns a new piece; does not mutate the input.
+  function _project(poly, ax, ay) {
+    let mn = Infinity, mx = -Infinity;
+    for (const p of poly) { const d = p.x * ax + p.y * ay; if (d < mn) mn = d; if (d > mx) mx = d; }
+    return [mn, mx];
+  }
+  // Minimal translation vector to push convex polygon A out of convex polygon B
+  // (Separating Axis Theorem). Returns null if they are not overlapping (merely
+  // touching counts as separated). Direction points from B toward A.
+  function overlapMTV(A, B) {
+    let minO = Infinity, axx = 0, axy = 0;
+    for (const poly of [A, B]) {
+      for (let i = 0; i < poly.length; i++) {
+        const p1 = poly[i], p2 = poly[(i + 1) % poly.length];
+        let nx = -(p2.y - p1.y), ny = p2.x - p1.x;
+        const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
+        const [minA, maxA] = _project(A, nx, ny), [minB, maxB] = _project(B, nx, ny);
+        const o = Math.min(maxA, maxB) - Math.max(minA, minB);
+        if (o <= 1e-9) return null;
+        if (o < minO) { minO = o; axx = nx; axy = ny; }
+      }
+    }
+    const ca = polygonCentroid(A), cb = polygonCentroid(B);
+    if ((ca.x - cb.x) * axx + (ca.y - cb.y) * axy < 0) { axx = -axx; axy = -axy; }
+    return { x: axx * minO, y: axy * minO };
+  }
+
+  // Settle a piece on release: quantize its angle to 45deg, pull its nearest
+  // vertex onto the nearest vertex of already-placed pieces ("assist stick to
+  // side"), THEN push it out of any piece it overlaps so it ends up edge-to-edge,
+  // never overlapping. Pure edge/vertex assembly — no absolute grid, because
+  // tangram vertices do not lie on any rational grid. Single source of snap
+  // truth, used by the UI (tangram/ui.js) and the reachability test. Returns a
+  // new piece; does not mutate the input.
   function snapPieceToNeighbors(piece, otherPieces, polygons, radius, iters) {
     radius = radius == null ? SNAP_RADIUS : radius;
     iters = iters == null ? 3 : iters;
@@ -72,6 +99,17 @@
       const s = findVertexSnap(mine, others, radius);
       if (!s) break;
       p.pos.x += s.dx; p.pos.y += s.dy;
+    }
+    // Guarantee no overlap on release: push out of any overlapping neighbour.
+    const otherPolys = otherPieces.map(q => transformPolygon(polygons[q.type], q.pos, q.angle, q.flipped));
+    for (let pass = 0; pass < 12; pass++) {
+      const mine = transformPolygon(polygons[p.type], p.pos, p.angle, p.flipped);
+      let moved = false;
+      for (const qp of otherPolys) {
+        const mtv = overlapMTV(mine, qp);
+        if (mtv) { p.pos.x += mtv.x; p.pos.y += mtv.y; moved = true; break; }
+      }
+      if (!moved) break;
     }
     return p;
   }
@@ -124,6 +162,6 @@
   }
 
   return { rotatePoint, transformPolygon, polygonArea, polygonCentroid,
-    pointInPolygon, snapAngle, snapToGrid, findVertexSnap, snapPieceToNeighbors,
-    isSolved, POS_TOL, GRID_SIZE, SNAP_RADIUS };
+    pointInPolygon, snapAngle, snapToGrid, findVertexSnap, overlapMTV,
+    snapPieceToNeighbors, isSolved, POS_TOL, GRID_SIZE, SNAP_RADIUS };
 });
