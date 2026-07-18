@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ms"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tangram Prototype</title>
+<style>
+  body{font-family:'Segoe UI',sans-serif;background:#faf6ee;margin:0;color:#1e2a4a;text-align:center;}
+  #board{background:#fff;border:3px solid #d4a94e;border-radius:12px;touch-action:none;display:block;margin:10px auto;}
+  button,select{background:#1e2a4a;color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:700;margin:4px;font-size:15px;}
+  #status{font-weight:800;font-size:18px;min-height:24px;}
+  #dump{text-align:left;max-width:360px;margin:0 auto;white-space:pre-wrap;font-size:11px;}
+</style></head><body>
+<h2>Tangram Prototype</h2>
+<select id="shapeSel"><option value="segiempat">Segi empat</option><option value="kuda">Kuda</option></select>
+<button id="flipBtn" style="display:none;">↔ Balik</button>
+<div id="status"></div>
+<canvas id="board" width="360" height="380"></canvas>
+<div>
+  <button id="dumpBtn">📋 Dump state</button>
+  <button id="resetBtn">↺ Reset</button>
+</div>
+<pre id="dump"></pre>
+<script src="tangram/engine.js"></script>
+<script src="tangram/shapes.js"></script>
+<script src="tangram/ui.js"></script>
+<script>
+const S = TangramShapes;
+const cv = document.getElementById('board');
+let ctrl, shape = 'segiempat';
+
+function build(){
+  if (ctrl) ctrl.destroy();
+  shape = document.getElementById('shapeSel').value;
+  document.getElementById('status').textContent = '';
+  ctrl = TangramUI.attachTangram(cv, {
+    solution: S.SOLUTIONS[shape] || null,
+    onSolve: () => { document.getElementById('status').textContent = '🎉 BERJAYA!'; },
+    onSelect: (p) => { document.getElementById('flipBtn').style.display = (p && p.type === 'para') ? 'inline-block' : 'none'; }
+  });
+}
+document.getElementById('shapeSel').onchange = build;
+document.getElementById('resetBtn').onclick = build;
+document.getElementById('flipBtn').onclick = () => ctrl.flipSelected();
+document.getElementById('dumpBtn').onclick = () => {
+  document.getElementById('dump').textContent = JSON.stringify(ctrl.getPieces());
+};
+build();
+</script></body></html>
