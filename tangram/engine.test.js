@@ -117,15 +117,50 @@ test('isSolved: swapping the two duplicate "a" pieces still solves', () => {
   assert.strictEqual(E.isSolved(swapped, SOL, FIX), true);
 });
 
-test('T1: segiempat solution tiles a square (area 8, square bbox)', () => {
+// Sample the bounding box of a solution's world polygons on a fine grid,
+// counting how many pieces cover each interior point. This actually proves
+// tiling/overlap properties (unlike area alone, which is constant, or bbox
+// alone, which a gap+overlap pair would still satisfy).
+function sampleCoverage(sol, step) {
+  const worlds = sol.map(s => E.transformPolygon(S.PIECE_POLYGONS[s.type], s.pos, s.angle, s.flipped));
+  const xs = worlds.flat().map(p => p.x), ys = worlds.flat().map(p => p.y);
+  const minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
+  let overlap = 0, covered = 0, samples = 0;
+  for (let x = minx + step / 2; x < maxx; x += step) {
+    for (let y = miny + step / 2; y < maxy; y += step) {
+      samples++;
+      let c = 0;
+      for (const w of worlds) if (E.pointInPolygon({ x, y }, w)) c++;
+      if (c > 1) overlap++;
+      if (c >= 1) covered++;
+    }
+  }
+  return { overlap, coveredFrac: covered / samples, worlds };
+}
+
+test('T1: segiempat is an exact gap-free, overlap-free square tiling', () => {
   const sol = S.SOLUTIONS.segiempat;
   assert.strictEqual(sol.length, 7);
-  const worlds = sol.map(s => E.transformPolygon(S.PIECE_POLYGONS[s.type], s.pos, s.angle, s.flipped));
-  const totalArea = worlds.reduce((a, w) => a + E.polygonArea(w), 0);
-  assert.ok(Math.abs(totalArea - 8) < 1e-6, 'piece areas must sum to 8');
+  const { overlap, coveredFrac, worlds } = sampleCoverage(sol, 0.05);
+  // exact square bbox
   const xs = worlds.flat().map(p => p.x), ys = worlds.flat().map(p => p.y);
   const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
   const side = 2 * Math.SQRT2;
-  assert.ok(Math.abs(w - side) < 0.05 && Math.abs(h - side) < 0.05,
+  assert.ok(Math.abs(w - side) < 0.02 && Math.abs(h - side) < 0.02,
     `bbox ${w.toFixed(3)}x${h.toFixed(3)} should be ${side.toFixed(3)} square`);
+  // no point covered by two pieces (no overlap)
+  assert.strictEqual(overlap, 0, 'pieces must not overlap');
+  // essentially every point inside the square bbox is covered (no gaps)
+  assert.ok(coveredFrac > 0.99, `coverage ${coveredFrac.toFixed(4)} should be ~1.0 (no gaps)`);
+});
+
+test('kuda is a legal non-overlapping arrangement of the 7 pieces', () => {
+  const sol = S.SOLUTIONS.kuda;
+  assert.strictEqual(sol.length, 7);
+  const counts = {};
+  sol.forEach(s => counts[s.type] = (counts[s.type] || 0) + 1);
+  assert.deepStrictEqual(counts, { largeTri: 2, medTri: 1, smallTri: 2, square: 1, para: 1 });
+  const { overlap } = sampleCoverage(sol, 0.05);
+  assert.strictEqual(overlap, 0, 'kuda pieces must not overlap');
+  assert.strictEqual(E.isSolved(sol, sol, S.PIECE_POLYGONS), true);
 });
