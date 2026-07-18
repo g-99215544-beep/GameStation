@@ -117,22 +117,33 @@ test('isSolved: swapping the two duplicate "a" pieces still solves', () => {
   assert.strictEqual(E.isSolved(swapped, SOL, FIX), true);
 });
 
-// Sample the bounding box of a solution's world polygons on a fine grid,
-// counting how many pieces cover each interior point. This actually proves
-// tiling/overlap properties (unlike area alone, which is constant, or bbox
-// alone, which a gap+overlap pair would still satisfy).
+// Shrink a polygon slightly toward its centroid, so that pieces which merely
+// share an edge (a legal, common tangram situation) are not counted as
+// overlapping just because sample points land on the shared boundary line.
+function inset(poly, d) {
+  const c = E.polygonCentroid(poly);
+  return poly.map(p => ({ x: c.x + (p.x - c.x) * (1 - d), y: c.y + (p.y - c.y) * (1 - d) }));
+}
+
+// Sample the bounding box of a solution's world polygons on a fine grid.
+// Coverage uses the full polygons (proves no gaps); overlap uses slightly
+// inset polygons (proves no real area overlap, ignoring shared-edge contact).
+// This actually proves tiling/overlap properties — unlike area alone (which is
+// constant) or bbox alone (which a gap+overlap pair would still satisfy).
 function sampleCoverage(sol, step) {
   const worlds = sol.map(s => E.transformPolygon(S.PIECE_POLYGONS[s.type], s.pos, s.angle, s.flipped));
+  const insets = worlds.map(w => inset(w, 0.03));
   const xs = worlds.flat().map(p => p.x), ys = worlds.flat().map(p => p.y);
   const minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
   let overlap = 0, covered = 0, samples = 0;
   for (let x = minx + step / 2; x < maxx; x += step) {
     for (let y = miny + step / 2; y < maxy; y += step) {
       samples++;
-      let c = 0;
-      for (const w of worlds) if (E.pointInPolygon({ x, y }, w)) c++;
-      if (c > 1) overlap++;
-      if (c >= 1) covered++;
+      let full = 0, inner = 0;
+      for (const w of worlds) if (E.pointInPolygon({ x, y }, w)) full++;
+      for (const w of insets) if (E.pointInPolygon({ x, y }, w)) inner++;
+      if (inner > 1) overlap++;
+      if (full >= 1) covered++;
     }
   }
   return { overlap, coveredFrac: covered / samples, worlds };
@@ -163,4 +174,37 @@ test('kuda is a legal non-overlapping arrangement of the 7 pieces', () => {
   const { overlap } = sampleCoverage(sol, 0.05);
   assert.strictEqual(overlap, 0, 'kuda pieces must not overlap');
   assert.strictEqual(E.isSolved(sol, sol, S.PIECE_POLYGONS), true);
+});
+
+// A solution being self-consistent (isSolved(sol,sol)) does NOT mean a student
+// can actually reach it: pieces are placed imperfectly and only edge/vertex
+// snapping pulls them into place. This test simulates a student dropping each
+// piece near its spot (deterministic seeded jitter, random order) and letting
+// snapPieceToNeighbors settle it, then asserts the arrangement solves the vast
+// majority of the time. It guards against authoring a shape whose pieces don't
+// actually lock together via the snap system.
+function lcg(seed) { let s = seed >>> 0; return () => { s = (Math.imul(s, 1103515245) + 12345) >>> 0; return s / 0xffffffff; }; }
+function reachRate(sol, jitter, trials, rnd) {
+  let ok = 0;
+  for (let t = 0; t < trials; t++) {
+    const order = sol.map((_, i) => i);
+    for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    const placed = [];
+    for (const idx of order) {
+      const src = sol[idx];
+      const p = { type: src.type, angle: src.angle, flipped: src.flipped,
+        pos: { x: src.pos.x + (rnd() * 2 - 1) * jitter, y: src.pos.y + (rnd() * 2 - 1) * jitter } };
+      placed.push(E.snapPieceToNeighbors(p, placed, S.PIECE_POLYGONS, E.SNAP_RADIUS, 3));
+    }
+    if (E.isSolved(placed, sol, S.PIECE_POLYGONS)) ok++;
+  }
+  return ok / trials;
+}
+
+test('both solutions are snap-reachable by a student at realistic jitter', () => {
+  const rnd = lcg(0x1a2b3c4d);
+  const sq = reachRate(S.SOLUTIONS.segiempat, 0.15, 80, rnd);
+  const ku = reachRate(S.SOLUTIONS.kuda, 0.15, 80, rnd);
+  assert.ok(sq >= 0.9, `segiempat reachability ${(sq * 100).toFixed(0)}% should be >=90%`);
+  assert.ok(ku >= 0.9, `kuda reachability ${(ku * 100).toFixed(0)}% should be >=90%`);
 });

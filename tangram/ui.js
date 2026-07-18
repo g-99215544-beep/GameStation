@@ -57,9 +57,9 @@
     const evtU = e => { const r = canvas.getBoundingClientRect(); return p2u({ x: e.clientX - r.left, y: e.clientY - r.top }); };
     const hit = u => { for (let i = pieces.length - 1; i >= 0; i--) if (E.pointInPolygon(u, wp(pieces[i]))) return pieces[i]; return null; };
     function snap(p) {
-      p.pos = E.snapToGrid(p.pos, E.GRID_SIZE); p.angle = E.snapAngle(p.angle);
-      const others = []; pieces.forEach(q => { if (q !== p) wp(q).forEach(v => others.push(v)); });
-      const s = E.findVertexSnap(wp(p), others, E.SNAP_RADIUS); if (s) { p.pos.x += s.dx; p.pos.y += s.dy; }
+      const others = pieces.filter(q => q !== p);
+      const settled = E.snapPieceToNeighbors(p, others, polygons, E.SNAP_RADIUS, 3);
+      p.pos = settled.pos; p.angle = settled.angle;
     }
     function check() { if (solved || !solution) return; if (E.isSolved(pieces, solution, polygons)) { solved = true; onSolve(); } }
 

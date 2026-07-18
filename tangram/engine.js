@@ -3,7 +3,7 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = mod;
   else root.TangramEngine = mod;
 })(typeof self !== 'undefined' ? self : this, function () {
-  const POS_TOL = 0.3, GRID_SIZE = 0.5, SNAP_RADIUS = 0.4;
+  const POS_TOL = 0.3, GRID_SIZE = 0.5, SNAP_RADIUS = 0.5;
 
   function rotatePoint(p, deg) {
     const r = deg * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
@@ -55,6 +55,27 @@
     return best;
   }
 
+  // Settle a piece on release: quantize its angle to 45deg, then repeatedly
+  // pull its nearest vertex onto the nearest vertex of already-placed pieces
+  // ("assist stick to side"). Pure edge/vertex assembly — no absolute grid,
+  // because tangram vertices do not lie on any rational grid. This is the
+  // single source of snap truth, used by the UI (tangram/ui.js) and the
+  // reachability test. Returns a new piece; does not mutate the input.
+  function snapPieceToNeighbors(piece, otherPieces, polygons, radius, iters) {
+    radius = radius == null ? SNAP_RADIUS : radius;
+    iters = iters == null ? 3 : iters;
+    const p = { type: piece.type, flipped: piece.flipped, angle: snapAngle(piece.angle), pos: { x: piece.pos.x, y: piece.pos.y } };
+    const others = [];
+    otherPieces.forEach(q => transformPolygon(polygons[q.type], q.pos, q.angle, q.flipped).forEach(v => others.push(v)));
+    for (let i = 0; i < iters; i++) {
+      const mine = transformPolygon(polygons[p.type], p.pos, p.angle, p.flipped);
+      const s = findVertexSnap(mine, others, radius);
+      if (!s) break;
+      p.pos.x += s.dx; p.pos.y += s.dy;
+    }
+    return p;
+  }
+
   function _translate(poly, dx, dy) { return poly.map(p => ({ x: p.x + dx, y: p.y + dy })); }
   function _rotate(poly, deg) { return poly.map(p => rotatePoint(p, deg)); }
   function _avg(pts) {
@@ -103,5 +124,6 @@
   }
 
   return { rotatePoint, transformPolygon, polygonArea, polygonCentroid,
-    pointInPolygon, snapAngle, snapToGrid, findVertexSnap, isSolved, POS_TOL, GRID_SIZE, SNAP_RADIUS };
+    pointInPolygon, snapAngle, snapToGrid, findVertexSnap, snapPieceToNeighbors,
+    isSolved, POS_TOL, GRID_SIZE, SNAP_RADIUS };
 });

@@ -481,6 +481,7 @@ function startGame(stId, testSt){
   show('view-game');
   const st = testSt || stations[stId];
   timeUp=false;
+  window._gameOver=false;
   timeLeftSec = (st.timeLimitMin||10)*60;
   window._startedAt = Date.now();
   window._curStId = stId;
@@ -503,7 +504,12 @@ function tick(){
   const t=document.getElementById('timer');
   t.innerText=`${m}:${String(s).padStart(2,'0')}`;
   if(timeLeftSec<=30) t.classList.add('warn');
-  if(timeLeftSec<=0){ clearInterval(timerInterval); timeUp=true; t.innerText='HABIS'; }
+  if(timeLeftSec<=0){
+    clearInterval(timerInterval); timeUp=true; t.innerText='HABIS';
+    // Open-ended games (tangram) have no manual submit button, so auto-finish
+    // on timeout — otherwise a student who can't solve is stranded here.
+    if(gameState && gameState.type==='tangram') finishGame();
+  }
 }
 function renderGame(st){
   const card = document.getElementById('gameCard');
@@ -611,6 +617,8 @@ function startTangram(st, shapeId){
   });
 }
 function finishGame(forceOk){
+  if(window._gameOver) return;   // guard against double-completion (e.g. solve then timeout)
+  window._gameOver=true;
   if(gameState.type==='quiz'||gameState.type==='pilihan'){
     let correct=0;
     gameState.qs.forEach((q,i)=>{

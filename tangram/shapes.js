@@ -33,14 +33,17 @@
       { type: 'square', pos: { x: 5.207107, y: 4.5 }, angle: 45, flipped: false },
       { type: 'para', pos: { x: 4.146447, y: 5.56066 }, angle: 135, flipped: false },
     ],
+    // Every piece shares a full edge or a vertex with a neighbour (vertices on
+    // an integer grid), so the vertex-snap "assist stick" reliably locks the
+    // arrangement together — see the reachability test in engine.test.js.
     kuda: [
-      { type: 'largeTri', pos: { x: 4.667, y: 5.667 }, angle: 0,   flipped: false }, // body (upper-left half)
-      { type: 'largeTri', pos: { x: 5.333, y: 6.333 }, angle: 180, flipped: false }, // body (lower-right half) -> 2x2 square barrel
-      { type: 'para',     pos: { x: 3.4,   y: 4.2 },   angle: 45,  flipped: false }, // neck (rising up-left)
-      { type: 'medTri',   pos: { x: 2.5,   y: 3.05 },  angle: 225, flipped: false }, // head
-      { type: 'smallTri', pos: { x: 4.3,   y: 7.667 }, angle: 180, flipped: false }, // front leg
-      { type: 'smallTri', pos: { x: 6.5,   y: 7.667 }, angle: 180, flipped: false }, // back leg
-      { type: 'square',   pos: { x: 6.5,   y: 6.5 },   angle: 0,   flipped: false }, // rump / hindquarter
+      { type: 'largeTri', pos: { x: 4.6667, y: 5.6667 }, angle: 0,   flipped: false }, // body (upper-left half)
+      { type: 'largeTri', pos: { x: 5.3333, y: 6.3333 }, angle: 180, flipped: false }, // body (lower-right half) -> 2x2 square barrel
+      { type: 'square',   pos: { x: 6.5,    y: 6.5 },    angle: 0,   flipped: false }, // rump (shares right edge of body)
+      { type: 'smallTri', pos: { x: 4.3333, y: 7.3333 }, angle: 0,   flipped: false }, // front leg (shares body bottom edge)
+      { type: 'smallTri', pos: { x: 6.6667, y: 7.3333 }, angle: 90,  flipped: false }, // back leg (shares rump bottom edge)
+      { type: 'para',     pos: { x: 3,      y: 4.5 },    angle: 0,   flipped: false }, // neck (shares body top-left vertex)
+      { type: 'medTri',   pos: { x: 2,      y: 3.3333 }, angle: 225, flipped: false }, // head (shares neck tip vertex)
     ],
   };
 
