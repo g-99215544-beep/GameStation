@@ -93,7 +93,12 @@
         rctx.closePath(); rctx.fill(); rctx.stroke();
       });
     }
-    const evtU = e => { const r = canvas.getBoundingClientRect(); return p2u({ x: e.clientX - r.left, y: e.clientY - r.top }); };
+    const evtU = e => {
+      const r = canvas.getBoundingClientRect();
+      // account for the canvas being CSS-scaled (max-width:100%) on small phones
+      const sx = canvas.width / r.width, sy = canvas.height / r.height;
+      return p2u({ x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy });
+    };
     const hit = u => { for (let i = pieces.length - 1; i >= 0; i--) if (E.pointInPolygon(u, wp(pieces[i]))) return pieces[i]; return null; };
     function snap(p) {
       const others = pieces.filter(q => q !== p);

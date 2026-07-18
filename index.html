@@ -485,9 +485,12 @@ function startGame(stId, testSt){
   timeLeftSec = (st.timeLimitMin||10)*60;
   window._startedAt = Date.now();
   window._curStId = stId;
+  renderGame(st);
+  // Tangram runs its own flow: instructions -> Mula -> timer -> 2 shapes, and
+  // draws its own test banner, so don't start the timer / banner here for it.
+  if(st.gameType==='tangram') return;
   document.getElementById('timer').style.display='block';
   timerInterval = setInterval(tick,1000);
-  renderGame(st);
   if(window._testMode){
     const card = document.getElementById('gameCard');
     const banner = document.createElement('div');
@@ -508,7 +511,7 @@ function tick(){
     clearInterval(timerInterval); timeUp=true; t.innerText='HABIS';
     // Open-ended games (tangram) have no manual submit button, so auto-finish
     // on timeout — otherwise a student who can't solve is stranded here.
-    if(gameState && gameState.type==='tangram') finishGame();
+    if(gameState && gameState.type==='tangram' && window._tgTimeout){ window._tgTimeout(); }
   }
 }
 function renderGame(st){
@@ -564,7 +567,7 @@ function renderGame(st){
     card.innerHTML=html;
   }
   else if(st.gameType==='tangram'){
-    startTangram(st, data.shape || 'segiempat');
+    startTangram(st);
     return;
   }
   else {
@@ -601,22 +604,109 @@ function checkGrid(){
   gameState.correct = correct===total?1:0; gameState.total=1;
   finishGame();
 }
-function startTangram(st, shapeId){
+// Tangram station: every student builds TWO shapes in sequence (square, then
+// horse), one shared timer, after a clear instructions screen. Scoring out of
+// 200: 25 per shape completed, plus a time bonus of (timeLeft/total)*150 only
+// if both are completed. The admin "Uji" path runs this exact same flow.
+function startTangram(st){
   const S = window.TangramShapes;
-  gameState.total = 1; gameState.correct = 0;
-  const sol = S.SOLUTIONS[shapeId] || S.SOLUTIONS.segiempat;
+  gameState.type='tangram'; gameState.total=1; gameState.correct=0;
+  const totalSec = (st.timeLimitMin||10)*60;
+  const SHAPES = [{id:'segiempat', name:'Segi Empat'}, {id:'kuda', name:'Kuda'}];
+  let idx = 0;    // shape currently being built
+  let done = 0;   // shapes completed so far
   const card = document.getElementById('gameCard');
-  card.innerHTML = `<h2>${st.name}</h2>
-    <div style="font-size:13px;color:#555;font-weight:700;">Bina bentuk ini:</div>
-    <canvas id="tgRef" style="margin:6px 0 12px;"></canvas>
-    <canvas id="tgBoard" width="360" height="460" style="background:#fff;border:3px solid #d4a94e;border-radius:12px;touch-action:none;max-width:100%;"></canvas>
-    <p style="color:#555;font-size:13px;">Ketik keping = putar. Seret untuk gerak.</p>
-    <button id="tgFlip" class="secondary" style="display:none;" onclick="window._tgCtrl && window._tgCtrl.flipSelected()">↔ Balik</button>`;
-  window._tgCtrl = window.TangramUI.attachTangram(document.getElementById('tgBoard'), {
-    solution: sol, ppu: 51, refCanvas: document.getElementById('tgRef'),
-    onSolve: () => { gameState.correct = 1; finishGame(); },
-    onSelect: (p) => { document.getElementById('tgFlip').style.display = (p && p.type === 'para') ? 'inline-block' : 'none'; }
-  });
+  const testBanner = () => window._testMode
+    ? '<div class="msg" style="background:#fdf3d8;margin-top:0;">🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">← Kembali ke Admin</button></div>'
+    : '';
+
+  function showInstructions(){
+    if(timerInterval) clearInterval(timerInterval);
+    document.getElementById('timer').style.display='none';
+    card.innerHTML = testBanner() + `
+      <h2>🧩 ${st.name}</h2>
+      <div class="card" style="text-align:left;box-shadow:none;border:2px solid #eee;">
+        <h3 style="margin-top:0;">📋 Arahan</h3>
+        <ol style="padding-left:20px;line-height:1.7;margin:0;">
+          <li>Anda perlu bina <b>2 bentuk</b>: mula-mula <b>Segi Empat</b>, kemudian <b>Kuda</b>.</li>
+          <li>Bayang bentuk ada dalam kotak — <b>seret keping</b> ke dalam bayang untuk memenuhinya.</li>
+          <li><b>Ketik</b> keping untuk pusing 45°. Keping akan melekat pada tepi keping lain.</li>
+          <li>Bentuk siap secara <b>automatik</b> apabila susunan betul.</li>
+        </ol>
+        <div class="msg ok" style="font-weight:700;margin-top:12px;">
+          🏆 Markah penuh <b>200</b> · Siap 1 bentuk = 25 · Siap 2 bentuk = 50 + bonus masa (makin cepat, makin tinggi) · Gagal dua-dua = 0.<br>
+          ⏱️ Masa: <b>${Math.round(totalSec/60)} minit</b> — bermula bila anda tekan Mula.
+        </div>
+      </div>
+      <button class="big" onclick="window._tgStart()">▶️ Mula Aktiviti</button>`;
+  }
+
+  function startActivity(){
+    timeUp=false; window._gameOver=false;
+    timeLeftSec = totalSec; window._startedAt = Date.now();
+    document.getElementById('timer').style.display='block';
+    if(timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(tick,1000);
+    playShape();
+  }
+
+  function playShape(){
+    const shp = SHAPES[idx];
+    card.innerHTML = testBanner() + `
+      <h2>🧩 ${st.name}</h2>
+      <div style="font-weight:800;color:var(--gold);background:var(--navy);display:inline-block;padding:5px 14px;border-radius:6px;">Bentuk ${idx+1}/2: ${shp.name}</div>
+      <canvas id="tgBoard" width="360" height="460" style="background:#fff;border:3px solid #d4a94e;border-radius:12px;touch-action:none;max-width:100%;display:block;margin:10px auto;"></canvas>
+      <p style="color:#555;font-size:13px;">Seret keping ke dalam bayang. Ketik keping = putar.</p>
+      <button id="tgFlip" class="secondary" style="display:none;" onclick="window._tgCtrl && window._tgCtrl.flipSelected()">↔ Balik</button>`;
+    window._tgCtrl = window.TangramUI.attachTangram(document.getElementById('tgBoard'), {
+      solution: S.SOLUTIONS[shp.id], ppu: 51,
+      onSolve: onShapeSolved,
+      onSelect: (p) => { const f=document.getElementById('tgFlip'); if(f) f.style.display=(p&&p.type==='para')?'inline-block':'none'; }
+    });
+  }
+
+  function onShapeSolved(){
+    done++; idx++;
+    if(idx < SHAPES.length){
+      card.innerHTML = testBanner() + `<div class="finalbox">
+        <div style="font-size:56px;">✅</div>
+        <h2 style="color:var(--green);">Bentuk ${done} Selesai!</h2>
+        <p>Seterusnya: bina <b>${SHAPES[idx].name}</b>.</p>
+        <p style="color:#888;font-size:13px;">⏱️ Masa masih berjalan — teruskan cepat!</p>
+        <button class="big" onclick="window._tgNext()">➡️ Bina ${SHAPES[idx].name}</button>
+      </div>`;
+    } else {
+      complete();
+    }
+  }
+
+  function complete(){
+    if(window._gameOver) return; window._gameOver=true;
+    if(timerInterval) clearInterval(timerInterval);
+    const remain = Math.max(0, timeLeftSec);
+    const score = done*25 + (done>=2 ? Math.round((remain/totalSec)*150) : 0);
+    const timeTakenSec = Math.round((Date.now()-window._startedAt)/1000);
+    if(window._testMode){ showTangramTestResult(done, score, timeTakenSec); return; }
+    submitCompletion(done>=2, score, timeTakenSec);
+  }
+
+  window._tgStart = startActivity;
+  window._tgNext = playShape;
+  window._tgTimeout = complete;   // invoked by tick() when the timer hits 0
+  showInstructions();
+}
+function showTangramTestResult(done, score, timeTakenSec){
+  show('view-result');
+  document.getElementById('timer').style.display='none';
+  const msg = done>=2 ? 'Kedua-dua bentuk siap! 🎉' : done===1 ? '1 bentuk siap, 1 belum' : 'Tiada bentuk siap';
+  document.getElementById('resultCard').innerHTML=`<div class="finalbox">
+    <div style="font-size:50px;">🧪</div>
+    <h2>Ujian Selesai</h2>
+    <p>${msg}</p>
+    <p>Markah: <b>${score}</b> / 200 <span style="color:#888;">(${timeTakenSec}s)</span></p>
+    <p style="color:#888;font-size:13px;">Mod ujian — tiada markah disimpan ke Firebase.</p>
+    <button class="big" onclick="endTest()">← Kembali ke Admin</button>
+  </div>`;
 }
 function finishGame(forceOk){
   if(window._gameOver) return;   // guard against double-completion (e.g. solve then timeout)
