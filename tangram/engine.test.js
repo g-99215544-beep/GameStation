@@ -116,3 +116,16 @@ test('isSolved: swapping the two duplicate "a" pieces still solves', () => {
   const swapped = [SOL[2], SOL[1], SOL[0]];
   assert.strictEqual(E.isSolved(swapped, SOL, FIX), true);
 });
+
+test('T1: segiempat solution tiles a square (area 8, square bbox)', () => {
+  const sol = S.SOLUTIONS.segiempat;
+  assert.strictEqual(sol.length, 7);
+  const worlds = sol.map(s => E.transformPolygon(S.PIECE_POLYGONS[s.type], s.pos, s.angle, s.flipped));
+  const totalArea = worlds.reduce((a, w) => a + E.polygonArea(w), 0);
+  assert.ok(Math.abs(totalArea - 8) < 1e-6, 'piece areas must sum to 8');
+  const xs = worlds.flat().map(p => p.x), ys = worlds.flat().map(p => p.y);
+  const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+  const side = 2 * Math.SQRT2;
+  assert.ok(Math.abs(w - side) < 0.05 && Math.abs(h - side) < 0.05,
+    `bbox ${w.toFixed(3)}x${h.toFixed(3)} should be ${side.toFixed(3)} square`);
+});
