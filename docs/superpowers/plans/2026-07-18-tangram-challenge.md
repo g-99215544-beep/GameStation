@@ -25,8 +25,9 @@
 - Create: `tangram/engine.js` — pure geometry, snap, solve detection (UMD; no deps).
 - Create: `tangram/shapes.js` — `PIECE_POLYGONS`, `PIECE_SET`, `SOLUTIONS` (UMD; no deps).
 - Create: `tangram/engine.test.js` — Node tests for engine + shapes.
-- Create: `tangram-prototype.html` — Canvas UI + authoring dump button (loads the two JS files).
-- Modify: `index.html` — add `tangram` to `GAME_TYPES`, `<script>` includes, a `tangram` branch in `renderGame`, solve → `finishGame`.
+- Create: `tangram/ui.js` — shared Canvas UI module (`attachTangram`); consumed by both the prototype and `index.html` so no glue is duplicated.
+- Create: `tangram-prototype.html` — Canvas UI shell + authoring dump button (loads engine/shapes/ui).
+- Modify: `index.html` — add `tangram` to `GAME_TYPES`, three `<script>` includes, a `tangram` branch in `renderGame`, solve → `finishGame`.
 
 ---
 
@@ -467,16 +468,135 @@ git commit -m "feat(tangram): position/rotation-invariant solve detection"
 
 ---
 
-### Task 5: Prototype — rendering
+### Task 5: Shared UI module + prototype
 
 **Files:**
+- Create: `tangram/ui.js`
 - Create: `tangram-prototype.html`
 
 **Interfaces:**
-- Consumes: `window.TangramEngine`, `window.TangramShapes` (browser globals from the UMD files).
-- Produces: `initPieces()`, `render()`, and a module-level `pieces` array of `{id,type,pos,angle,flipped}`. `unitToPx`/`pxToUnit` helpers.
+- Consumes: `window.TangramEngine` (Tasks 1/3/4), `window.TangramShapes` (Task 2).
+- Produces (on `module.exports` / `window.TangramUI`):
+  - `attachTangram(canvas, opts) -> controller`
+    - `opts`: `{ solution?, ppu?, onSolve?, onSelect?, polygons?, pieceSet? }`
+      (defaults: `polygons = TangramShapes.PIECE_POLYGONS`, `pieceSet = TangramShapes.PIECE_SET`, `ppu = 38`).
+    - Behavior: renders the 7 pieces scattered on the canvas; drag moves a
+      piece; a tap (< 6px move) rotates the selected piece +45° CW; on release,
+      snaps to grid + nearest 45° + nearest neighbour vertex; draws the reference
+      silhouette (from `solution`) top-right; calls `onSolve()` once when
+      `isSolved` is true.
+    - `controller`: `{ getPieces(), setPieces(arr), flipSelected(), getSelected(), redraw(), destroy() }`.
+      `getPieces()` returns `[{type,pos:{x,y},angle,flipped}]` with coords rounded
+      to 4 decimals (used for authoring dumps in Task 6).
 
-- [ ] **Step 1: Create the prototype file with rendering only**
+This single module is consumed by BOTH the prototype (this task) and
+`index.html` (Task 7) — no Canvas/pointer glue is duplicated.
+
+- [ ] **Step 1: Create the shared UI module**
+
+Create `tangram/ui.js`:
+
+```js
+(function (root, factory) {
+  const mod = factory();
+  if (typeof module !== 'undefined' && module.exports) module.exports = mod;
+  else root.TangramUI = mod;
+})(typeof self !== 'undefined' ? self : this, function () {
+  const COLORS = { largeTri:'#3a7d5c', medTri:'#c0453a', smallTri:'#1e2a4a', square:'#d4a94e', para:'#7a5cc0' };
+
+  function attachTangram(canvas, opts) {
+    opts = opts || {};
+    const E = opts.engine || (typeof window !== 'undefined' ? window.TangramEngine : null);
+    const S = opts.shapes || (typeof window !== 'undefined' ? window.TangramShapes : null);
+    const polygons = opts.polygons || S.PIECE_POLYGONS;
+    const pieceSet = opts.pieceSet || S.PIECE_SET;
+    const solution = opts.solution || null;
+    const PPU = opts.ppu || 38;
+    const onSolve = opts.onSolve || function () {};
+    const onSelect = opts.onSelect || function () {};
+    const ctx = canvas.getContext('2d');
+
+    let pieces = pieceSet.map((t, i) => ({
+      id: i, type: t, angle: 0, flipped: false,
+      pos: { x: 1.4 + (i % 4) * 2, y: 1.4 + Math.floor(i / 4) * 3 }
+    }));
+    let selected = null, dragging = false, startPx = null, grab = null, solved = false;
+
+    const wp = p => E.transformPolygon(polygons[p.type], p.pos, p.angle, p.flipped);
+    const u2p = p => ({ x: p.x * PPU, y: p.y * PPU });
+    const p2u = p => ({ x: p.x / PPU, y: p.y / PPU });
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      pieces.forEach(p => {
+        const poly = wp(p).map(u2p);
+        ctx.beginPath();
+        poly.forEach((v, i) => i ? ctx.lineTo(v.x, v.y) : ctx.moveTo(v.x, v.y));
+        ctx.closePath();
+        ctx.fillStyle = COLORS[p.type] || '#888'; ctx.fill();
+        ctx.strokeStyle = (p === selected) ? '#000' : '#fff';
+        ctx.lineWidth = (p === selected) ? 3 : 2; ctx.stroke();
+      });
+      if (solution) {
+        const c = solution.reduce((a, s) => ({ x: a.x + s.pos.x, y: a.y + s.pos.y }), { x: 0, y: 0 });
+        c.x /= solution.length; c.y /= solution.length;
+        ctx.save(); ctx.fillStyle = 'rgba(30,42,74,.85)';
+        solution.forEach(s => {
+          const poly = E.transformPolygon(polygons[s.type], s.pos, s.angle, s.flipped);
+          ctx.beginPath();
+          poly.forEach((v, i) => {
+            const x = canvas.width - 64 + (v.x - c.x) * 9, y = 12 + (v.y - c.y) * 9 + 26;
+            i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+          });
+          ctx.closePath(); ctx.fill();
+        });
+        ctx.restore();
+      }
+    }
+    const evtU = e => { const r = canvas.getBoundingClientRect(); return p2u({ x: e.clientX - r.left, y: e.clientY - r.top }); };
+    const hit = u => { for (let i = pieces.length - 1; i >= 0; i--) if (E.pointInPolygon(u, wp(pieces[i]))) return pieces[i]; return null; };
+    function snap(p) {
+      p.pos = E.snapToGrid(p.pos, E.GRID_SIZE); p.angle = E.snapAngle(p.angle);
+      const others = []; pieces.forEach(q => { if (q !== p) wp(q).forEach(v => others.push(v)); });
+      const s = E.findVertexSnap(wp(p), others, E.SNAP_RADIUS); if (s) { p.pos.x += s.dx; p.pos.y += s.dy; }
+    }
+    function check() { if (solved || !solution) return; if (E.isSolved(pieces, solution, polygons)) { solved = true; onSolve(); } }
+
+    function onDown(e) {
+      if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+      const u = evtU(e); selected = hit(u); dragging = false; startPx = { x: e.clientX, y: e.clientY };
+      if (selected) { pieces = pieces.filter(q => q !== selected); pieces.push(selected); grab = { x: u.x - selected.pos.x, y: u.y - selected.pos.y }; }
+      onSelect(selected); draw();
+    }
+    function onMove(e) {
+      if (!selected) return;
+      if (!dragging && Math.hypot(e.clientX - startPx.x, e.clientY - startPx.y) > 6) dragging = true;
+      if (dragging) { const u = evtU(e); selected.pos = { x: u.x - grab.x, y: u.y - grab.y }; draw(); }
+    }
+    function onUp() {
+      if (!selected) return;
+      if (!dragging) selected.angle = E.snapAngle(selected.angle + 45); else snap(selected);
+      draw(); check();
+    }
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('pointermove', onMove);
+    canvas.addEventListener('pointerup', onUp);
+    draw();
+
+    return {
+      getPieces: () => pieces.map(p => ({ type: p.type, pos: { x: +p.pos.x.toFixed(4), y: +p.pos.y.toFixed(4) }, angle: p.angle, flipped: p.flipped })),
+      setPieces: (arr) => { pieces = arr.map((s, i) => ({ id: i, type: s.type, pos: { x: s.pos.x, y: s.pos.y }, angle: s.angle, flipped: s.flipped })); solved = false; draw(); check(); },
+      flipSelected: () => { if (!selected) return; selected.flipped = !selected.flipped; snap(selected); draw(); check(); },
+      getSelected: () => selected,
+      redraw: draw,
+      destroy: () => { canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove); canvas.removeEventListener('pointerup', onUp); }
+    };
+  }
+  return { attachTangram };
+});
+```
+
+- [ ] **Step 2: Create the prototype consuming the module**
 
 Create `tangram-prototype.html`:
 
@@ -488,261 +608,111 @@ Create `tangram-prototype.html`:
 <style>
   body{font-family:'Segoe UI',sans-serif;background:#faf6ee;margin:0;color:#1e2a4a;text-align:center;}
   #board{background:#fff;border:3px solid #d4a94e;border-radius:12px;touch-action:none;display:block;margin:10px auto;}
-  button{background:#1e2a4a;color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:700;margin:4px;}
+  button,select{background:#1e2a4a;color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:700;margin:4px;font-size:15px;}
   #status{font-weight:800;font-size:18px;min-height:24px;}
+  #dump{text-align:left;max-width:360px;margin:0 auto;white-space:pre-wrap;font-size:11px;}
 </style></head><body>
 <h2>Tangram Prototype</h2>
+<select id="shapeSel"><option value="segiempat">Segi empat</option><option value="kuda">Kuda</option></select>
+<button id="flipBtn" style="display:none;">↔ Balik</button>
 <div id="status"></div>
-<canvas id="board" width="360" height="360"></canvas>
+<canvas id="board" width="360" height="380"></canvas>
 <div>
-  <button onclick="dumpState()">📋 Dump state</button>
-  <button onclick="initPieces();render();">↺ Reset</button>
+  <button id="dumpBtn">📋 Dump state</button>
+  <button id="resetBtn">↺ Reset</button>
 </div>
-<pre id="dump" style="text-align:left;max-width:360px;margin:0 auto;white-space:pre-wrap;"></pre>
+<pre id="dump"></pre>
 <script src="tangram/engine.js"></script>
 <script src="tangram/shapes.js"></script>
+<script src="tangram/ui.js"></script>
 <script>
-const E = TangramEngine, S = TangramShapes;
-const PPU = 40;                 // pixels per unit
-const cv = document.getElementById('board'), ctx = cv.getContext('2d');
-let pieces = [];
-const COLORS = { largeTri:'#3a7d5c', medTri:'#c0453a', smallTri:'#1e2a4a', square:'#d4a94e', para:'#7a5cc0' };
+const S = TangramShapes;
+const cv = document.getElementById('board');
+let ctrl, shape = 'segiempat';
 
-function unitToPx(p){ return { x: p.x*PPU, y: p.y*PPU }; }
-function pxToUnit(p){ return { x: p.x/PPU, y: p.y/PPU }; }
-
-function initPieces(){
-  pieces = S.PIECE_SET.map((t,i)=>({
-    id:i, type:t, angle:0, flipped:false,
-    pos:{ x: 1.5 + (i%4)*2, y: 1.5 + Math.floor(i/4)*3 }
-  }));
-}
-function worldPoly(p){ return E.transformPolygon(S.PIECE_POLYGONS[p.type], p.pos, p.angle, p.flipped); }
-
-function render(){
-  ctx.clearRect(0,0,cv.width,cv.height);
-  pieces.forEach(p=>{
-    const poly = worldPoly(p).map(unitToPx);
-    ctx.beginPath();
-    poly.forEach((v,i)=> i? ctx.lineTo(v.x,v.y) : ctx.moveTo(v.x,v.y));
-    ctx.closePath();
-    ctx.fillStyle = COLORS[p.type]; ctx.fill();
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+function build(){
+  if (ctrl) ctrl.destroy();
+  shape = document.getElementById('shapeSel').value;
+  document.getElementById('status').textContent = '';
+  ctrl = TangramUI.attachTangram(cv, {
+    solution: S.SOLUTIONS[shape] || null,
+    onSolve: () => { document.getElementById('status').textContent = '🎉 BERJAYA!'; },
+    onSelect: (p) => { document.getElementById('flipBtn').style.display = (p && p.type === 'para') ? 'inline-block' : 'none'; }
   });
 }
-function dumpState(){
-  const out = pieces.map(p=>({ type:p.type, pos:{x:+p.pos.x.toFixed(4), y:+p.pos.y.toFixed(4)}, angle:p.angle, flipped:p.flipped }));
-  document.getElementById('dump').textContent = JSON.stringify(out);
-}
-initPieces(); render();
+document.getElementById('shapeSel').onchange = build;
+document.getElementById('resetBtn').onclick = build;
+document.getElementById('flipBtn').onclick = () => ctrl.flipSelected();
+document.getElementById('dumpBtn').onclick = () => {
+  document.getElementById('dump').textContent = JSON.stringify(ctrl.getPieces());
+};
+build();
 </script></body></html>
 ```
 
-- [ ] **Step 2: Verify in the browser**
+- [ ] **Step 3: Verify in the browser**
 
-Serve and open, then confirm 7 colored pieces render without errors:
+Serve and drive with Playwright MCP:
 
 ```bash
 python -m http.server 8765 >/dev/null 2>&1 &
 ```
 
-Drive with Playwright MCP: navigate to `http://localhost:8765/tangram-prototype.html`, take a snapshot, and evaluate:
-
-```js
-() => ({ pieceCount: pieces.length, err: window.__err || null })
-```
-
-Expected: `pieceCount: 7`, canvas shows 7 shapes, no console errors.
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add tangram-prototype.html
-git commit -m "feat(tangram): prototype rendering of 7 pieces"
-```
-
----
-
-### Task 6: Prototype — interaction (drag, tap-rotate, flip, snap)
-
-**Files:**
-- Modify: `tangram-prototype.html` (add pointer handlers, flip button, snap-on-release)
-
-**Interfaces:**
-- Consumes: `pieces`, `worldPoly`, `render`, `pxToUnit` (Task 5); `E.snapToGrid`, `E.snapAngle`, `E.findVertexSnap`, `E.pointInPolygon` (Tasks 1/3).
-- Produces: `snapPiece(p)`, `checkSolved()`, pointer-event wiring. Behavior: drag moves; tap (< 6px move) rotates selected piece +45°; a "↔ Balik" button flips the selected `para`.
-
-- [ ] **Step 1: Add interaction code**
-
-In `tangram-prototype.html`, add a flip button after the board:
-
-```html
-<button id="flipBtn" onclick="flipSelected()" style="display:none;">↔ Balik</button>
-```
-
-Add before `initPieces(); render();`:
-
-```js
-let selected = null, dragging = false, startPx = null, grabOffset = null;
-
-function hitTest(uPt){
-  for (let i = pieces.length - 1; i >= 0; i--) {
-    if (E.pointInPolygon(uPt, worldPoly(pieces[i]))) return pieces[i];
-  }
-  return null;
-}
-function bringToTop(p){ pieces = pieces.filter(q => q !== p); pieces.push(p); }
-function evtUnit(e){
-  const r = cv.getBoundingClientRect();
-  return pxToUnit({ x: e.clientX - r.left, y: e.clientY - r.top });
-}
-function updateFlipBtn(){
-  document.getElementById('flipBtn').style.display =
-    (selected && selected.type === 'para') ? 'inline-block' : 'none';
-}
-
-cv.addEventListener('pointerdown', e => {
-  cv.setPointerCapture(e.pointerId);
-  const u = evtUnit(e);
-  selected = hitTest(u);
-  dragging = false;
-  startPx = { x: e.clientX, y: e.clientY };
-  if (selected) { bringToTop(selected); grabOffset = { x: u.x - selected.pos.x, y: u.y - selected.pos.y }; }
-  updateFlipBtn(); render();
-});
-cv.addEventListener('pointermove', e => {
-  if (!selected) return;
-  if (!dragging && Math.hypot(e.clientX - startPx.x, e.clientY - startPx.y) > 6) dragging = true;
-  if (dragging) {
-    const u = evtUnit(e);
-    selected.pos = { x: u.x - grabOffset.x, y: u.y - grabOffset.y };
-    render();
-  }
-});
-cv.addEventListener('pointerup', () => {
-  if (!selected) return;
-  if (!dragging) { selected.angle = E.snapAngle(selected.angle + 45); }  // tap = rotate CW
-  else { snapPiece(selected); }
-  render(); checkSolved();
-});
-
-function flipSelected(){
-  if (!selected) return;
-  selected.flipped = !selected.flipped;
-  snapPiece(selected); render(); checkSolved();
-}
-function snapPiece(p){
-  p.pos = E.snapToGrid(p.pos, E.GRID_SIZE);
-  p.angle = E.snapAngle(p.angle);
-  const mine = worldPoly(p);
-  const others = [];
-  pieces.forEach(q => { if (q !== p) worldPoly(q).forEach(v => others.push(v)); });
-  const snap = E.findVertexSnap(mine, others, E.SNAP_RADIUS);
-  if (snap) { p.pos.x += snap.dx; p.pos.y += snap.dy; }
-}
-function checkSolved(){
-  const sol = S.SOLUTIONS[window.__shape];
-  const st = document.getElementById('status');
-  if (sol && E.isSolved(pieces, sol, S.PIECE_POLYGONS)) st.textContent = '🎉 BERJAYA!';
-  else st.textContent = '';
-}
-```
-
-- [ ] **Step 2: Verify in the browser**
-
-Serve, navigate to the prototype. Drive with Playwright MCP `browser_evaluate` to simulate a rotate via tap and a drag+snap, checking state changes:
+Navigate to `http://localhost:8765/tangram-prototype.html`, snapshot, and evaluate:
 
 ```js
 () => {
-  const before = pieces[0].angle;
-  // simulate a tap-rotate directly through the handler path:
-  selected = pieces[0]; dragging = false; selected.angle = E.snapAngle(selected.angle + 45);
-  const after = pieces[0].angle;
-  // simulate snap: nudge a piece near another's vertex then snap
-  const p = pieces[1]; snapPiece(p);
-  return { rotatedBy: after - before, angleIsMultipleOf45: after % 45 === 0 };
+  const before = ctrl.getPieces().length;
+  const sel = ctrl.getPieces()[0];
+  return { pieceCount: before, firstType: sel.type, hasCtrl: !!ctrl };
 }
 ```
 
-Expected: `rotatedBy: 45`, `angleIsMultipleOf45: true`. Then manually (via real pointer or `browser_click`/drag) confirm pieces move and click into place.
+Expected: `pieceCount: 7`, no console errors, 7 shapes visible on the canvas.
+Then confirm a tap rotates and a drag moves a piece (via real pointer events or
+`browser_click`/drag on the canvas), and that a moved piece clicks into place.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add tangram-prototype.html
-git commit -m "feat(tangram): drag, tap-rotate, flip, snap-on-release"
+git add tangram/ui.js tangram-prototype.html
+git commit -m "feat(tangram): shared canvas UI module + prototype"
 ```
 
 ---
 
-### Task 7: Author the two target shapes
+### Task 6: Author the two target shapes
 
 **Files:**
-- Modify: `tangram-prototype.html` (add a shape selector so you can author + test each)
 - Modify: `tangram/shapes.js` (fill `SOLUTIONS.segiempat` and `SOLUTIONS.kuda`)
 - Modify: `tangram/engine.test.js` (append T1 tiling validation for the square)
 
 **Interfaces:**
-- Consumes: everything from Tasks 1–6.
-- Produces: `SOLUTIONS = { segiempat:[...7], kuda:[...7] }` with real, snapped coordinates; a reference-silhouette renderer in the prototype.
+- Consumes: the prototype + `controller.getPieces()` from Task 5; `isSolved` from Task 4.
+- Produces: `SOLUTIONS = { segiempat:[...7], kuda:[...7] }` with real, snapped coordinates.
 
-- [ ] **Step 1: Add shape selection + reference silhouette to the prototype**
+- [ ] **Step 1: Author `segiempat` (the square)**
 
-In `tangram-prototype.html`, add near the top controls:
-
-```html
-<select id="shapeSel" onchange="window.__shape=this.value;render();checkSolved();">
-  <option value="segiempat">Segi empat</option>
-  <option value="kuda">Kuda</option>
-</select>
-```
-
-Set default and draw a small reference (top-right of the canvas) from `SOLUTIONS`:
-
-```js
-window.__shape = 'segiempat';
-function drawReference(){
-  const sol = S.SOLUTIONS[window.__shape];
-  if (!sol) return;
-  const scale = 12, ox = cv.width - 90, oy = 10;
-  const cen = sol.reduce((a,s)=>({x:a.x+s.pos.x,y:a.y+s.pos.y}),{x:0,y:0});
-  cen.x/=sol.length; cen.y/=sol.length;
-  ctx.save(); ctx.fillStyle='#1e2a4a';
-  sol.forEach(s=>{
-    const poly = E.transformPolygon(S.PIECE_POLYGONS[s.type], s.pos, s.angle, s.flipped);
-    ctx.beginPath();
-    poly.forEach((v,i)=>{ const x=ox+(v.x-cen.x)*scale+40, y=oy+(v.y-cen.y)*scale+40;
-      i?ctx.lineTo(x,y):ctx.moveTo(x,y); });
-    ctx.closePath(); ctx.fill();
-  });
-  ctx.restore();
-}
-```
-
-Call `drawReference()` at the end of `render()`.
-
-- [ ] **Step 2: Author `segiempat` (the square)**
-
-Serve and open the prototype. Select "Segi empat". Drag/rotate the 7 pieces to assemble them into the original square (they snap to grid so the result is exact). When assembled, click **📋 Dump state**, copy the JSON.
-
-Paste it into `tangram/shapes.js`, replacing the `SOLUTIONS` line:
+Serve and open the prototype. Select "Segi empat". Drag/rotate the 7 pieces to
+reassemble the original square (snapping makes the result exact). Click
+**📋 Dump state** and copy the JSON. Paste it into `tangram/shapes.js`, replacing
+the `SOLUTIONS` line:
 
 ```js
 const SOLUTIONS = { segiempat: /* PASTE dumped array here */, kuda: [] };
 ```
 
-- [ ] **Step 3: Add + run the T1 tiling test for the square**
+- [ ] **Step 2: Add + run the T1 tiling test for the square**
 
 Append to `tangram/engine.test.js`:
 
 ```js
-test('T1: segiempat solution tiles a square (area 8, no overlap)', () => {
+test('T1: segiempat solution tiles a square (area 8, square bbox)', () => {
   const sol = S.SOLUTIONS.segiempat;
   assert.strictEqual(sol.length, 7);
   const worlds = sol.map(s => E.transformPolygon(S.PIECE_POLYGONS[s.type], s.pos, s.angle, s.flipped));
   const totalArea = worlds.reduce((a, w) => a + E.polygonArea(w), 0);
   assert.ok(Math.abs(totalArea - 8) < 1e-6, 'piece areas must sum to 8');
-  // bounding box must be a square of side sqrt(8) = 2*sqrt(2)
   const xs = worlds.flat().map(p => p.x), ys = worlds.flat().map(p => p.y);
   const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
   const side = 2 * Math.SQRT2;
@@ -752,50 +722,55 @@ test('T1: segiempat solution tiles a square (area 8, no overlap)', () => {
 ```
 
 Run: `node --test tangram/`
-Expected: PASS. If it fails, re-assemble the square in the prototype and re-dump (snapping guarantees clean coordinates).
+Expected: PASS. If it fails, re-assemble the square in the prototype and re-dump
+(snapping guarantees clean coordinates).
 
-- [ ] **Step 4: Author `kuda` (the horse)**
+- [ ] **Step 3: Author `kuda` (the horse)**
 
-In the prototype select "Kuda" (reference will be empty until filled — that's expected). Assemble a horse silhouette you're happy with, **📋 Dump state**, and paste into `SOLUTIONS.kuda` in `tangram/shapes.js`.
+In the prototype select "Kuda" (its reference is empty until filled — expected).
+Assemble a horse silhouette you are happy with, **📋 Dump state**, and paste into
+`SOLUTIONS.kuda` in `tangram/shapes.js`.
 
-- [ ] **Step 5: Verify both shapes solve in the browser**
+- [ ] **Step 4: Verify both shapes solve**
 
-Serve, open prototype. For each shape: select it, assemble to match, confirm the status shows **🎉 BERJAYA!**. Also drive via Playwright MCP:
+Serve, open the prototype, and drive with Playwright MCP:
 
 ```js
 () => {
-  window.__shape = 'segiempat';
-  pieces = S.SOLUTIONS.segiempat.map((s,i)=>({id:i,...JSON.parse(JSON.stringify(s))}));
-  const squareSolves = E.isSolved(pieces, S.SOLUTIONS.segiempat, S.PIECE_POLYGONS);
-  pieces = S.SOLUTIONS.kuda.map((s,i)=>({id:i,...JSON.parse(JSON.stringify(s))}));
-  const horseSolves = E.isSolved(pieces, S.SOLUTIONS.kuda, S.PIECE_POLYGONS);
-  return { squareSolves, horseSolves };
+  const r = {};
+  ['segiempat','kuda'].forEach(name => {
+    const sol = S.SOLUTIONS[name];
+    r[name] = sol.length === 7 && TangramEngine.isSolved(
+      sol.map((s,i)=>({id:i,...JSON.parse(JSON.stringify(s))})), sol, S.PIECE_POLYGONS);
+  });
+  return r;
 }
 ```
 
-Expected: `{ squareSolves: true, horseSolves: true }`. Visually confirm the horse reference silhouette looks like a horse.
+Expected: `{ segiempat: true, kuda: true }`. Visually confirm (screenshot) the
+horse reference silhouette reads as a horse; if not, re-author and re-dump.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add tangram/shapes.js tangram/engine.test.js tangram-prototype.html
+git add tangram/shapes.js tangram/engine.test.js
 git commit -m "feat(tangram): author square + horse target solutions"
 ```
 
 ---
 
-### Task 8: Integrate into the app
+### Task 7: Integrate into the app
 
 **Files:**
 - Modify: `index.html`
   - `GAME_TYPES` (add tangram entry)
-  - `<head>` add `<script src="tangram/engine.js">` + `<script src="tangram/shapes.js">`
+  - `<head>` add three `<script src="tangram/*.js">` includes
   - `renderGame(st)` add a `tangram` branch
-  - add `startTangram(st)` helper
+  - add `startTangram(st, shapeId)` helper (uses `TangramUI.attachTangram`)
 
 **Interfaces:**
-- Consumes: `window.TangramEngine`, `window.TangramShapes`; existing `gameState`, `finishGame()`, `#gameCard`, `#timer`, `window._testMode`.
-- Produces: playable tangram station; solve → existing `finishGame()` with binary score.
+- Consumes: `window.TangramUI.attachTangram` (Task 5), `window.TangramShapes.SOLUTIONS` (Task 6); existing `gameState`, `finishGame()`, `#gameCard`, `#timer`, `window._testMode`.
+- Produces: playable tangram station; solve → existing `finishGame()` (binary score).
 
 - [ ] **Step 1: Register the game type and scripts**
 
@@ -805,23 +780,22 @@ In `index.html`, add to `GAME_TYPES` (after the existing entries):
   {id:'tangram', name:'Tangram Challenge'}
 ```
 
-In `<head>`, after the existing CDN script tags, add:
+In `<head>`, after the existing CDN `<script>` tags, add:
 
 ```html
 <script src="tangram/engine.js"></script>
 <script src="tangram/shapes.js"></script>
+<script src="tangram/ui.js"></script>
 ```
 
 - [ ] **Step 2: Add the tangram branch in `renderGame`**
 
-In `renderGame(st)`, add a branch (before the final `else`):
+In `renderGame(st)`, add a branch before the final `else`:
 
 ```js
   else if(st.gameType==='tangram'){
     let data={}; try{ data=JSON.parse(st.gameDataRaw||'{}'); }catch(e){ data={}; }
-    const shapeId = data.shape || 'segiempat';
-    gameState.total=1; gameState.correct=0;
-    startTangram(st, shapeId);
+    startTangram(st, data.shape || 'segiempat');
     return;
   }
 ```
@@ -832,75 +806,44 @@ Add near the other game helpers in `index.html`:
 
 ```js
 function startTangram(st, shapeId){
-  const E = window.TangramEngine, S = window.TangramShapes;
-  const card = document.getElementById('gameCard');
+  const S = window.TangramShapes;
+  gameState.total = 1; gameState.correct = 0;
   const sol = S.SOLUTIONS[shapeId] || S.SOLUTIONS.segiempat;
+  const card = document.getElementById('gameCard');
   card.innerHTML = `<h2>${st.name}</h2>
-    <canvas id="tgBoard" width="340" height="360" style="background:#fff;border:3px solid #d4a94e;border-radius:12px;touch-action:none;"></canvas>
+    <canvas id="tgBoard" width="340" height="380" style="background:#fff;border:3px solid #d4a94e;border-radius:12px;touch-action:none;"></canvas>
     <p style="color:#555;font-size:13px;">Ketik keping = putar. Seret untuk gerak.</p>
-    <button id="tgFlip" class="secondary" style="display:none;" onclick="tgFlipSelected()">↔ Balik</button>`;
-  const cv = document.getElementById('tgBoard'), ctx = cv.getContext('2d');
-  const PPU = 34;
-  const COLORS = { largeTri:'#3a7d5c', medTri:'#c0453a', smallTri:'#1e2a4a', square:'#d4a94e', para:'#7a5cc0' };
-  let pieces = S.PIECE_SET.map((t,i)=>({id:i,type:t,angle:0,flipped:false,
-    pos:{ x: 1.4 + (i%4)*2, y: 1.4 + Math.floor(i/4)*3 }}));
-  let selected=null, dragging=false, startPx=null, grabOffset=null, solved=false;
-  const wp = p => E.transformPolygon(S.PIECE_POLYGONS[p.type], p.pos, p.angle, p.flipped);
-  const u2p = p => ({x:p.x*PPU,y:p.y*PPU}), p2u = p => ({x:p.x/PPU,y:p.y/PPU});
-  function draw(){
-    ctx.clearRect(0,0,cv.width,cv.height);
-    pieces.forEach(p=>{ const poly=wp(p).map(u2p); ctx.beginPath();
-      poly.forEach((v,i)=> i?ctx.lineTo(v.x,v.y):ctx.moveTo(v.x,v.y)); ctx.closePath();
-      ctx.fillStyle=COLORS[p.type]; ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke(); });
-    // reference silhouette (top-right)
-    const cen = sol.reduce((a,s)=>({x:a.x+s.pos.x,y:a.y+s.pos.y}),{x:0,y:0}); cen.x/=sol.length; cen.y/=sol.length;
-    ctx.save(); ctx.fillStyle='rgba(30,42,74,.85)';
-    sol.forEach(s=>{ const poly=E.transformPolygon(S.PIECE_POLYGONS[s.type],s.pos,s.angle,s.flipped);
-      ctx.beginPath(); poly.forEach((v,i)=>{ const x=cv.width-70+(v.x-cen.x)*10, y=14+(v.y-cen.y)*10+30;
-        i?ctx.lineTo(x,y):ctx.moveTo(x,y); }); ctx.closePath(); ctx.fill(); });
-    ctx.restore();
-  }
-  const evtU = e => { const r=cv.getBoundingClientRect(); return p2u({x:e.clientX-r.left,y:e.clientY-r.top}); };
-  const hit = u => { for(let i=pieces.length-1;i>=0;i--) if(E.pointInPolygon(u,wp(pieces[i]))) return pieces[i]; return null; };
-  function flipBtn(){ document.getElementById('tgFlip').style.display=(selected&&selected.type==='para')?'inline-block':'none'; }
-  function snap(p){ p.pos=E.snapToGrid(p.pos,E.GRID_SIZE); p.angle=E.snapAngle(p.angle);
-    const others=[]; pieces.forEach(q=>{ if(q!==p) wp(q).forEach(v=>others.push(v)); });
-    const s=E.findVertexSnap(wp(p),others,E.SNAP_RADIUS); if(s){ p.pos.x+=s.dx; p.pos.y+=s.dy; } }
-  function check(){ if(solved) return;
-    if(E.isSolved(pieces, sol, S.PIECE_POLYGONS)){ solved=true; finishGame(); } }
-  cv.addEventListener('pointerdown', e=>{ cv.setPointerCapture(e.pointerId); const u=evtU(e);
-    selected=hit(u); dragging=false; startPx={x:e.clientX,y:e.clientY};
-    if(selected){ pieces=pieces.filter(q=>q!==selected); pieces.push(selected);
-      grabOffset={x:u.x-selected.pos.x,y:u.y-selected.pos.y}; } flipBtn(); draw(); });
-  cv.addEventListener('pointermove', e=>{ if(!selected) return;
-    if(!dragging && Math.hypot(e.clientX-startPx.x,e.clientY-startPx.y)>6) dragging=true;
-    if(dragging){ const u=evtU(e); selected.pos={x:u.x-grabOffset.x,y:u.y-grabOffset.y}; draw(); } });
-  cv.addEventListener('pointerup', ()=>{ if(!selected) return;
-    if(!dragging) selected.angle=E.snapAngle(selected.angle+45); else snap(selected);
-    draw(); check(); });
-  window.tgFlipSelected = ()=>{ if(!selected) return; selected.flipped=!selected.flipped; snap(selected); draw(); check(); };
-  draw();
+    <button id="tgFlip" class="secondary" style="display:none;" onclick="window._tgCtrl && window._tgCtrl.flipSelected()">↔ Balik</button>`;
+  window._tgCtrl = window.TangramUI.attachTangram(document.getElementById('tgBoard'), {
+    solution: sol, ppu: 34,
+    onSolve: () => { gameState.correct = 1; finishGame(); },
+    onSelect: (p) => { document.getElementById('tgFlip').style.display = (p && p.type === 'para') ? 'inline-block' : 'none'; }
+  });
 }
 ```
 
-- [ ] **Step 4: Verify in the browser via the admin test button**
+- [ ] **Step 4: Verify via the admin test button in the browser**
 
-Serve the app. Drive with Playwright MCP: set up an admin station of type `tangram` and launch test mode (reusing the `testStation` path), then solve programmatically to confirm it routes to the existing result screen without a Firebase write:
+Serve the app. Drive with Playwright MCP: build an admin `tangram` station and
+launch test mode (reusing the existing `testStation` path), then confirm it
+renders and solving routes to the existing result screen with 0 Firebase writes:
 
 ```js
 () => {
   buildStationsUI({1:{name:'Stesen Tangram', gameType:'tangram', gameDataRaw:'{"shape":"segiempat"}'}});
   show('view-admin');
-  document.getElementById('st_gametype_1').value='tangram';
-  document.getElementById('st_gamedata_1').value='{"shape":"segiempat"}';
+  document.getElementById('st_gametype_1').value = 'tangram';
+  document.getElementById('st_gamedata_1').value = '{"shape":"segiempat"}';
   window._testMode = true;
   testStation(1);
-  const hasCanvas = !!document.getElementById('tgBoard');
-  return { hasCanvas, gameActive: document.getElementById('view-game').classList.contains('active') };
+  return { hasCanvas: !!document.getElementById('tgBoard'), gameActive: document.getElementById('view-game').classList.contains('active') };
 }
 ```
 
-Expected: `{ hasCanvas: true, gameActive: true }`. Then confirm the reference silhouette renders and pieces are draggable. Finally verify the full solve path (drag pieces to solve, or set `pieces` to the solution and trigger `pointerup`) shows the 🧪 test result with **0 Firebase writes** (same spy technique as the earlier test-station verification).
+Expected: `{ hasCanvas: true, gameActive: true }`. Then spy on Firebase writes
+(same technique as the earlier test-station verification), solve by
+`window._tgCtrl.setPieces(TangramShapes.SOLUTIONS.segiempat)`, and confirm the
+🧪 test result appears with **0 Firebase writes**.
 
 - [ ] **Step 5: Run the full engine test suite one last time**
 
@@ -918,8 +861,8 @@ git commit -m "feat(tangram): integrate tangram game type into station flow"
 
 ## Self-Review Notes
 
-- **Spec coverage:** pieces & coordinate system → Tasks 1–2; interaction (drag/tap-rotate/flip/snap) → Tasks 3, 6; solve detection invariance → Task 4; reference silhouette from solution data → Task 7; layout & Canvas → Tasks 5–6; app integration + binary scoring + admin Uji → Task 8; build-prototype-first → Tasks 5–7; tests T1–T4 → Tasks 4 & 7 (T2/T4 in Task 4 via synthetic fixture, T1 in Task 7, snap/T3 in Task 3). All spec sections map to a task.
-- **No-flip risk:** the flip control (Task 6/8) removes the parallelogram chirality constraint, so `kuda` can be authored freely.
-- **Coordinate risk:** target coordinates are produced by in-prototype assembly + snap (Task 7), not hand-derived; T1 validates the square, and `isSolved` self-check validates the horse.
-- **Type consistency:** `{type,pos:{x,y},angle,flipped}` is the single piece shape used by `isSolved`, `SOLUTIONS`, dump output, and both UIs.
-```
+- **Spec coverage:** pieces & coordinates → Tasks 1–2; interaction (drag/tap-rotate/flip/snap) → Tasks 3, 5; solve detection invariance → Task 4; reference silhouette from solution data → Task 5; layout & Canvas → Task 5; app integration + binary scoring + admin Uji → Task 7; build-prototype-first → Tasks 5–6; tests T1–T4 → Tasks 4 & 6 (T2/T4 in Task 4 via synthetic fixture, T1 in Task 6, snap/T3 in Task 3). All spec sections map to a task.
+- **No duplication:** all Canvas/pointer/snap/solve glue lives once in `tangram/ui.js` (`attachTangram`), consumed by both the prototype and `index.html`.
+- **No-flip risk:** the flip control removes the parallelogram chirality constraint, so `kuda` can be authored freely.
+- **Coordinate risk:** target coordinates come from in-prototype assembly + snap (Task 6), not hand derivation; T1 validates the square, `isSolved` self-check validates the horse.
+- **Type consistency:** `{type,pos:{x,y},angle,flipped}` is the single piece shape used by `isSolved`, `SOLUTIONS`, `getPieces()` dumps, and both UIs.
