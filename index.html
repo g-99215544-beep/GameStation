@@ -33,8 +33,6 @@
   .msg{padding:12px;border-radius:10px;margin-top:12px;font-weight:600;}
   .err{background:#fbe4e2;color:var(--red);}
   .ok{background:#dff5e5;color:var(--green);}
-  .role-btn{display:block;width:100%;padding:20px;font-size:18px;margin-bottom:10px;background:#fff;color:var(--navy);border:3px solid var(--navy);}
-  .role-btn:hover{background:var(--navy);color:#fff;}
   .clue{background:var(--navy);color:var(--gold);padding:18px;border-radius:12px;font-size:19px;font-weight:700;margin-top:12px;text-align:center;}
   #reader{width:100%;border-radius:14px;overflow:hidden;border:4px solid var(--gold);margin-top:10px;}
   .keyrow{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:16px 0;}
@@ -120,18 +118,17 @@
   .topbar-actions{display:flex;align-items:center;gap:10px;}
   .icon-btn{width:42px;height:42px;margin:0;padding:0;border:1px solid #ffffff44;border-radius:10px;background:#ffffff12;color:#fff;font-size:22px;display:inline-flex;align-items:center;justify-content:center;}
   .icon-btn:hover{background:var(--gold);color:var(--navy);}
-  .admin-login-overlay{position:fixed;inset:0;z-index:40;background:rgba(18,26,47,.46);display:flex;align-items:center;justify-content:center;padding:20px;}
-  .admin-login-overlay .card{width:min(430px,100%);margin:0;position:relative;}
-  .view-login .role-btn{display:none;}
-  .view-login #adminLoginCard{position:fixed;inset:0;z-index:40;background:rgba(18,26,47,.46);display:none;align-items:center;justify-content:center;padding:20px;border-radius:0;box-shadow:none;max-width:none;margin:0;}
-  .view-login #adminLoginCard > label,.view-login #adminLoginCard > input,.view-login #adminLoginCard > button,.view-login #adminLoginCard > div{width:min(430px,100%);margin-left:auto;margin-right:auto;}
-  .view-login #adminLoginCard{inset:50% auto auto 50%;transform:translate(-50%,-50%);width:min(430px,calc(100% - 32px));height:auto;background:#fff;border-radius:14px;box-shadow:0 14px 40px rgba(0,0,0,.22);}
+  .admin-login-overlay{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(18,26,47,.56);}
+  .admin-login-overlay.open{display:flex;}
+  .admin-login-card{width:min(430px,100%);margin:0;padding:28px;position:relative;box-shadow:0 18px 48px rgba(0,0,0,.24);}
+  .admin-login-card h2{margin:0 34px 6px 0;font-size:26px;}
+  .admin-login-card .login-intro{margin:0 0 22px;color:#777;line-height:1.45;}
+  .admin-login-card button.big{margin-right:0;}
   .close-btn{position:absolute;right:18px;top:18px;margin:0;padding:0;background:none;color:#777;font-size:24px;line-height:1;}
   .close-btn:hover{background:none;color:var(--red);}
   .login-card{padding:28px;}
   .login-card h2{margin:0 0 6px;font-size:26px;}
   .login-card .login-intro{margin:0 0 22px;color:#777;}
-  .admin-entry-note{font-size:12px;color:#777;text-align:center;margin:18px 0 0;}
   .admin-shell{max-width:1080px;margin:0 auto;}
   .wrap.admin-wrap{max-width:1120px;}
   .admin-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:18px;}
@@ -204,23 +201,23 @@
     <div class="card login-card">
       <h2>Log Masuk Kumpulan</h2>
       <p class="login-intro">Pilih kumpulan anda dan masukkan password untuk bermula.</p>
-      <button class="role-btn" onclick="showAdminLogin()">⚙️ Admin / Guru</button>
       <label>Kumpulan</label>
       <select id="groupLoginSelect"></select>
       <label>Password Kumpulan</label>
       <input id="groupLoginPass" placeholder="Masukkan password kumpulan anda">
       <button class="big" onclick="loginAsGroup()">Masuk sebagai Kumpulan</button>
       <div id="groupLoginMsg"></div>
-      <p class="admin-entry-note">Guru atau admin? Gunakan ikon gear di atas kanan.</p>
     </div>
-    <div class="card" id="adminLoginCard" style="display:none;">
-      <button class="close-btn" type="button" onclick="hideAdminLogin()" aria-label="Tutup">&times;</button>
-      <h2>Login Admin</h2>
-      <p class="login-intro">Masukkan PIN guru untuk membuka panel kawalan.</p>
-      <label>PIN Admin</label>
-      <input id="adminPin" type="password" placeholder="Masukkan PIN">
-      <button onclick="loginAsAdmin()">Masuk Admin</button>
-      <div id="adminLoginMsg"></div>
+    <div class="admin-login-overlay" id="adminLoginCard" role="dialog" aria-modal="true" aria-labelledby="adminLoginTitle" aria-hidden="true" onclick="if(event.target===this) hideAdminLogin()">
+      <div class="card admin-login-card">
+        <button class="close-btn" type="button" onclick="hideAdminLogin()" aria-label="Tutup">&times;</button>
+        <h2 id="adminLoginTitle">Login Admin</h2>
+        <p class="login-intro">Masukkan PIN guru untuk membuka panel kawalan.</p>
+        <label>PIN Admin</label>
+        <input id="adminPin" type="password" placeholder="Masukkan PIN" onkeydown="if(event.key==='Enter') loginAsAdmin()">
+        <button class="big" onclick="loginAsAdmin()">Masuk Admin</button>
+        <div id="adminLoginMsg"></div>
+      </div>
     </div>
   </div>
 
@@ -537,14 +534,23 @@ function loadConfigCache(){
 function showAdminLogin(){
   const card = document.getElementById('adminLoginCard');
   if(!card) return;
-  card.style.display='flex';
+  card.classList.add('open');
+  card.setAttribute('aria-hidden','false');
+  const msg = document.getElementById('adminLoginMsg');
+  if(msg) msg.innerHTML='';
   const pin = document.getElementById('adminPin');
   if(pin){ pin.value=''; setTimeout(()=>pin.focus(), 0); }
 }
 function hideAdminLogin(){
   const card = document.getElementById('adminLoginCard');
-  if(card) card.style.display='none';
+  if(card){
+    card.classList.remove('open');
+    card.setAttribute('aria-hidden','true');
+  }
 }
+document.addEventListener('keydown', event=>{
+  if(event.key==='Escape') hideAdminLogin();
+});
 function loginAsAdmin(){
   if(document.getElementById('adminPin').value === ADMIN_PIN){
     hideAdminLogin();
