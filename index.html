@@ -185,6 +185,17 @@
     .step-actions{align-items:stretch;flex-direction:column;}
     .step-actions .step-next{margin-left:0;width:100%;}
   }
+  @media print{
+    @page{margin:18mm;}
+    body{background:#fff!important;}
+    body *{visibility:hidden!important;}
+    #qrOutput,#qrOutput *{visibility:visible!important;}
+    #qrOutput{position:absolute;inset:0;display:block!important;width:100%;}
+    #qrOutput .qr-print{display:flex!important;flex-direction:column;align-items:center;justify-content:center;width:100%!important;min-height:calc(100vh - 36mm);margin:0!important;padding:18mm!important;border:none!important;border-radius:0!important;box-shadow:none!important;break-after:page;page-break-after:always;}
+    #qrOutput .qr-print:last-child{break-after:auto;page-break-after:auto;}
+    #qrOutput .qr-print > div:first-child{font-size:22px!important;margin-bottom:16px;}
+    #qrOutput .qr-print > div:last-child{max-width:150mm;margin-top:18px;font-size:14px!important;color:#333!important;}
+  }
 </style>
 </head>
 <body>
@@ -286,7 +297,10 @@
         <div class="card" id="printArea">
           <h3>QR Tersembunyi</h3>
           <p class="admin-panel-intro">Jana QR untuk setiap stesen, kemudian cetak dan sorokkan di lokasi clue.</p>
-          <button class="secondary" onclick="generateQRs()">Jana QR Stesen</button>
+          <div class="feature-actions">
+            <button class="secondary" onclick="generateQRs()">Jana QR Stesen</button>
+            <button onclick="printQRCodes()">Cetak QR: Satu QR Setiap Halaman</button>
+          </div>
           <div id="qrOutput" class="qr-grid"></div>
           <div class="step-actions">
             <button onclick="goToAdminStep('passwords')">&#8592; Kembali</button>
@@ -809,6 +823,14 @@ function generateQRs(){
     out.appendChild(div);
     setTimeout(()=>new QRCode(document.getElementById('qr_'+s.id), {text:s.password, width:130, height:130}), 0);
   });
+}
+function printQRCodes(){
+  const output = document.getElementById('qrOutput');
+  if(!output || !output.querySelector('.qr-print')){
+    alert('Jana QR stesen dahulu sebelum mencetak.');
+    return;
+  }
+  window.print();
 }
 function watchDashboard(){
   db.ref(PATH+'/progress').on('value', snap=>{
