@@ -630,9 +630,9 @@ function startTangram(st){
   gameState.type='tangram'; gameState.total=1; gameState.correct=0;
   const totalSec = (st.timeLimitMin||10)*60;
   const SHAPES = [
-    {id:'segiempat', name:'Segi Empat', guide:true},
     {id:'kuda',      name:'Kuda',       guide:false},
     {id:'kucing',    name:'Kucing',     guide:false},
+    {id:'segiempat', name:'Segi Empat', guide:false},
   ];
   let idx = 0;    // shape currently being built
   let done = 0;   // shapes completed so far
@@ -651,7 +651,7 @@ function startTangram(st){
       <div class="card" style="text-align:left;box-shadow:none;border:2px solid #eee;">
         <h3 style="margin-top:0;">📋 Arahan</h3>
         <ol style="padding-left:20px;line-height:1.7;margin:0;">
-          <li>Anda perlu bina <b>3 bentuk</b> mengikut urutan: <b>Segi Empat</b> → <b>Kuda</b> → <b>Kucing</b>.</li>
+          <li>Anda perlu bina <b>3 bentuk</b> mengikut urutan: <b>Kuda</b> → <b>Kucing</b> → <b>Segi Empat</b>.</li>
           <li>Bayang bentuk (kelabu) ada dalam kotak — <b>seret keping</b> ke dalam bayang; keping akan <b>melekat</b> ke tempatnya.</li>
           <li><b>Ketik</b> keping untuk pusing 45°. Bentuk siap secara <b>automatik</b> apabila lengkap.</li>
         </ol>
