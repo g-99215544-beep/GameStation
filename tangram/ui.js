@@ -109,23 +109,37 @@
       return p2u({ x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy });
     };
     const hit = u => { for (let i = pieces.length - 1; i >= 0; i--) if (E.pointInPolygon(u, wp(pieces[i]))) return pieces[i]; return null; };
-    var SLOT_SNAP = 1.4; // how close (in units) a piece must be dropped to stick to its target slot
+    var SLOT_SNAP = 0.7; // must be dropped this close (units) AND already at the right angle
+    function polysCoincide(a, b, tol) {
+      if (a.length !== b.length) return false;
+      const used = new Array(b.length).fill(false);
+      for (const va of a) {
+        let f = -1;
+        for (let j = 0; j < b.length; j++) if (!used[j] && Math.hypot(va.x - b[j].x, va.y - b[j].y) <= tol) { f = j; break; }
+        if (f < 0) return false; used[f] = true;
+      }
+      return true;
+    }
     function snap(p) {
-      // 1) Stick to the gray target: snap onto the nearest free slot of the same
-      //    type within range (position + orientation), so pieces click into the
-      //    silhouette. This is the "assist" the outline provides.
+      // 1) Stick to the gray target ONLY if the piece is ALREADY rotated correctly
+      //    for a slot AND dropped close to it. It does NOT fix a wrong angle for you
+      //    — the student must rotate the piece to the right orientation first.
       if (targetSlots) {
         let best = null, bestD = SLOT_SNAP;
         for (const slot of targetSlots) {
           if (slot.type !== p.type) continue;
-          const occupied = pieces.some(q => q !== p && Math.hypot(q.pos.x - slot.pos.x, q.pos.y - slot.pos.y) < 0.25);
-          if (occupied) continue;
+          if (pieces.some(q => q !== p && Math.hypot(q.pos.x - slot.pos.x, q.pos.y - slot.pos.y) < 0.25)) continue;
           const d = Math.hypot(p.pos.x - slot.pos.x, p.pos.y - slot.pos.y);
-          if (d < bestD) { bestD = d; best = slot; }
+          if (d >= bestD) continue;
+          // orientation gate: the piece, at its CURRENT angle/flip, must produce the slot's shape
+          const mine = E.transformPolygon(polygons[p.type], slot.pos, p.angle, p.flipped);
+          const want = E.transformPolygon(polygons[slot.type], slot.pos, slot.angle, slot.flipped);
+          if (!polysCoincide(mine, want, 0.02)) continue;
+          bestD = d; best = slot;
         }
-        if (best) { p.pos = { x: best.pos.x, y: best.pos.y }; p.angle = best.angle; p.flipped = best.flipped; return; }
+        if (best) { p.pos = { x: best.pos.x, y: best.pos.y }; return; } // fine-tune position only; angle already right
       }
-      // 2) Otherwise assemble edge-to-edge against neighbours.
+      // 2) Otherwise assemble edge-to-edge against neighbours (angle snaps to 45deg).
       const others = pieces.filter(q => q !== p);
       const settled = E.snapPieceToNeighbors(p, others, polygons, E.SNAP_RADIUS, 3);
       p.pos = settled.pos; p.angle = settled.angle;

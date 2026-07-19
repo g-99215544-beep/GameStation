@@ -182,6 +182,12 @@ function show(id){
   document.getElementById(id).classList.add('active');
 }
 
+// Direct-play link: index.html?tangram (or ?demo=tangram) launches the Tangram
+// Challenge straight away, no login — for sharing with other teachers/devs.
+function isTangramDemo(){
+  const q = new URLSearchParams(location.search);
+  return q.has('tangram') || q.get('demo')==='tangram';
+}
 // ---------- FIREBASE SETUP (auto-connect, hardcoded) ----------
 function connectFirebase(){
   try{
@@ -189,6 +195,8 @@ function connectFirebase(){
     db = firebase.database();
     initApp();
   }catch(e){
+    // The tangram demo needs no Firebase, so still launch it on connection error.
+    if(isTangramDemo()){ startTangramDemo(); return; }
     document.body.innerHTML = '<div class="wrap"><div class="card"><h2>❌ Ralat Sambungan Firebase</h2><p>'+e.message+'</p></div></div>';
   }
 }
@@ -197,7 +205,15 @@ function initApp(){
   const sel = document.getElementById('groupLoginSelect');
   sel.innerHTML='';
   for(let i=1;i<=NUM_GROUPS;i++) sel.innerHTML += `<option value="${i}">Kumpulan ${i}</option>`;
+  if(isTangramDemo()){ startTangramDemo(); return; }
   loadConfigCache().then(()=>tryRestoreSession());
+}
+
+// Launch the tangram station directly in demo mode (test mode = no Firebase writes).
+function startTangramDemo(){
+  window._testMode = true; window._demoMode = true;
+  document.getElementById('topTitle').innerText = '🧩 Tangram Challenge';
+  startGame('demo', { name:'Tangram Challenge', gameType:'tangram', timeLimitMin:10 });
 }
 
 const SESSION_DURATION_MS = 12*60*60*1000; // 12 hours
@@ -621,7 +637,9 @@ function startTangram(st){
   let idx = 0;    // shape currently being built
   let done = 0;   // shapes completed so far
   const card = document.getElementById('gameCard');
-  const testBanner = () => window._testMode
+  const testBanner = () => window._demoMode
+    ? '<div class="msg" style="background:#e7f0ff;margin-top:0;">🎮 <b>Demo Tangram</b> — <button class="linkbtn" onclick="startTangramDemo()">↺ Main semula</button></div>'
+    : window._testMode
     ? '<div class="msg" style="background:#fdf3d8;margin-top:0;">🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">← Kembali ke Admin</button></div>'
     : '';
 
@@ -709,8 +727,8 @@ function showTangramTestResult(done, total, score, timeTakenSec){
     <h2>Ujian Selesai</h2>
     <p>${msg}</p>
     <p>Markah: <b>${score}</b> / 200 <span style="color:#888;">(${timeTakenSec}s)</span></p>
-    <p style="color:#888;font-size:13px;">Mod ujian — tiada markah disimpan ke Firebase.</p>
-    <button class="big" onclick="endTest()">← Kembali ke Admin</button>
+    <p style="color:#888;font-size:13px;">${window._demoMode ? 'Demo — tiada markah disimpan.' : 'Mod ujian — tiada markah disimpan ke Firebase.'}</p>
+    ${window._demoMode ? '<button class="big" onclick="startTangramDemo()">↺ Main Semula</button>' : '<button class="big" onclick="endTest()">← Kembali ke Admin</button>'}
   </div>`;
 }
 function finishGame(forceOk){

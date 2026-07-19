@@ -178,23 +178,33 @@ for (const name of ['kuda', 'kucing']) {
   });
 }
 
-// In the game a dropped piece sticks to its target slot (position + orientation)
-// when released within SLOT_SNAP of it (tangram/ui.js snap()). This test mirrors
-// that: it drops each piece near its slot with deterministic jitter and a random
-// wrong angle, snaps it to the nearest free same-type slot, and asserts the
-// arrangement solves. It guards every solution (incl. rotated-piece shapes) as
-// reliably reachable via the on-board outline.
-const SLOT_SNAP = 1.4;
+// In the game a dropped piece sticks to its slot only when it is ALREADY at the
+// right angle AND dropped within SLOT_SNAP of the slot (tangram/ui.js snap()); a
+// wrong angle is NOT auto-corrected. This test mirrors that: it drops each piece
+// at the correct orientation with position jitter, snaps it (with the same
+// orientation gate), and asserts the arrangement solves — guarding every
+// solution as reachable when the student rotates correctly and drops close.
+const SLOT_SNAP = 0.7;
 function lcg(seed) { let s = seed >>> 0; return () => { s = (Math.imul(s, 1103515245) + 12345) >>> 0; return s / 0xffffffff; }; }
+function coincide(a, b, tol) {
+  if (a.length !== b.length) return false;
+  const used = new Array(b.length).fill(false);
+  for (const va of a) { let f = -1; for (let j = 0; j < b.length; j++) if (!used[j] && Math.hypot(va.x - b[j].x, va.y - b[j].y) <= tol) { f = j; break; } if (f < 0) return false; used[f] = true; }
+  return true;
+}
 function slotSnap(p, slots, placed) {
   let best = null, bestD = SLOT_SNAP;
   for (const slot of slots) {
     if (slot.type !== p.type) continue;
     if (placed.some(q => Math.hypot(q.pos.x - slot.pos.x, q.pos.y - slot.pos.y) < 0.25)) continue;
     const d = Math.hypot(p.pos.x - slot.pos.x, p.pos.y - slot.pos.y);
-    if (d < bestD) { bestD = d; best = slot; }
+    if (d >= bestD) continue;
+    const mine = E.transformPolygon(S.PIECE_POLYGONS[p.type], slot.pos, p.angle, p.flipped);
+    const want = E.transformPolygon(S.PIECE_POLYGONS[slot.type], slot.pos, slot.angle, slot.flipped);
+    if (!coincide(mine, want, 0.02)) continue;
+    bestD = d; best = slot;
   }
-  return best ? { type: p.type, pos: { x: best.pos.x, y: best.pos.y }, angle: best.angle, flipped: best.flipped } : p;
+  return best ? { type: p.type, pos: { x: best.pos.x, y: best.pos.y }, angle: p.angle, flipped: p.flipped } : p;
 }
 function slotReach(sol, jitter, trials, rnd) {
   let ok = 0;
@@ -204,7 +214,7 @@ function slotReach(sol, jitter, trials, rnd) {
     const placed = [];
     for (const idx of order) {
       const src = sol[idx];
-      const p = { type: src.type, angle: src.angle + 90, flipped: !src.flipped, // deliberately wrong orientation
+      const p = { type: src.type, angle: src.angle, flipped: src.flipped, // correct orientation (student rotated it)
         pos: { x: src.pos.x + (rnd() * 2 - 1) * jitter, y: src.pos.y + (rnd() * 2 - 1) * jitter } };
       placed.push(slotSnap(p, sol, placed));
     }
@@ -213,10 +223,20 @@ function slotReach(sol, jitter, trials, rnd) {
   return ok / trials;
 }
 
-test('all solutions are reliably reachable by snapping to the target outline', () => {
+test('correctly-rotated pieces dropped close snap into every solution', () => {
   const rnd = lcg(0x1a2b3c4d);
   for (const name of ['segiempat', 'kuda', 'kucing']) {
-    const rate = slotReach(S.SOLUTIONS[name], 0.35, 100, rnd);
+    const rate = slotReach(S.SOLUTIONS[name], 0.3, 100, rnd);
     assert.ok(rate >= 0.99, `${name} slot-reachability ${(rate * 100).toFixed(0)}% should be >=99%`);
   }
+});
+
+test('a WRONG-angle piece dropped on its slot does NOT snap (assist is not automatic)', () => {
+  const sol = S.SOLUTIONS.kuda;
+  // take the medium triangle (no rotational symmetry), drop it exactly on its
+  // slot but rotated 90deg off — it must NOT snap to the slot.
+  const src = sol.find(s => s.type === 'medTri');
+  const wrong = { type: 'medTri', pos: { x: src.pos.x, y: src.pos.y }, angle: src.angle + 90, flipped: src.flipped };
+  const out = slotSnap(wrong, sol, []);
+  assert.ok(Math.abs(out.angle - (src.angle + 90)) < 1e-9, 'angle must be left unchanged (not auto-fixed)');
 });
