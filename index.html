@@ -60,19 +60,35 @@
   .badge.idle{background:#fdf3d8;color:#b8860b;}
   .qr-print{display:inline-block;text-align:center;border:2px dashed #999;padding:14px;margin:6px;border-radius:10px;}
   .linkbtn{background:none;border:none;color:var(--navy);text-decoration:underline;font-weight:600;padding:0;margin:0;cursor:pointer;}
-  /* ---- Smart Board finale ---- */
-  #view-board.active{display:block;}
-  .board-head{text-align:center;margin:6px 0 18px;}
-  .board-head h1{font-size:clamp(24px,4vw,40px);margin:0;color:var(--gold);}
-  .board-head p{margin:6px 0 0;color:#555;font-size:15px;}
-  .board-cols{display:grid;grid-template-columns:2.2fr 1fr;gap:18px;align-items:start;}
-  @media (max-width:720px){.board-cols{grid-template-columns:1fr;}}
-  .chest-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;}
-  .chest-card{background:#fff;border:2px solid #eee;border-radius:14px;padding:10px 8px 12px;text-align:center;box-shadow:0 3px 10px rgba(0,0,0,.06);transition:transform .12s;}
+  /* ---- Smart Board finale (full-screen landscape, 4 columns) ---- */
+  /* board-mode lets the board escape the 640px mobile wrap and fill the screen
+     so all 14 chests sit in a 4x4 grid with no page scroll */
+  body.board-mode{overflow:hidden;}
+  body.board-mode .wrap{max-width:none;padding:0;height:calc(100vh - 52px);}
+  #view-board.active{display:flex;flex-direction:column;height:100%;padding:8px 18px 14px;}
+  #view-board > #boardWrap{flex:1 1 0;min-height:0;display:flex;flex-direction:column;width:100%;}
+  .board-head{text-align:center;margin:0 0 8px;position:relative;flex:0 0 auto;}
+  .board-head h1{font-size:clamp(20px,2.4vw,34px);margin:0;color:var(--gold);}
+  .board-head p{margin:3px 0 0;color:#555;font-size:clamp(11px,1.2vw,15px);}
+  .board-back{position:absolute;left:0;top:2px;font-size:15px;background:none;border:none;color:var(--navy);text-decoration:underline;font-weight:700;cursor:pointer;padding:4px 0;margin:0;}
+  .board-back:hover{color:var(--gold);background:none;}
+  .board-cols{display:grid;grid-template-columns:1fr 240px;gap:14px;flex:1 1 0;min-height:0;}
+  /* 4 columns x 4 rows sized to fill the bounded height -> always fits, no scroll */
+  .chest-grid{display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(4,1fr);gap:8px;min-height:0;}
+  @media (max-width:720px){
+    body.board-mode{overflow:auto;}
+    body.board-mode .wrap{height:auto;}
+    #view-board.active{height:auto;min-height:100%;}
+    .board-cols{grid-template-columns:1fr;}
+    .chest-grid{grid-template-columns:repeat(2,1fr);grid-template-rows:none;}
+    .chest-card{overflow:visible;}
+    .chest-vis{flex:0 0 auto !important;height:auto !important;width:78% !important;}
+  }
+  .chest-card{background:#fff;border:2px solid #eee;border-radius:14px;padding:6px 6px 8px;text-align:center;box-shadow:0 3px 10px rgba(0,0,0,.06);transition:transform .12s;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0;overflow:hidden;}
   /* Chest visual: a single sprite-sheet (40 frames, 8x5). Percentage background
      -position selects a frame independent of pixel size. Frame 0 = closed chest,
      last frame (100% 100%) = fully open. */
-  .chest-vis{position:relative;width:88%;max-width:150px;margin:0 auto 6px;aspect-ratio:240/213;
+  .chest-vis{position:relative;flex:1 1 0;min-height:0;width:auto;max-width:100%;margin:0 auto 3px;aspect-ratio:240/213;
     background-image:url(assets/chest/chest_sheet.png?v=1);background-size:800% 500%;
     background-position:0% 0%;background-repeat:no-repeat;}
   .chest-vis.opened{background-position:100% 100%;}
@@ -91,7 +107,7 @@
   .chest-card.won{border-color:var(--green);background:#eafaf0;}
   @keyframes chestPulse{50%{box-shadow:0 0 0 4px rgba(212,169,78,.35);}}
   .chest-anim{position:fixed;z-index:60;pointer-events:none;}
-  .rank-panel{background:var(--navy);color:#fff;border-radius:14px;padding:16px 16px 8px;position:sticky;top:12px;}
+  .rank-panel{background:var(--navy);color:#fff;border-radius:14px;padding:14px 14px 6px;overflow:auto;max-height:100%;}
   .rank-panel h2{margin:0 0 10px;color:var(--gold);font-size:18px;text-align:center;}
   .rank-row{display:flex;align-items:center;gap:8px;padding:8px 6px;border-bottom:1px solid #ffffff22;}
   .rank-row:last-child{border-bottom:none;}
@@ -131,8 +147,16 @@
 
   <!-- ADMIN VIEW -->
   <div class="view" id="view-admin">
-    <div class="card">
+    <div class="card" id="sessionCard">
       <button class="linkbtn" onclick="logout()">← Log keluar</button>
+      <h2>🎬 Kawalan Sesi</h2>
+      <div id="sessionStatus"></div>
+      <button class="secondary" id="btnStart" onclick="startSession()">▶️ Mula Sesi</button>
+      <button id="btnEnd" onclick="endSession()" style="background:var(--red);">⏹️ Tamat Sesi</button>
+      <button id="btnNew" onclick="newSession()">🔄 Sesi Baru (murid baru)</button>
+      <p style="font-size:13px;color:#888;margin-top:12px;">Aliran: setup stesen &amp; <b>Push Config</b> (password) → tekan <b>Mula</b> untuk buka sesi. Kumpulan hanya boleh main bila sesi <b>Aktif</b>. Tekan <b>Tamat</b> bila habis. Guna <b>Sesi Baru</b> untuk mula semula dengan murid baru (progress direset, stesen &amp; password kekal).</p>
+    </div>
+    <div class="card">
       <h2>⚙️ Setup Stesen (6)</h2>
       <div id="stationsArea"></div>
       <button class="secondary" onclick="pushConfig()">🚀 Push Config & Reset Progress</button>
@@ -185,6 +209,11 @@
     <div class="card finalbox" id="chestCard"></div>
   </div>
 
+  <!-- GROUP: SESSION WAITING / ENDED -->
+  <div class="view" id="view-session">
+    <div class="card finalbox" id="sessionMsgCard"></div>
+  </div>
+
   <!-- SMART BOARD FINALE (big screen at the start point) -->
   <div class="view" id="view-board">
     <div id="boardWrap"></div>
@@ -215,6 +244,9 @@ const FIREBASE_CONFIG = {
 };
 const PATH = 'gamestation2026';
 let db, stations, groups, currentGroupId, progress={}, timerInterval, timeLeftSec, timeUp=false, gameState={}, html5QrCode;
+// Session lifecycle so the app is reusable across events: admin presses Mula to
+// start, Tamat to end. status: 'setup' (not started) | 'active' | 'ended'.
+let sessionInfo = {status:'setup'};
 
 function show(id){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -254,8 +286,8 @@ function initApp(){
   sel.innerHTML='';
   for(let i=1;i<=NUM_GROUPS;i++) sel.innerHTML += `<option value="${i}">Kumpulan ${i}</option>`;
   if(isTangramDemo()){ startTangramDemo(); return; }
-  if(isSmartBoard()){ loadConfigCache().then(()=>showSmartBoard()); return; }
-  loadConfigCache().then(()=>tryRestoreSession());
+  if(isSmartBoard()){ loadConfigCache().then(()=>{ watchSession(); showSmartBoard(); }); return; }
+  loadConfigCache().then(()=>{ watchSession(); tryRestoreSession(); });
 }
 
 // Launch the tangram station directly in demo mode (test mode = no Firebase writes).
@@ -288,10 +320,12 @@ function tryRestoreSession(){
     show('view-admin');
     document.getElementById('topTitle').innerText='⚙️ Admin Panel';
     watchDashboard();
+    renderSessionControls();
   } else if(session.role==='group' && session.groupId && groups[session.groupId]){
     currentGroupId = session.groupId;
     document.getElementById('topTitle').innerText='Kumpulan '+currentGroupId;
-    loadGroupProgress();
+    // enter the game only if the session is active; otherwise show wait/ended
+    db.ref(PATH+'/session').once('value').then(s=>{ sessionInfo=s.val()||{status:'setup'}; enterGroupBySession(); });
   } else {
     clearSession();
     show('view-login');
@@ -315,6 +349,7 @@ function loginAsAdmin(){
     show('view-admin');
     document.getElementById('topTitle').innerText='⚙️ Admin Panel';
     watchDashboard();
+    renderSessionControls();
   } else {
     document.getElementById('adminLoginMsg').innerHTML='<div class="msg err">PIN salah</div>';
   }
@@ -336,15 +371,87 @@ function loginAsGroup(){
   currentGroupId = gid;
   saveSession('group', gid);
   document.getElementById('topTitle').innerText='Kumpulan '+currentGroupId;
-  loadGroupProgress();
+  // gate on session: only enter the game when the session is active
+  db.ref(PATH+'/session').once('value').then(s=>{ sessionInfo=s.val()||{status:'setup'}; enterGroupBySession(); });
 }
 function logout(){
   if(timerInterval) clearInterval(timerInterval);
   if(html5QrCode){ html5QrCode.stop().catch(()=>{}); }
+  db.ref(PATH).off('value');
+  document.body.classList.remove('board-mode');
+  currentGroupId = null;
   clearSession();
   document.getElementById('topTitle').innerText='🎯 Game Station Matematik';
   document.getElementById('timer').style.display='none';
   show('view-login');
+}
+
+// ---------- SESSION LIFECYCLE (reusable across events) ----------
+function watchSession(){
+  db.ref(PATH+'/session').on('value', snap=>{
+    sessionInfo = snap.val() || {status:'setup'};
+    renderSessionControls();      // admin card (no-op when not on admin)
+    reactToSessionForGroup();     // group waiting/ended/enter
+  });
+}
+// Admin: reflect status and show only the relevant button(s).
+function renderSessionControls(){
+  const el = document.getElementById('sessionStatus');
+  if(!el) return;
+  const st = (sessionInfo||{}).status || 'setup';
+  const map = {setup:['⚪ Belum Bermula','#8a6d1a'], active:['🟢 SESI AKTIF','var(--green)'], ended:['🔴 SESI TAMAT','var(--red)']};
+  const [label,color] = map[st] || map.setup;
+  el.innerHTML = `<div style="font-size:22px;font-weight:800;color:${color};margin:6px 0 2px;">${label}</div>`;
+  const start=document.getElementById('btnStart'), end=document.getElementById('btnEnd'), nw=document.getElementById('btnNew');
+  if(start) start.style.display = (st==='active') ? 'none' : 'inline-block';
+  if(end)   end.style.display   = (st==='active') ? 'inline-block' : 'none';
+  if(nw)    nw.style.display    = (st==='ended')  ? 'inline-block' : 'none';
+}
+function startSession(){
+  db.ref(PATH+'/session').set({status:'active', startedAt:Date.now()});
+}
+function endSession(){
+  if(!confirm('Tamatkan sesi sekarang? Kumpulan tidak boleh main lagi.')) return;
+  db.ref(PATH+'/session').update({status:'ended', endedAt:Date.now()});
+}
+function newSession(){
+  if(!confirm('Mula sesi BARU dengan murid baru?\n\nSemua progress & peti harta akan direset. Stesen & password login kekal.')) return;
+  const prog={};
+  Object.keys(groups||{}).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
+  db.ref(PATH+'/progress').set(prog);
+  db.ref(PATH+'/session').set({status:'setup'});
+}
+// Group side: route to game / waiting / ended based on live session status.
+function enterGroupBySession(){
+  const st = (sessionInfo||{}).status || 'setup';
+  if(st==='active') loadGroupProgress();
+  else showSessionMsg(st==='ended' ? 'ended' : 'waiting');
+}
+function reactToSessionForGroup(){
+  if(!currentGroupId) return;              // only for a logged-in group
+  const st = (sessionInfo||{}).status || 'setup';
+  const onMsg = document.getElementById('view-session').classList.contains('active');
+  if(st!=='active'){ showSessionMsg(st==='ended' ? 'ended' : 'waiting'); }
+  else if(onMsg){ loadGroupProgress(); }   // session (re)started while waiting -> enter
+}
+function showSessionMsg(kind){
+  if(timerInterval) clearInterval(timerInterval);
+  if(html5QrCode){ html5QrCode.stop().catch(()=>{}); }
+  document.getElementById('timer').style.display='none';
+  show('view-session');
+  const card = document.getElementById('sessionMsgCard');
+  if(kind==='waiting'){
+    card.innerHTML = `<div style="font-size:64px;">⏳</div>
+      <h2>Menunggu Guru Mula Sesi</h2>
+      <p>Kumpulan ${currentGroupId} sudah log masuk.<br>Sesi belum bermula — tunggu guru tekan <b>Mula</b>.</p>
+      <button class="linkbtn" onclick="logout()">← Log keluar</button>`;
+  } else {
+    card.innerHTML = `<div style="font-size:64px;">🏁</div><h2>Sesi Tamat</h2><p>Terima kasih, Kumpulan ${currentGroupId}!</p><div id="sessFinal" style="font-size:34px;font-weight:800;color:var(--gold);margin:8px 0;">…</div><button class="linkbtn" onclick="logout()">← Log keluar</button>`;
+    db.ref(PATH+'/progress/'+currentGroupId).once('value').then(s=>{
+      const p=s.val()||{}; const sc = (p.finalScore!=null ? p.finalScore : (p.totalScore||0));
+      const el=document.getElementById('sessFinal'); if(el) el.innerText = sc + ' markah';
+    });
+  }
 }
 
 // ---------- ADMIN: STATION CONFIG ----------
@@ -406,6 +513,7 @@ function pushConfig(){
   Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
   db.ref(PATH+'/config/stations').set(st);
   db.ref(PATH+'/config/groups').set(gr);
+  db.ref(PATH+'/session').set({status:'setup'}); // fresh config -> not started yet
   db.ref(PATH+'/progress').set(prog).then(()=>{
     stations=st; groups=gr;
     let listHtml = '<h4>Password Login Kumpulan (beri kepada setiap kumpulan)</h4><table><tr><th>Kumpulan</th><th>Password</th></tr>';
@@ -861,13 +969,24 @@ function showGoToBoard(){
 // ---------- SMART BOARD (big screen): all groups' chests + live ranking ----------
 function showSmartBoard(){
   show('view-board');
+  document.body.classList.add('board-mode');
   document.getElementById('topTitle').innerText='🏴‍☠️ Peti Harta Karun';
   document.getElementById('timer').style.display='none';
+  db.ref(PATH).off('value');           // avoid stacking listeners on re-entry
   db.ref(PATH).on('value', snap=>{
     const data = snap.val()||{};
     const grps = (data.config && data.config.groups) || groups || {};
     renderSmartBoard(grps, data.progress||{});
   });
+}
+// Leave the board: detach the live listener and return to admin (or login). The
+// board is fully live — re-opening it re-subscribes and shows current progress.
+function leaveSmartBoard(){
+  db.ref(PATH).off('value');
+  document.body.classList.remove('board-mode');
+  let role=null; try{ role=(JSON.parse(localStorage.getItem('gs_session'))||{}).role; }catch(e){}
+  if(role==='admin'){ show('view-admin'); document.getElementById('topTitle').innerText='⚙️ Admin Panel'; }
+  else { show('view-login'); document.getElementById('topTitle').innerText='🎯 Game Station Matematik'; }
 }
 // The 6 keyholes (2 rows x 3), as % of the chest sprite frame. Index 0..5 =
 // key-collection order (top row left->right, then bottom row) so key N lights
@@ -904,6 +1023,7 @@ function renderSmartBoard(grps, prog){
   }).join('');
   document.getElementById('boardWrap').innerHTML = `
     <div class="board-head">
+      <button class="board-back" onclick="leaveSmartBoard()">← Kembali</button>
       <h1>🏴‍☠️ Peti Harta Karun</h1>
       <p>Kumpulan yang sudah kumpul <b>6 kunci</b> — tekan peti kumpulan anda untuk buka!</p>
     </div>
