@@ -47,6 +47,18 @@
   .match-btn.matched{border-color:var(--green);background:#e4f7ea;opacity:.6;pointer-events:none;}
   .grid3{display:grid;gap:8px;justify-content:center;margin:16px 0;}
   .grid3 input{text-align:center;font-size:18px;padding:8px;}
+  .sudoku-progress{display:flex;justify-content:center;gap:8px;margin:12px 0 18px;}
+  .sudoku-progress span{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#e6e8ed;color:#777;font-weight:800;}
+  .sudoku-progress span.active{background:var(--gold);color:var(--navy);}
+  .sudoku-progress span.done{background:var(--green);color:#fff;}
+  .sudoku-board{display:grid;gap:3px;width:min(100%,420px);margin:18px auto;padding:5px;background:var(--navy);border-radius:8px;}
+  .sudoku-board.size-2{width:min(100%,190px);}
+  .sudoku-board.size-3{width:min(100%,250px);}
+  .sudoku-cell{aspect-ratio:1;width:100%;min-width:0;margin:0!important;padding:4px!important;border:1px solid #c7ceda!important;border-radius:3px!important;background:#fff;color:var(--navy);font-size:18px!important;font-weight:800;text-align:center;}
+  .sudoku-cell.given{display:flex;align-items:center;justify-content:center;background:#e8edf5;color:var(--navy);}
+  .sudoku-cell.error{border-color:var(--red)!important;background:#fbe4e2;}
+  .sudoku-board.size-9 .sudoku-cell{font-size:16px!important;}
+  @media (max-width:420px){.sudoku-board.size-9 .sudoku-cell{font-size:14px!important;padding:2px!important;}}
   .finalbox{text-align:center;padding:20px;}
   .chest{font-size:80px;margin:20px 0;cursor:pointer;transition:transform .2s;}
   .chest:hover{transform:scale(1.1);}
@@ -429,6 +441,7 @@ const GAME_TYPES = [
   {id:'pilihan', name:'Pilihan Bergambar'},
   {id:'grid_nombor', name:'Grid Nombor'},
   {id:'puzzle_susun', name:'Puzzle Cantum Nombor'},
+  {id:'sudoku', name:'Sudoku Challenge (3 Stage)'},
   {id:'tangram', name:'Tangram Challenge'}
 ];
 const NUM_GROUPS = 14;
@@ -953,6 +966,7 @@ function startGame(stId, testSt){
   const st = testSt || stations[stId];
   timeUp=false;
   window._gameOver=false;
+  window._sudokuTimeout=null;
   timeLeftSec = (st.timeLimitMin||10)*60;
   window._startedAt = Date.now();
   window._curStId = stId;
@@ -983,6 +997,7 @@ function tick(){
     // Open-ended games (tangram) have no manual submit button, so auto-finish
     // on timeout — otherwise a student who can't solve is stranded here.
     if(gameState && gameState.type==='tangram' && window._tgTimeout){ window._tgTimeout(); }
+    if(gameState && gameState.type==='sudoku' && window._sudokuTimeout){ window._sudokuTimeout(); }
   }
 }
 function renderGame(st){
@@ -1037,6 +1052,10 @@ function renderGame(st){
     html+=`</div><button class="big" onclick="checkGrid()">Semak Grid</button>`;
     card.innerHTML=html;
   }
+  else if(st.gameType==='sudoku'){
+    startSudoku(st);
+    return;
+  }
   else if(st.gameType==='tangram'){
     startTangram(st);
     return;
@@ -1074,6 +1093,116 @@ function checkGrid(){
   }));
   gameState.correct = correct===total?1:0; gameState.total=1;
   finishGame();
+}
+
+// Sudoku uses fixed, verified puzzles so every group receives the same
+// three-stage challenge: a 2x2 warm-up, 3x3 pattern, then standard 9x9.
+function startSudoku(st){
+  const stages = [
+    {size:2,label:'2 x 2',puzzle:[[1,0],[0,1]],solution:[[1,2],[2,1]]},
+    {size:3,label:'3 x 3',puzzle:[[1,0,3],[0,3,0],[3,0,2]],solution:[[1,2,3],[2,3,1],[3,1,2]]},
+    {size:9,label:'9 x 9',puzzle:[
+      [5,3,0,0,7,0,0,0,2],
+      [6,0,0,1,9,5,3,0,0],
+      [1,9,8,0,0,2,0,6,7],
+      [8,5,0,7,6,0,4,0,3],
+      [4,0,6,8,0,3,7,9,0],
+      [7,1,3,0,2,4,0,5,6],
+      [9,6,0,5,3,0,2,8,0],
+      [2,0,7,4,1,9,0,3,5],
+      [0,4,5,2,0,6,1,0,9]
+    ],solution:[
+      [5,3,4,6,7,8,9,1,2],
+      [6,7,2,1,9,5,3,4,8],
+      [1,9,8,3,4,2,5,6,7],
+      [8,5,9,7,6,1,4,2,3],
+      [4,2,6,8,5,3,7,9,1],
+      [7,1,3,9,2,4,8,5,6],
+      [9,6,1,5,3,7,2,8,4],
+      [2,8,7,4,1,9,6,3,5],
+      [3,4,5,2,8,6,1,7,9]
+    ]}
+  ];
+  gameState.type='sudoku';
+  gameState.total=stages.length;
+  gameState.correct=0;
+  gameState.sudoku={station:st,stages,stageIndex:0,completed:0};
+  window._sudokuTimeout=()=>finishSudoku(false);
+  showSudokuStage();
+}
+function sudokuCellBorderStyle(size,row,col){
+  if(size!==9) return '';
+  const styles=[];
+  if(col===2 || col===5) styles.push('border-right:3px solid var(--navy)!important');
+  if(row===2 || row===5) styles.push('border-bottom:3px solid var(--navy)!important');
+  return styles.join(';');
+}
+function showSudokuStage(){
+  const sudoku=gameState.sudoku;
+  const stage=sudoku.stages[sudoku.stageIndex];
+  const card=document.getElementById('gameCard');
+  const progress=sudoku.stages.map((_,i)=>`<span class="${i<sudoku.completed?'done':i===sudoku.stageIndex?'active':''}">${i+1}</span>`).join('');
+  let html=`<div class="sudoku-game"><h2>${sudoku.station.name}</h2><p>Selesaikan 3 stage Sudoku mengikut urutan.</p><div class="sudoku-progress">${progress}</div><h3 style="margin:0;">Stage ${sudoku.stageIndex+1}/3: ${stage.label}</h3><p style="color:#666;font-size:14px;">Isi nombor 1 hingga ${stage.size} sekali bagi setiap baris dan lajur.${stage.size===9?' Setiap kotak 3 x 3 juga mesti lengkap.':''}</p><div class="sudoku-board size-${stage.size}" style="grid-template-columns:repeat(${stage.size},minmax(0,1fr));">`;
+  stage.puzzle.forEach((row,r)=>row.forEach((cell,c)=>{
+    const style=sudokuCellBorderStyle(stage.size,r,c);
+    if(cell){
+      html+=`<div class="sudoku-cell given" style="${style}">${cell}</div>`;
+    } else {
+      html+=`<input class="sudoku-cell" id="sudoku_${sudoku.stageIndex}_${r}_${c}" inputmode="numeric" maxlength="1" aria-label="Baris ${r+1}, lajur ${c+1}" style="${style}" oninput="sanitizeSudokuInput(this,${stage.size})">`;
+    }
+  }));
+  html+=`</div><div id="sudokuMsg"></div><button class="big" onclick="checkSudokuStage()">Semak Stage ${sudoku.stageIndex+1}</button></div>`;
+  card.innerHTML=html;
+}
+function sanitizeSudokuInput(input,size){
+  const value=String(input.value||'').replace(/[^0-9]/g,'').slice(0,1);
+  input.value=Number(value)>0 && Number(value)<=size ? value : '';
+  input.classList.remove('error');
+}
+function checkSudokuStage(){
+  const sudoku=gameState.sudoku;
+  const stage=sudoku.stages[sudoku.stageIndex];
+  let empty=0,wrong=0;
+  stage.puzzle.forEach((row,r)=>row.forEach((cell,c)=>{
+    if(cell) return;
+    const input=document.getElementById(`sudoku_${sudoku.stageIndex}_${r}_${c}`);
+    const value=Number(input.value);
+    input.classList.remove('error');
+    if(!value){ empty++; return; }
+    if(value!==stage.solution[r][c]){ wrong++; input.classList.add('error'); }
+  }));
+  const msg=document.getElementById('sudokuMsg');
+  if(empty || wrong){
+    const parts=[];
+    if(empty) parts.push(`${empty} kotak belum diisi`);
+    if(wrong) parts.push(`${wrong} jawapan perlu disemak`);
+    msg.innerHTML=`<div class="msg err">${parts.join(' dan ')}.</div>`;
+    return;
+  }
+  sudoku.completed++;
+  gameState.correct=sudoku.completed;
+  if(sudoku.completed>=sudoku.stages.length){
+    finishSudoku(!timeUp);
+    return;
+  }
+  const next=sudoku.stages[sudoku.stageIndex+1];
+  document.getElementById('gameCard').innerHTML=`<div class="finalbox"><div style="font-size:52px;">&#10003;</div><h2 style="color:var(--green);">Stage ${sudoku.completed} Selesai!</h2><p>Seterusnya: Sudoku ${next.label}.</p><button class="big" onclick="nextSudokuStage()">Teruskan ke Stage ${sudoku.completed+1}</button></div>`;
+}
+function nextSudokuStage(){
+  gameState.sudoku.stageIndex++;
+  showSudokuStage();
+}
+function finishSudoku(onTime){
+  if(window._gameOver) return;
+  window._gameOver=true;
+  window._sudokuTimeout=null;
+  clearInterval(timerInterval);
+  const completed=gameState.sudoku.completed;
+  const timeTakenSec=Math.round((Date.now()-window._startedAt)/1000);
+  let score=Math.round((completed/gameState.total)*100);
+  if(!onTime) score=Math.max(0,score-20);
+  if(window._testMode){ showTestResult(onTime,score,timeTakenSec); return; }
+  submitCompletion(onTime,score,timeTakenSec);
 }
 // Tangram station: every student builds THREE shapes in sequence (square, then
 // horse, then cat), one shared timer, after a clear instructions screen. Marks
