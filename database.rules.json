@@ -13,7 +13,7 @@
             ".validate": "newData.hasChildren(['name','gameType'])",
             "name":        { ".validate": "newData.isString() && newData.val().length <= 120" },
             "location":    { ".validate": "newData.isString() && newData.val().length <= 200" },
-            "password":    { ".validate": "newData.isString() && newData.val().length <= 60" },
+            "password":    { ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9]{5}$/)" },
             "gameType":    { ".validate": "newData.isString() && newData.val().length <= 40" },
             "gameDataRaw": { ".validate": "newData.isString() && newData.val().length <= 5000" },
             "$other":      { ".validate": true }

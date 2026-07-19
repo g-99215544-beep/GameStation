@@ -34,6 +34,8 @@
   .err{background:#fbe4e2;color:var(--red);}
   .ok{background:#dff5e5;color:var(--green);}
   .clue{background:var(--navy);color:var(--gold);padding:18px;border-radius:12px;font-size:19px;font-weight:700;margin-top:12px;text-align:center;}
+  .password-or{display:flex;align-items:center;gap:10px;color:#888;font-size:13px;font-weight:700;margin:18px 0 4px;}
+  .password-or::before,.password-or::after{content:'';height:1px;background:#e4e4e4;flex:1;}
   #reader{width:100%;border-radius:14px;overflow:hidden;border:4px solid var(--gold);margin-top:10px;}
   .keyrow{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin:16px 0;}
   .key{width:46px;height:46px;border-radius:10px;background:var(--gold);color:var(--navy);font-size:20px;display:flex;align-items:center;justify-content:center;font-weight:800;}
@@ -366,13 +368,14 @@
       <h2 id="clueGroupName"></h2>
       <div class="keyrow" id="keyrowMini"></div>
       <div class="clue" id="clueText"></div>
-      <button class="big" onclick="openScanner()">📷 Scan QR Tersembunyi</button>
-      <div id="reader" style="display:none;"></div>
-      <div id="scanResultArea" style="display:none;">
-        <label>Password (semak & sahkan)</label>
-        <input id="passInput">
-        <button class="big secondary" onclick="checkPassword()">✅ Sahkan Password</button>
+      <div id="scanResultArea">
+        <label>Password Stesen</label>
+        <input id="passInput" maxlength="5" pattern="[A-Za-z0-9]{5}" autocomplete="off" placeholder="Contoh: 14542 atau sabun" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5)" onkeydown="if(event.key==='Enter') checkPassword()">
+        <button class="big secondary" onclick="checkPassword()">Sahkan Password</button>
       </div>
+      <div class="password-or">atau</div>
+      <button class="big" onclick="openScanner()">Scan QR untuk Isi Password</button>
+      <div id="reader" style="display:none;"></div>
       <div id="passMsg"></div>
     </div>
   </div>
@@ -696,18 +699,28 @@ function showSessionMsg(kind){
 }
 
 // ---------- ADMIN: STATION CONFIG ----------
+function isValidStationPassword(password){
+  return /^[A-Za-z0-9]{5}$/.test(String(password||'').trim());
+}
+function generateStationPassword(){
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let password='';
+  for(let i=0;i<5;i++) password += chars[Math.floor(Math.random()*chars.length)];
+  return password;
+}
 function buildStationsUI(existing){
   const area = document.getElementById('stationsArea');
   area.innerHTML='';
   for(let i=1;i<=6;i++){
     const s = existing[i] || {};
+    const stationPassword = isValidStationPassword(s.password) ? s.password : generateStationPassword();
     const opts = GAME_TYPES.map(g=>`<option value="${g.id}" ${s.gameType===g.id?'selected':''}>${g.name}</option>`).join('');
     area.innerHTML += `
     <div class="station-block">
       <h3>Stesen ${i}</h3>
       <label>Nama Stesen</label><input id="st_name_${i}" value="${s.name||''}" placeholder="cth: Stesen Sifir">
       <label>Lokasi (teks clue)</label><input id="st_loc_${i}" value="${s.location||''}" placeholder="cth: Tempat membaca buku">
-      <label>Password QR (sama untuk semua kumpulan)</label><input id="st_pass_${i}" value="${s.password||('PASS'+i+Math.floor(Math.random()*900+100))}">
+      <label>Password Stesen (tepat 5 huruf atau digit)</label><input id="st_pass_${i}" value="${stationPassword}" maxlength="5" pattern="[A-Za-z0-9]{5}" placeholder="cth: 14542 atau sabun" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5)">
       <label>Jenis Game</label><select id="st_gametype_${i}">${opts}</select>
       <label>Data Game (JSON)</label><input id="st_gamedata_${i}" value='${(s.gameDataRaw||"{}").replace(/'/g,"&apos;")}'>
       <button class="secondary" onclick="testStation(${i})">▶️ Uji Cara Main Stesen Ini</button>
@@ -720,12 +733,19 @@ function collectStations(){
     out[i]={id:i,
       name:document.getElementById('st_name_'+i).value,
       location:document.getElementById('st_loc_'+i).value,
-      password:document.getElementById('st_pass_'+i).value,
+      password:document.getElementById('st_pass_'+i).value.trim(),
       timeLimitMin:10,
       gameType:document.getElementById('st_gametype_'+i).value,
       gameDataRaw:document.getElementById('st_gamedata_'+i).value};
   }
   return out;
+}
+function validateStationPasswords(stationConfig){
+  const invalid = Object.values(stationConfig).filter(st=>!isValidStationPassword(st.password));
+  if(!invalid.length) return true;
+  const numbers = invalid.map(st=>st.id).join(', ');
+  alert(`Password Stesen ${numbers} mesti tepat 5 huruf atau digit. Contoh: 14542, sabun, atau 34gbs.`);
+  return false;
 }
 // rotation: group i starts at station ((i-1)%6)+1, so groups 1,7,13 share start=1; 2,8,14 share start=2 etc (2 groups per station approx, since 14 groups /6)
 function rotationFor(startStation){
@@ -749,6 +769,7 @@ function collectGroups(){
 }
 function pushConfig(){
   const st = collectStations();
+  if(!validateStationPasswords(st)) return;
   const gr = collectGroups();
   const prog={};
   Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
@@ -777,6 +798,7 @@ function showLoginPasswords(){
 }
 function generateQRs(){
   const st = collectStations();
+  if(!validateStationPasswords(st)) return;
   stations = st;
   const out = document.getElementById('qrOutput');
   out.innerHTML='';
@@ -820,7 +842,7 @@ function showClueScreen(){
   const st = stations[stId];
   document.getElementById('clueText').innerText = '📍 Pergi cari QR di: '+ st.location;
   document.getElementById('reader').style.display='none';
-  document.getElementById('scanResultArea').style.display='none';
+  document.getElementById('passInput').value='';
   document.getElementById('passMsg').innerHTML='';
 }
 function renderKeyrowMini(){
@@ -840,11 +862,12 @@ function openScanner(){
   }).catch(()=>{ html5QrCode.start({facingMode:"environment"},{fps:10,qrbox:220}, onScan); });
 }
 function onScan(decodedText){
-  document.getElementById('passInput').value = decodedText;
-  document.getElementById('scanResultArea').style.display='block';
+  document.getElementById('passInput').value = String(decodedText||'').trim().replace(/[^A-Za-z0-9]/g,'').slice(0,5);
   html5QrCode.stop().catch(()=>{});
   document.getElementById('reader').style.display='none';
   if(navigator.vibrate) navigator.vibrate(200);
+  document.getElementById('passMsg').innerHTML='<div class="msg ok">Password daripada QR diterima. Game bermula...</div>';
+  setTimeout(checkPassword, 350);
 }
 function checkPassword(){
   const g = groups[currentGroupId];
@@ -852,11 +875,15 @@ function checkPassword(){
   const st = stations[stId];
   const input = document.getElementById('passInput').value.trim();
   const msg = document.getElementById('passMsg');
+  if(!isValidStationPassword(input)){
+    msg.innerHTML='<div class="msg err">Masukkan password tepat 5 huruf atau digit.</div>';
+    return;
+  }
   if(input.toUpperCase() === String(st.password).toUpperCase()){
     msg.innerHTML='<div class="msg ok">✅ Password betul! Game bermula...</div>';
     setTimeout(()=>startGame(stId), 600);
   } else {
-    msg.innerHTML='<div class="msg err">❌ Password salah. Pastikan QR yang discan betul untuk lokasi ini.</div>';
+    msg.innerHTML='<div class="msg err">❌ Password salah. Semak password atau QR bagi stesen ini.</div>';
   }
 }
 
@@ -873,6 +900,10 @@ function testStation(i){
     gameType:document.getElementById('st_gametype_'+i).value,
     gameDataRaw:document.getElementById('st_gamedata_'+i).value
   };
+  if(!isValidStationPassword(st.password)){
+    alert('Password stesen mesti tepat 5 huruf atau digit sebelum diuji.');
+    return;
+  }
   window._testMode = true;
   startGame(st.id, st);
 }
