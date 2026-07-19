@@ -60,6 +60,32 @@
   .badge.idle{background:#fdf3d8;color:#b8860b;}
   .qr-print{display:inline-block;text-align:center;border:2px dashed #999;padding:14px;margin:6px;border-radius:10px;}
   .linkbtn{background:none;border:none;color:var(--navy);text-decoration:underline;font-weight:600;padding:0;margin:0;cursor:pointer;}
+  /* ---- Smart Board finale ---- */
+  #view-board.active{display:block;}
+  .board-head{text-align:center;margin:6px 0 18px;}
+  .board-head h1{font-size:clamp(24px,4vw,40px);margin:0;color:var(--gold);}
+  .board-head p{margin:6px 0 0;color:#555;font-size:15px;}
+  .board-cols{display:grid;grid-template-columns:2.2fr 1fr;gap:18px;align-items:start;}
+  @media (max-width:720px){.board-cols{grid-template-columns:1fr;}}
+  .chest-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;}
+  .chest-card{background:#fff;border:2px solid #eee;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 3px 10px rgba(0,0,0,.06);transition:transform .12s;}
+  .chest-card .c-ico{font-size:40px;line-height:1;}
+  .chest-card .c-grp{font-weight:800;color:var(--navy);margin-top:6px;font-size:15px;}
+  .chest-card .c-sub{font-size:12px;color:#888;margin-top:2px;}
+  .chest-card .c-score{font-weight:800;color:var(--gold);font-size:18px;margin-top:2px;}
+  .chest-card.locked{opacity:.65;cursor:pointer;}
+  .chest-card.ready{border-color:var(--gold);background:#fffaf0;cursor:pointer;animation:chestPulse 1.1s infinite;}
+  .chest-card.ready:hover{transform:scale(1.05);}
+  .chest-card.won{border-color:var(--green);background:#eafaf0;}
+  @keyframes chestPulse{50%{box-shadow:0 0 0 4px rgba(212,169,78,.35);}}
+  .rank-panel{background:var(--navy);color:#fff;border-radius:14px;padding:16px 16px 8px;position:sticky;top:12px;}
+  .rank-panel h2{margin:0 0 10px;color:var(--gold);font-size:18px;text-align:center;}
+  .rank-row{display:flex;align-items:center;gap:8px;padding:8px 6px;border-bottom:1px solid #ffffff22;}
+  .rank-row:last-child{border-bottom:none;}
+  .rank-pos{font-size:18px;min-width:30px;text-align:center;font-weight:800;}
+  .rank-name{flex:1;font-weight:700;font-size:14px;}
+  .rank-score{font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums;}
+  .board-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--navy);color:#fff;padding:14px 22px;border-radius:12px;font-weight:700;font-size:16px;box-shadow:0 8px 30px rgba(0,0,0,.3);opacity:0;transition:opacity .3s;z-index:50;max-width:90vw;text-align:center;}
 </style>
 </head>
 <body>
@@ -99,6 +125,7 @@
       <button class="secondary" onclick="pushConfig()">🚀 Push Config & Reset Progress</button>
       <button onclick="generateQRs()">🖨️ Generate QR Tersembunyi</button>
       <button onclick="showLoginPasswords()">🔑 Papar Password Login Kumpulan</button>
+      <button onclick="showSmartBoard()">🏴‍☠️ Buka Smart Board (Peti Harta)</button>
       <div id="pushStatus"></div>
       <div id="loginPassArea"></div>
     </div>
@@ -140,15 +167,14 @@
     <div class="card" id="resultCard"></div>
   </div>
 
-  <!-- GROUP: TREASURE CHEST FINALE -->
+  <!-- GROUP: TREASURE CHEST FINALE (phone) -->
   <div class="view" id="view-chest">
-    <div class="card finalbox">
-      <h2>🎉 Semua 6 Kunci Dikumpul!</h2>
-      <div class="keyrow" id="chestKeyRow"></div>
-      <div class="chest" id="chestIcon" onclick="openChest()">🔒📦</div>
-      <p>Ketik peti untuk buka!</p>
-      <div id="chestResult"></div>
-    </div>
+    <div class="card finalbox" id="chestCard"></div>
+  </div>
+
+  <!-- SMART BOARD FINALE (big screen at the start point) -->
+  <div class="view" id="view-board">
+    <div id="boardWrap"></div>
   </div>
 
 </div>
@@ -182,11 +208,20 @@ function show(id){
   document.getElementById(id).classList.add('active');
 }
 
+// Bonus marks for the order in which a group opens its chest at the Smart Board
+// (running back to finish first is rewarded). Index 0 = the 1st group to open.
+const CHEST_BONUS = [50,40,30,25,20,15,12,10,8,6,5,4,3,2];
+
 // Direct-play link: index.html?tangram (or ?demo=tangram) launches the Tangram
 // Challenge straight away, no login — for sharing with other teachers/devs.
 function isTangramDemo(){
   const q = new URLSearchParams(location.search);
   return q.has('tangram') || q.get('demo')==='tangram';
+}
+// index.html?board opens the big-screen Smart Board finale (for the projector).
+function isSmartBoard(){
+  const q = new URLSearchParams(location.search);
+  return q.has('board') || q.get('view')==='board';
 }
 // ---------- FIREBASE SETUP (auto-connect, hardcoded) ----------
 function connectFirebase(){
@@ -206,6 +241,7 @@ function initApp(){
   sel.innerHTML='';
   for(let i=1;i<=NUM_GROUPS;i++) sel.innerHTML += `<option value="${i}">Kumpulan ${i}</option>`;
   if(isTangramDemo()){ startTangramDemo(); return; }
+  if(isSmartBoard()){ loadConfigCache().then(()=>showSmartBoard()); return; }
   loadConfigCache().then(()=>tryRestoreSession());
 }
 
@@ -404,8 +440,7 @@ function loadGroupProgress(){
   db.ref(PATH+'/progress/'+currentGroupId).once('value').then(snap=>{
     const p = snap.val() || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
     progress = p;
-    if(p.status==='won'){ showWon(); return; }
-    if(p.currentIndex>=6){ showChest(); return; }
+    if(p.status==='won' || p.currentIndex>=6){ showGoToBoard(); return; }
     showClueScreen();
   });
 }
@@ -773,7 +808,7 @@ function showResult(onTime, score, done){
   document.getElementById('timer').style.display='none';
   const g = groups[currentGroupId];
   let nextHtml='';
-  if(done){ nextHtml=`<button class="big" onclick="showChest()">📦 Teruskan ke Peti Harta</button>`; }
+  if(done){ nextHtml=`<button class="big" onclick="showGoToBoard()">🏁 Selesai! Ke Peti Harta</button>`; }
   else { nextHtml=`<button class="big" onclick="showClueScreen()">➡️ Lihat Clue Seterusnya</button>`; }
   document.getElementById('resultCard').innerHTML=`<div class="finalbox">
     <div style="font-size:50px;">🔑</div>
@@ -783,26 +818,98 @@ function showResult(onTime, score, done){
   </div>`;
 }
 
-// ---------- TREASURE CHEST ----------
-function showChest(){
+// ---------- GROUP FINALE (phone): run to the Smart Board ----------
+// The chest is NOT opened on the phone. The phone tells the group to run to the
+// Smart Board; once their chest is opened there, it shows their final marks.
+function showGoToBoard(){
   show('view-chest');
   document.getElementById('timer').style.display='none';
-  const row = document.getElementById('chestKeyRow');
-  row.innerHTML='';
-  for(let i=1;i<=6;i++) row.innerHTML+=`<div class="key">🔑</div>`;
-  document.getElementById('chestIcon').innerText='🔒📦';
-  document.getElementById('chestResult').innerHTML='';
+  const card = document.getElementById('chestCard');
+  db.ref(PATH+'/progress/'+currentGroupId).on('value', snap=>{
+    const p = snap.val()||{};
+    if(p.status==='won'){
+      card.innerHTML = `
+        <div style="font-size:70px;">🎉📦✨</div>
+        <h2 style="color:var(--green);">Peti Kumpulan ${currentGroupId} Dibuka!</h2>
+        <p style="font-size:15px;">Markah stesen ${p.totalScore||0} + bonus buka awal <b>${p.finishBonus||0}</b> (kumpulan ke-${p.finishOrder||'-'} habis)</p>
+        <p style="font-size:22px;">Markah akhir: <b style="color:var(--gold);font-size:30px;">${p.finalScore!=null?p.finalScore:(p.totalScore||0)}</b></p>
+        <p style="color:#888;">Lihat ranking penuh di Smart Board! 🏆</p>`;
+    } else {
+      card.innerHTML = `
+        <h2>🎉 Semua 6 Kunci Dikumpul!</h2>
+        <div class="keyrow">${'<div class="key">🔑</div>'.repeat(6)}</div>
+        <div style="font-size:64px;margin:14px 0;">🏃💨📦</div>
+        <h2 style="color:var(--gold);margin:0;">Lari ke SMART BOARD!</h2>
+        <p style="font-size:16px;">Pergi ke <b>tempat mula</b> dan tekan <b>peti Kumpulan ${currentGroupId}</b> di skrin besar untuk membuka peti &amp; mengira markah akhir anda.</p>`;
+    }
+  });
 }
-function openChest(){
-  document.getElementById('chestIcon').innerText='🎉📦✨';
-  document.getElementById('chestResult').innerHTML=`<h2 style="color:var(--green);">TAHNIAH KUMPULAN ${currentGroupId}!</h2><p>Semua 6 kunci sepadan — Kumpulan anda MENANG! 🏆</p>`;
-  db.ref(PATH+'/progress/'+currentGroupId).update({status:'won'});
+
+// ---------- SMART BOARD (big screen): all groups' chests + live ranking ----------
+function showSmartBoard(){
+  show('view-board');
+  document.getElementById('topTitle').innerText='🏴‍☠️ Peti Harta Karun';
+  document.getElementById('timer').style.display='none';
+  db.ref(PATH).on('value', snap=>{
+    const data = snap.val()||{};
+    const grps = (data.config && data.config.groups) || groups || {};
+    renderSmartBoard(grps, data.progress||{});
+  });
 }
-function showWon(){
-  show('view-chest');
-  document.getElementById('chestKeyRow').innerHTML='<div class="key">🔑</div>'.repeat(6);
-  document.getElementById('chestIcon').innerText='🎉📦✨';
-  document.getElementById('chestResult').innerHTML=`<h2 style="color:var(--green);">TAHNIAH KUMPULAN ${currentGroupId}!</h2><p>Kumpulan anda telah MENANG! 🏆</p>`;
+function renderSmartBoard(grps, prog){
+  const ids = Object.keys(grps).length ? Object.keys(grps) : Array.from({length:NUM_GROUPS},(_,i)=>String(i+1));
+  const opened = ids.map(gid=>({gid, p:prog[gid]||{}}))
+    .filter(x=>x.p.status==='won')
+    .sort((a,b)=>(b.p.finalScore||0)-(a.p.finalScore||0));
+  const rankOf={}; opened.forEach((x,i)=>rankOf[x.gid]=i+1);
+  const medal=['🥇','🥈','🥉'];
+  const rankHtml = opened.length
+    ? opened.map((x,i)=>`<div class="rank-row"><span class="rank-pos">${medal[i]||('#'+(i+1))}</span><span class="rank-name">Kumpulan ${x.gid}</span><span class="rank-score">${x.p.finalScore}</span></div>`).join('')
+    : '<p style="text-align:center;color:#ffffffaa;padding:14px;">Belum ada kumpulan buka peti…</p>';
+  const chestsHtml = ids.map(gid=>{
+    const p = prog[gid]||{currentIndex:0,keys:[],status:'idle'};
+    const keys=(p.keys||[]).length;
+    if(p.status==='won'){
+      return `<div class="chest-card won"><div class="c-ico">🎉📦</div><div class="c-grp">Kumpulan ${gid}</div><div class="c-score">${p.finalScore} mkh</div><div class="c-sub">#${rankOf[gid]} · buka ke-${p.finishOrder}</div></div>`;
+    }
+    if((p.currentIndex||0)>=6){
+      return `<div class="chest-card ready" onclick="openChestOnBoard('${gid}')"><div class="c-ico">📦✨</div><div class="c-grp">Kumpulan ${gid}</div><div class="c-sub" style="color:var(--gold);font-weight:800;">SEDIA! Tekan</div></div>`;
+    }
+    return `<div class="chest-card locked" onclick="openChestOnBoard('${gid}')"><div class="c-ico">🔒📦</div><div class="c-grp">Kumpulan ${gid}</div><div class="c-sub">${keys}/6 kunci</div></div>`;
+  }).join('');
+  document.getElementById('boardWrap').innerHTML = `
+    <div class="board-head">
+      <h1>🏴‍☠️ Peti Harta Karun</h1>
+      <p>Kumpulan yang sudah kumpul <b>6 kunci</b> — tekan peti kumpulan anda untuk buka!</p>
+    </div>
+    <div class="board-cols">
+      <div class="chest-grid">${chestsHtml}</div>
+      <div class="rank-panel"><h2>🏆 Ranking</h2>${rankHtml}</div>
+    </div>`;
+}
+function openChestOnBoard(gid){
+  db.ref(PATH+'/progress/'+gid).once('value').then(snap=>{
+    const p = snap.val()||{};
+    if(p.status==='won') return; // already opened
+    if((p.currentIndex||0) < 6){
+      flashBoardMsg(`🔒 Kumpulan ${gid} belum cukup kunci (${(p.keys||[]).length}/6) — belum boleh buka!`);
+      return;
+    }
+    db.ref(PATH+'/progress').once('value').then(all=>{
+      const prog = all.val()||{};
+      const order = Object.values(prog).filter(x=>x&&x.status==='won').length + 1;
+      const bonus = CHEST_BONUS[Math.min(order-1, CHEST_BONUS.length-1)];
+      const finalScore = (p.totalScore||0) + bonus;
+      db.ref(PATH+'/progress/'+gid).update({status:'won', finishOrder:order, finishBonus:bonus, finalScore, openedAt:Date.now()});
+      flashBoardMsg(`🎉 Kumpulan ${gid} buka peti! +${bonus} bonus (buka ke-${order}) · Markah akhir ${finalScore}`);
+    });
+  });
+}
+function flashBoardMsg(msg){
+  let t = document.getElementById('boardToast');
+  if(!t){ t=document.createElement('div'); t.id='boardToast'; t.className='board-toast'; document.body.appendChild(t); }
+  t.textContent = msg; t.style.opacity='1';
+  clearTimeout(window._boardToastT); window._boardToastT = setTimeout(()=>{ t.style.opacity='0'; }, 3800);
 }
 
 window.onload=()=>{
