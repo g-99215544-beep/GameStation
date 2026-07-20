@@ -338,17 +338,6 @@
       <button class="big" onclick="loginAsGroup()">Masuk sebagai Kumpulan</button>
       <div id="groupLoginMsg"></div>
     </div>
-    <div class="admin-login-overlay" id="adminLoginCard" role="dialog" aria-modal="true" aria-labelledby="adminLoginTitle" aria-hidden="true" onclick="if(event.target===this) hideAdminLogin()">
-      <div class="card admin-login-card">
-        <button class="close-btn" type="button" onclick="hideAdminLogin()" aria-label="Tutup">&times;</button>
-        <h2 id="adminLoginTitle">Login Admin</h2>
-        <p class="login-intro">Masukkan PIN guru untuk membuka panel kawalan.</p>
-        <label>PIN Admin</label>
-        <input id="adminPin" type="password" placeholder="Masukkan PIN" onkeydown="if(event.key==='Enter') loginAsAdmin()">
-        <button class="big" onclick="loginAsAdmin()">Masuk Admin</button>
-        <div id="adminLoginMsg"></div>
-      </div>
-    </div>
   </div>
 
   <!-- ADMIN VIEW -->
@@ -539,6 +528,18 @@
 
 </div>
 
+<div class="admin-login-overlay" id="adminLoginCard" role="dialog" aria-modal="true" aria-labelledby="adminLoginTitle" aria-hidden="true" onclick="if(event.target===this) hideAdminLogin()">
+  <div class="card admin-login-card">
+    <button class="close-btn" type="button" onclick="hideAdminLogin()" aria-label="Tutup">&times;</button>
+    <h2 id="adminLoginTitle">Login Admin</h2>
+    <p class="login-intro">Masukkan PIN guru untuk membuka panel kawalan.</p>
+    <label>PIN Admin</label>
+    <input id="adminPin" type="password" placeholder="Masukkan PIN" onkeydown="if(event.key==='Enter') loginAsAdmin()">
+    <button class="big" onclick="loginAsAdmin()">Masuk Admin</button>
+    <div id="adminLoginMsg"></div>
+  </div>
+</div>
+
 <script>
 const GAME_TYPES = [
   {id:'quiz', name:'Quiz Pantas'},
@@ -709,7 +710,7 @@ function show(id){
   const wrap = document.querySelector('.wrap');
   if(wrap) wrap.classList.toggle('admin-wrap', id==='view-admin');
   const adminBtn = document.getElementById('adminAccessBtn');
-  if(adminBtn) adminBtn.style.display = (id==='view-login') ? 'inline-flex' : 'none';
+  if(adminBtn) adminBtn.style.display = (id==='view-login' || id==='view-chest') ? 'inline-flex' : 'none';
   if(id!=='view-login') hideAdminLogin();
 }
 
@@ -1939,7 +1940,16 @@ function playChestOpen(cardEl, done){
   ov.style.width=r.width+'px'; ov.style.height=r.height+'px';
   ov.style.margin='0'; ov.style.maxWidth='none';
   document.body.appendChild(ov);
-  try{ const au=new Audio('assets/chest/chest_open.mp3?v=1'); au.volume=1; au.play().catch(()=>{}); }catch(_){}
+  try{
+    const au=new Audio('assets/chest/chest_open.mp3?v=2');
+    au.volume=1;
+    const playFromOpening=()=>{
+      au.currentTime=Math.min(5,Number.isFinite(au.duration)?au.duration:5);
+      au.play().catch(()=>{});
+    };
+    if(au.readyState>=1) playFromOpening();
+    else au.addEventListener('loadedmetadata',playFromOpening,{once:true});
+  }catch(_){}
   const {N,COLS,ROWS,DUR}=CHEST_ANIM, t0=performance.now();
   (function step(t){
     const f=Math.min(N-1, Math.floor((t-t0)/DUR*N));
