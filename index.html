@@ -34,16 +34,17 @@
   .journey-ship{position:absolute;z-index:2;width:25%;aspect-ratio:320/403;transform:translate(-50%,-88%);background-image:url('assets/ship/ship-sail-sheet.png?v=ship-sail-1');background-size:600% 400%;background-repeat:no-repeat;image-rendering:pixelated;filter:drop-shadow(3px 5px 0 rgba(0,46,81,.36));will-change:left,top,background-position,transform;}
   .journey-ship.facing-left{transform:translate(-50%,-88%) scaleX(-1);}
   .journey-status{position:absolute;z-index:3;left:50%;top:16px;transform:translateX(-50%);width:max-content;max-width:88%;padding:9px 14px;border:3px solid #704018;border-radius:5px;background:linear-gradient(180deg,#fff5b6,#f0bd53);box-shadow:3px 3px 0 #063a66;color:#12385b;font-family:"Trebuchet MS",system-ui,sans-serif;font-weight:900;text-align:center;text-shadow:1px 1px 0 #fffde6;}
-  .journey-island-button{position:absolute;z-index:4;width:19%;aspect-ratio:1.25;transform:translate(-50%,-50%);margin:0;padding:0;border:2px solid transparent;border-radius:50%;background:transparent;box-shadow:none;touch-action:manipulation;}
-  .journey-island-button:not(:disabled){cursor:pointer;}
-  .journey-island-button:not(:disabled):hover,.journey-island-button:not(:disabled):focus-visible{border-color:#fff3a5;background:rgba(255,239,136,.14);box-shadow:0 0 0 3px rgba(6,58,102,.72);outline:none;}
-  .journey-island-button:disabled{cursor:default;}
+  /* Scoped by id so these always outrank the `.participant-mode button` pirate skin. */
+  #journeyIslandButtons .journey-island-button{position:absolute;z-index:4;width:24%;aspect-ratio:1.25;transform:translate(-50%,-50%);margin:0;padding:0;border:2px solid transparent;border-radius:50%;background:transparent;box-shadow:none;text-shadow:none;transition:none;touch-action:manipulation;}
+  #journeyIslandButtons .journey-island-button:not(:disabled){cursor:pointer;}
+  #journeyIslandButtons .journey-island-button:not(:disabled):hover,#journeyIslandButtons .journey-island-button:not(:disabled):focus-visible{border-color:#fff3a5;background:rgba(255,239,136,.14);box-shadow:0 0 0 3px rgba(6,58,102,.72);outline:none;}
+  #journeyIslandButtons .journey-island-button:disabled{cursor:default;}
   .journey-score-popup{position:absolute;z-index:5;left:50%;top:50%;width:min(280px,78%);transform:translate(-50%,-50%);padding:18px 20px;border:3px solid #704018;border-radius:6px;background:linear-gradient(180deg,#fff7c7,#f3c762);box-shadow:5px 5px 0 rgba(6,58,102,.84);color:#12385b;font-family:"Trebuchet MS",system-ui,sans-serif;text-align:center;}
   .journey-score-popup[hidden]{display:none;}
   .journey-score-popup h2{margin:0 28px 8px 0;font-size:20px;}
   .journey-score-popup p{margin:0;font-size:16px;font-weight:700;}
-  .journey-popup-close{position:absolute;right:7px;top:5px;margin:0;padding:0;width:30px;height:30px;border:0;border-radius:0;background:transparent;box-shadow:none;color:#12385b;font-size:28px;line-height:26px;}
-  .journey-popup-close:hover,.journey-popup-close:focus-visible{background:rgba(112,64,24,.12);outline:2px solid #704018;outline-offset:1px;}
+  .journey-score-popup .journey-popup-close{position:absolute;right:7px;top:5px;margin:0;padding:0;width:30px;height:30px;border:0;border-radius:0;background:transparent;box-shadow:none;text-shadow:none;color:#12385b;font-size:28px;line-height:26px;}
+  .journey-score-popup .journey-popup-close:hover,.journey-score-popup .journey-popup-close:focus-visible{background:rgba(112,64,24,.12);outline:2px solid #704018;outline-offset:1px;}
   body.map-clue-mode .topbar,body.map-clue-mode .wrap{position:relative;z-index:81;}
   body.map-clue-mode .topbar{background:rgba(10,47,79,.94);backdrop-filter:blur(2px);}
   body.map-clue-mode .wrap{min-height:calc(100vh - 64px);padding-top:28px;}
@@ -251,6 +252,9 @@
   .participant-mode button:hover{background:linear-gradient(180deg,#ffd85a 0 48%,#ee8b28 48% 100%);color:#fff;border-color:#6c3614;filter:brightness(1.05);}
   .participant-mode button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #063a66;}
   .participant-mode button.secondary{background:linear-gradient(180deg,#237da2 0 48%,#15506f 48% 100%);border-color:#0c3857;text-shadow:1px 1px 0 #062a44;}
+  .participant-mode .clue-map-close{position:absolute;right:12px;top:10px;z-index:2;width:34px;height:34px;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;color:#12385b;font-size:30px;line-height:30px;text-shadow:none;}
+  .participant-mode .clue-map-close:hover,.participant-mode .clue-map-close:focus-visible{background:rgba(112,64,24,.12);color:#b3471e;outline:2px solid #704018;outline-offset:1px;}
+  .participant-mode .clue-map-close:active{transform:none;box-shadow:none;}
   .participant-mode .linkbtn{border:0;box-shadow:none;background:none;color:#12385b;text-shadow:none;text-decoration:underline;}
   .participant-mode .linkbtn:hover{background:none;color:#b3471e;}
   .participant-mode .msg{border:3px solid #754017;border-radius:5px;box-shadow:2px 2px 0 rgba(91,47,15,.24);}
@@ -324,8 +328,9 @@
 </section>
 <section class="journey-map" id="journeyMap" hidden aria-label="Peta perjalanan stesen">
   <div class="journey-map-canvas" id="journeyMapCanvas">
+    <!-- Ping-pong (forward + reversed) is baked into the file so the browser only ever decodes forward. -->
     <video class="journey-map-video" id="journeyMapVideo" muted playsinline loop preload="auto" aria-hidden="true">
-      <source src="map idle.mp4" type="video/mp4">
+      <source src="map idle pingpong.mp4" type="video/mp4">
     </video>
     <div class="journey-ship" id="journeyShip" aria-hidden="true"></div>
     <div class="journey-status" id="journeyStatus">Sedia berlayar!</div>
@@ -501,6 +506,7 @@
   <!-- GROUP: CLUE / SCAN VIEW -->
   <div class="view" id="view-clue">
     <div class="card">
+      <button class="clue-map-close" type="button" onclick="closeClueToMap()" aria-label="Tutup dan kembali ke map" title="Tutup">&times;</button>
       <button class="linkbtn" onclick="logout()">← Log keluar</button>
       <h2 id="clueGroupName"></h2>
       <div class="keyrow" id="keyrowMini"></div>
@@ -630,6 +636,12 @@ const MAP_STOPS = {
   0:{x:50,y:89}, 1:{x:57,y:78}, 2:{x:34,y:66}, 3:{x:59,y:55},
   4:{x:36,y:46}, 5:{x:62,y:36}, 6:{x:50,y:27}
 };
+// Ship moorings (MAP_STOPS) sit beside each island, so the click targets need
+// their own centres, measured from the map art.
+const MAP_ISLANDS = {
+  1:{x:61.5,y:75}, 2:{x:29.5,y:62}, 3:{x:66,y:55},
+  4:{x:33.5,y:43}, 5:{x:71,y:37},   6:{x:49.5,y:25}
+};
 const SHIP_SPRITE = {frames:24, cols:6, rows:4, frameMs:82};
 let journeyToken=0;
 let journeyShipStation=0;
@@ -678,14 +690,36 @@ function unlockJourneyShipAudio(){
     audio.muted=false;
   }).catch(()=>{ audio.muted=false; });
 }
+// "map idle pingpong.mp4" already contains forward + reversed frames, so a plain
+// native loop gives the ping-pong effect without ever seeking backwards.
+// (Reversing with currentTime stalled: the source clip is one long GOP, so every
+// backward seek forced a decode from frame 0.)
+function setupJourneyMapVideo(video){
+  if(!video || video.dataset.pingPongBound) return;
+  video.dataset.pingPongBound='1';
+  video.loop=true;
+  video.playbackRate=1;
+  video.addEventListener('loadedmetadata',()=>{ video.loop=true; });
+}
+function playJourneyMapPingPong(){
+  const video=document.getElementById('journeyMapVideo');
+  if(!video) return;
+  setupJourneyMapVideo(video);
+  video.loop=true;
+  video.playbackRate=1;
+  if(video.paused) video.play().catch(()=>{});
+}
+function pauseJourneyMapPingPong(){
+  const video=document.getElementById('journeyMapVideo');
+  if(video) video.pause();
+}
 function hideJourneyMap(){
   journeyToken++;
   journeyMoving=false;
   const map=document.getElementById('journeyMap');
-  const video=document.getElementById('journeyMapVideo');
   const popup=document.getElementById('journeyScorePopup');
   if(map) map.hidden=true;
-  if(video) video.pause();
+  pauseJourneyMapPingPong();
   if(popup) popup.hidden=true;
   stopJourneyShipAudio();
   document.body.classList.remove('map-clue-mode');
@@ -699,14 +733,14 @@ function renderJourneyIslandButtons(){
   const completedStations=progress.completedStations||{};
   holder.innerHTML='';
   for(let stationId=1;stationId<=6;stationId++){
-    const point=MAP_STOPS[stationId];
+    const point=MAP_ISLANDS[stationId];
     const isComplete=Boolean(completedStations[stationId]);
     const isNext=stationId===nextStation;
     const button=document.createElement('button');
     button.type='button';
     button.className='journey-island-button';
     button.style.left=point.x+'%';
-    button.style.top=(point.y-5)+'%';
+    button.style.top=point.y+'%';
     button.disabled=!isComplete&&!isNext;
     button.setAttribute('aria-label',isNext ? `Pergi ke Pulau ${stationId}` : isComplete ? `Lihat markah Pulau ${stationId}` : `Pulau ${stationId} masih terkunci`);
     if(isNext) button.setAttribute('aria-current','step');
@@ -719,6 +753,26 @@ function closeJourneyScorePopup(){
   const status=document.getElementById('journeyStatus');
   if(popup) popup.hidden=true;
   if(status) status.textContent='Pilih pulau seterusnya atau pulau yang sudah selesai.';
+}
+function stopClueScanner(){
+  const reader=document.getElementById('reader');
+  if(reader) reader.style.display='none';
+  if(!html5QrCode) return;
+  const scanner=html5QrCode;
+  html5QrCode=null;
+  try{ scanner.stop().catch(()=>{}); }catch(_){}
+}
+function closeClueToMap(){
+  const map=document.getElementById('journeyMap');
+  const clue=document.getElementById('view-clue');
+  const status=document.getElementById('journeyStatus');
+  stopClueScanner();
+  if(clue) clue.classList.remove('active');
+  if(map) map.hidden=false;
+  playJourneyMapPingPong();
+  document.body.classList.remove('map-clue-mode');
+  if(status) status.textContent='Pilih pulau seterusnya atau pulau yang sudah selesai.';
+  renderJourneyIslandButtons();
 }
 function showJourneyScore(stationId){
   const popup=document.getElementById('journeyScorePopup');
@@ -734,7 +788,6 @@ function showJourneyScore(stationId){
 }
 function showJourneyMap(){
   const map=document.getElementById('journeyMap');
-  const video=document.getElementById('journeyMapVideo');
   const status=document.getElementById('journeyStatus');
   const g=groups && groups[currentGroupId];
   if(!map || !g) return;
@@ -748,10 +801,7 @@ function showJourneyMap(){
   setJourneyShipFrame(0);
   if(status) status.textContent='Pilih pulau seterusnya atau pulau yang sudah selesai.';
   renderJourneyIslandButtons();
-  if(video){
-    video.loop=true;
-    video.play().catch(()=>{});
-  }
+  playJourneyMapPingPong();
 }
 function selectJourneyIsland(stationId){
   if(journeyMoving || !document.getElementById('journeyScorePopup')?.hidden) return;
@@ -768,7 +818,6 @@ function selectJourneyIsland(stationId){
 }
 function playStationJourney(fromStation,toStation,onArrive){
   const map=document.getElementById('journeyMap');
-  const video=document.getElementById('journeyMapVideo');
   const status=document.getElementById('journeyStatus');
   const from=MAP_STOPS[fromStation]||MAP_STOPS[0];
   const to=MAP_STOPS[toStation]||MAP_STOPS[1];
@@ -788,10 +837,7 @@ function playStationJourney(fromStation,toStation,onArrive){
   }
   playJourneyShipAudio();
   if(status) status.textContent=`Berlayar ke Pulau ${toStation}...`;
-  if(video){
-    video.loop=true;
-    video.play().catch(()=>{});
-  }
+  playJourneyMapPingPong();
   const duration=2700;
   let startedAt=null;
   const animate=(now)=>{
