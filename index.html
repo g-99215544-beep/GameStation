@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Game Station Matematik</title>
+<title>Game Station</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -17,6 +17,15 @@
   body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--cream);margin:0;padding:0;color:var(--navy);min-height:100vh;}
   .view{display:none;}
   .view.active{display:block;}
+  /* Daily intro: the video is a complete pixel-art scene, so it covers the
+     app rather than being chroma-keyed and leaving compression artefacts. */
+  .daily-intro{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;background:#000;overflow:hidden;}
+  .daily-intro[hidden]{display:none;}
+  .daily-intro-video{width:100%;height:100%;display:block;object-fit:cover;background:#000;}
+  .daily-intro-blackout{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;}
+  .daily-intro.is-fading .daily-intro-video{opacity:0;transition:opacity 1s linear;}
+  .daily-intro.is-fading .daily-intro-blackout{opacity:1;transition:opacity 1s linear;}
+  @media (prefers-reduced-motion:reduce){.daily-intro{display:none!important;}}
   .topbar{background:var(--navy);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;}
   .topbar h1{margin:0;font-size:18px;color:var(--gold);}
   #timer{font-size:22px;font-weight:800;background:#fff2;padding:4px 14px;border-radius:10px;}
@@ -214,12 +223,21 @@
 <body>
 
 <div class="topbar">
-  <h1 id="topTitle">🎯 Game Station Matematik</h1>
+  <h1 id="topTitle">🎯 Game Station</h1>
   <div class="topbar-actions">
     <button class="icon-btn" id="adminAccessBtn" type="button" onclick="showAdminLogin()" aria-label="Login admin" title="Login admin">&#9881;</button>
     <div id="timer" style="display:none;">--:--</div>
   </div>
 </div>
+
+<!-- Shown only on the first visit of each calendar day. The MP4 artwork is
+     deliberately opaque: it fully replaces the app background during playback. -->
+<section class="daily-intro" id="dailyIntro" hidden aria-label="Treasure Station intro">
+  <video class="daily-intro-video" id="dailyIntroVideo" muted playsinline preload="auto" aria-hidden="true">
+    <source src="Pixel_art_game_intro_animation_202607201130.mp4" type="video/mp4">
+  </video>
+  <div class="daily-intro-blackout" aria-hidden="true"></div>
+</section>
 <div class="wrap">
 
   <!-- LOGIN / ROLE SELECT -->
@@ -252,7 +270,7 @@
     <div class="admin-shell">
       <div class="admin-head">
         <div>
-          <p class="admin-kicker">Game Station Matematik</p>
+          <p class="admin-kicker">Game Station</p>
           <h2>Panel Kawalan Admin</h2>
           <p>Urus persediaan, pantau kumpulan, dan kawal sesi permainan.</p>
         </div>
@@ -462,6 +480,46 @@ let db, stations, groups, currentGroupId, progress={}, timerInterval, timeLeftSe
 // start, Tamat to end. status: 'setup' (not started) | 'active' | 'ended'.
 let sessionInfo = {status:'setup'};
 
+const DAILY_INTRO_KEY = 'game_station_intro_last_seen';
+const DAILY_INTRO_PLAY_MS = 3000;
+const DAILY_INTRO_FADE_MS = 1000;
+
+function localDayStamp(){
+  const now = new Date();
+  const month = String(now.getMonth()+1).padStart(2,'0');
+  const day = String(now.getDate()).padStart(2,'0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+function playDailyIntro(){
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const intro = document.getElementById('dailyIntro');
+  const video = document.getElementById('dailyIntroVideo');
+  const today = localDayStamp();
+  if(!intro || !video || localStorage.getItem(DAILY_INTRO_KEY)===today) return;
+
+  intro.hidden = false;
+  // Mark the day only when the intro is actually about to play, rather than
+  // repeatedly showing it during navigation through the app.
+  localStorage.setItem(DAILY_INTRO_KEY, today);
+  video.currentTime = 0;
+  video.play().catch(()=>startIntroFade());
+
+  let faded = false;
+  const startIntroFade = ()=>{
+    if(faded) return;
+    faded = true;
+    video.pause();
+    intro.classList.add('is-fading');
+    window.setTimeout(()=>{
+      intro.hidden = true;
+      intro.classList.remove('is-fading');
+    }, DAILY_INTRO_FADE_MS);
+  };
+  window.setTimeout(startIntroFade, DAILY_INTRO_PLAY_MS);
+  video.addEventListener('error', startIntroFade, {once:true});
+}
+
 function show(id){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById(id).classList.add('active');
@@ -653,7 +711,7 @@ function logout(){
   document.body.classList.remove('board-mode');
   currentGroupId = null;
   clearSession();
-  document.getElementById('topTitle').innerText='🎯 Game Station Matematik';
+  document.getElementById('topTitle').innerText='🎯 Game Station';
   document.getElementById('timer').style.display='none';
   show('view-login');
 }
@@ -1447,7 +1505,7 @@ function leaveSmartBoard(){
   document.body.classList.remove('board-mode');
   let role=null; try{ role=(JSON.parse(localStorage.getItem('gs_session'))||{}).role; }catch(e){}
   if(role==='admin'){ show('view-admin'); document.getElementById('topTitle').innerText='⚙️ Admin Panel'; }
-  else { show('view-login'); document.getElementById('topTitle').innerText='🎯 Game Station Matematik'; }
+  else { show('view-login'); document.getElementById('topTitle').innerText='🎯 Game Station'; }
 }
 // The 6 keyholes (2 rows x 3), as % of the chest sprite frame. Index 0..5 =
 // key-collection order (top row left->right, then bottom row) so key N lights
@@ -1547,6 +1605,7 @@ function flashBoardMsg(msg){
 }
 
 window.onload=()=>{
+  playDailyIntro();
   connectFirebase();
 };
 </script>
