@@ -31,7 +31,8 @@
   .journey-map[hidden]{display:none;}
   .journey-map-canvas{position:relative;width:min(100vw,calc(100vh * 9 / 16));height:min(100vh,calc(100vw * 16 / 9));overflow:hidden;background:#087dbd;}
   .journey-map-video{display:block;width:100%;height:100%;object-fit:cover;}
-  .journey-ship{position:absolute;z-index:2;width:25%;aspect-ratio:320/403;transform:translate(-50%,-88%);background-image:url('assets/ship/ship-sail-sheet.png?v=ship-sail-1');background-size:600% 400%;background-repeat:no-repeat;image-rendering:pixelated;filter:drop-shadow(3px 5px 0 rgba(0,46,81,.36));will-change:left,top,background-position;}
+  .journey-ship{position:absolute;z-index:2;width:25%;aspect-ratio:320/403;transform:translate(-50%,-88%);background-image:url('assets/ship/ship-sail-sheet.png?v=ship-sail-1');background-size:600% 400%;background-repeat:no-repeat;image-rendering:pixelated;filter:drop-shadow(3px 5px 0 rgba(0,46,81,.36));will-change:left,top,background-position,transform;}
+  .journey-ship.facing-left{transform:translate(-50%,-88%) scaleX(-1);}
   .journey-status{position:absolute;z-index:3;left:50%;top:16px;transform:translateX(-50%);width:max-content;max-width:88%;padding:9px 14px;border:3px solid #704018;border-radius:5px;background:linear-gradient(180deg,#fff5b6,#f0bd53);box-shadow:3px 3px 0 #063a66;color:#12385b;font-family:"Trebuchet MS",system-ui,sans-serif;font-weight:900;text-align:center;text-shadow:1px 1px 0 #fffde6;}
   body.map-clue-mode .topbar,body.map-clue-mode .wrap{position:relative;z-index:81;}
   body.map-clue-mode .topbar{background:rgba(10,47,79,.94);backdrop-filter:blur(2px);}
@@ -141,6 +142,11 @@
   .chest-card.won{border-color:var(--green);background:#eafaf0;}
   @keyframes chestPulse{50%{box-shadow:0 0 0 4px rgba(212,169,78,.35);}}
   .chest-anim{position:fixed;z-index:60;pointer-events:none;}
+  .chest-win-celebration{position:fixed;inset:0;z-index:70;display:grid;place-items:center;pointer-events:none;overflow:hidden;background:radial-gradient(circle at center,rgba(255,247,176,.94) 0 9%,rgba(255,206,61,.52) 22%,rgba(255,177,35,.18) 43%,transparent 68%);animation:chestWinLight 1s ease-in-out infinite alternate;}
+  .chest-win-celebration::before,.chest-win-celebration::after{position:absolute;content:'✦';color:#fff8a7;font-size:min(18vw,180px);text-shadow:0 0 24px #ffbc24,0 0 52px #fff1a4;animation:chestWinSpark 1.2s ease-in-out infinite alternate;}.chest-win-celebration::before{left:17%;top:20%;}.chest-win-celebration::after{right:17%;bottom:18%;animation-delay:.4s;}
+  .chest-win-card{position:relative;z-index:1;min-width:min(78vw,620px);padding:clamp(28px,5vw,64px);border:6px solid #704018;border-radius:14px;background:linear-gradient(135deg,#fffbd9,#f5c54d 48%,#fff1a7);box-shadow:0 0 0 8px rgba(255,239,128,.6),0 0 45px 22px rgba(255,205,47,.9),8px 8px 0 #613112;text-align:center;color:#12385b;font-family:"Trebuchet MS",system-ui,sans-serif;text-shadow:2px 2px 0 #fff9cf;}
+  .chest-win-card .win-kicker{margin:0 0 8px;font-size:clamp(18px,3vw,32px);font-weight:900;color:#814314;letter-spacing:.08em;text-transform:uppercase;}.chest-win-card h1{margin:0;font-size:clamp(42px,8vw,100px);line-height:1;font-weight:900;}.chest-win-card .win-score{margin:14px 0 0;font-size:clamp(34px,6vw,76px);font-weight:900;color:#b84d18;}
+  @keyframes chestWinLight{from{filter:brightness(1);opacity:.86;}to{filter:brightness(1.2);opacity:1;}}@keyframes chestWinSpark{from{transform:scale(.65) rotate(-8deg);opacity:.55;}to{transform:scale(1.15) rotate(8deg);opacity:1;}}
   .rank-panel{background:var(--navy);color:#fff;border-radius:14px;padding:14px 14px 6px;overflow:auto;max-height:100%;}
   .rank-panel h2{margin:0 0 10px;color:var(--gold);font-size:18px;text-align:center;}
   .rank-row{display:flex;align-items:center;gap:8px;padding:8px 6px;border-bottom:1px solid #ffffff22;}
@@ -211,6 +217,10 @@
   .worksheet-question-row label{margin:0 0 5px;color:var(--navy);}.worksheet-question-row > div{display:flex;gap:8px;align-items:center;}.worksheet-question-row input{margin:0;}
   .worksheet-question-row .worksheet-remove,.worksheet-add{margin:0;white-space:nowrap;}.worksheet-question-row .worksheet-remove{background:var(--red);}
   .worksheet-add{font-size:13px;padding:9px 12px;}
+  .password-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px;}.password-actions button{margin:0;}
+  .password-edit{display:flex;gap:8px;align-items:center;}.password-edit input{width:128px;min-width:0;margin:0;font-variant-numeric:tabular-nums;font-weight:800;letter-spacing:.08em;}.password-edit button{margin:0;padding:8px 10px;font-size:12px;white-space:nowrap;}
+  .password-note{margin:0 0 12px;color:#75582b;font-size:13px;font-weight:700;}
+  #passwordPrintOutput{display:none;}
   /* ---- Participant experience: pixel-art pirate treasure adventure ---- */
   body.participant-mode{background-color:#087ec1;background-image:linear-gradient(180deg,#07518d 0,#0c8bd1 36%,#0476b7 100%),repeating-linear-gradient(0deg,transparent 0 17px,rgba(255,255,255,.045) 17px 19px),repeating-linear-gradient(90deg,transparent 0 23px,rgba(255,255,255,.035) 23px 25px);color:#17324d;min-height:100vh;}
   .participant-mode .topbar{background:linear-gradient(180deg,#12385b 0 78%,#0a2a49 78% 100%);border-bottom:4px solid #ffcb42;box-shadow:0 4px 0 #063056;padding:13px 16px;}
@@ -266,12 +276,21 @@
     @page{margin:18mm;}
     body{background:#fff!important;}
     body *{visibility:hidden!important;}
-    #qrOutput,#qrOutput *{visibility:visible!important;}
-    #qrOutput{position:absolute;inset:0;display:block!important;width:100%;}
-    #qrOutput .qr-print{display:flex!important;flex-direction:column;align-items:center;justify-content:center;width:100%!important;min-height:calc(100vh - 36mm);margin:0!important;padding:18mm!important;border:none!important;border-radius:0!important;box-shadow:none!important;break-after:page;page-break-after:always;}
-    #qrOutput .qr-print:last-child{break-after:auto;page-break-after:auto;}
-    #qrOutput .qr-print > div:first-child{font-size:22px!important;margin-bottom:16px;}
-    #qrOutput .qr-print > div:last-child{max-width:150mm;margin-top:18px;font-size:14px!important;color:#333!important;}
+    body:not(.printing-passwords) #qrOutput,body:not(.printing-passwords) #qrOutput *{visibility:visible!important;}
+    body:not(.printing-passwords) #qrOutput{position:absolute;inset:0;display:block!important;width:100%;}
+    body:not(.printing-passwords) #qrOutput .qr-print{display:flex!important;flex-direction:column;align-items:center;justify-content:center;width:100%!important;min-height:calc(100vh - 36mm);margin:0!important;padding:18mm!important;border:none!important;border-radius:0!important;box-shadow:none!important;break-after:page;page-break-after:always;}
+    body:not(.printing-passwords) #qrOutput .qr-print:last-child{break-after:auto;page-break-after:auto;}
+    body:not(.printing-passwords) #qrOutput .qr-print > div:first-child{font-size:22px!important;margin-bottom:16px;}
+    body:not(.printing-passwords) #qrOutput .qr-print > div:last-child{max-width:150mm;margin-top:18px;font-size:14px!important;color:#333!important;}
+    body.printing-passwords #passwordPrintOutput,body.printing-passwords #passwordPrintOutput *{visibility:visible!important;}
+    body.printing-passwords #passwordPrintOutput{position:absolute;inset:0;display:block!important;width:100%;color:#111!important;}
+    body.printing-passwords .password-print-sheet{padding:8mm 10mm;}
+    body.printing-passwords .password-print-sheet h1{font-size:24px;margin:0 0 5px;color:#12385b!important;}
+    body.printing-passwords .password-print-sheet p{margin:0 0 15px;color:#333!important;}
+    body.printing-passwords .password-print-sheet table{margin:0;width:100%;font-size:14px;}
+    body.printing-passwords .password-print-sheet th,body.printing-passwords .password-print-sheet td{padding:9px 12px;border:1px solid #888!important;color:#111!important;}
+    body.printing-passwords .password-print-sheet th{background:#ffc63d!important;}
+    body.printing-passwords .password-print-sheet td:last-child{font-family:monospace;font-size:17px;font-weight:800;letter-spacing:.12em;}
   }
 </style>
 </head>
@@ -302,6 +321,9 @@
     <div class="journey-status" id="journeyStatus">Sedia berlayar!</div>
   </div>
 </section>
+<audio id="journeyShipAudio" preload="auto">
+  <source src="Kapal_berlayar_plain_cyan_backgr…_202607201223.mp4" type="video/mp4">
+</audio>
 <div class="wrap">
 
   <!-- LOGIN / ROLE SELECT -->
@@ -312,7 +334,7 @@
       <label>Kumpulan</label>
       <select id="groupLoginSelect"></select>
       <label>Password Kumpulan</label>
-      <input id="groupLoginPass" placeholder="Masukkan password kumpulan anda">
+      <input id="groupLoginPass" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="Masukkan 4 digit password" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)">
       <button class="big" onclick="loginAsGroup()">Masuk sebagai Kumpulan</button>
       <div id="groupLoginMsg"></div>
     </div>
@@ -365,7 +387,7 @@
           <p class="admin-panel-intro">Lengkapkan enam stesen. Selepas disimpan, teruskan ke langkah password kumpulan.</p>
           <div id="stationsArea"></div>
           <div class="feature-actions">
-            <button class="secondary" onclick="pushConfig()">Simpan Setup &amp; Jana Password</button>
+            <button class="secondary" onclick="pushConfig()">Simpan Setup &amp; Sedia Password</button>
             <button onclick="testStation(1)">Uji Stesen 1</button>
           </div>
           <div id="pushStatus"></div>
@@ -379,8 +401,9 @@
       <section class="admin-panel" id="admin-panel-passwords">
         <div class="card">
           <h3>Password Kumpulan</h3>
-          <p class="admin-panel-intro">Berikan password yang tertera kepada kumpulan masing-masing sebelum sesi dimulakan.</p>
+          <p class="admin-panel-intro">Password kumpulan menggunakan 4 digit nombor sahaja. Anda boleh sunting atau jana semula password sebelum sesi dimulakan.</p>
           <div id="loginPassArea" class="table-wrap"></div>
+          <div id="passwordPrintOutput" aria-hidden="true"></div>
           <div class="step-actions">
             <button onclick="goToAdminStep('setup')">&#8592; Kembali</button>
             <button class="step-next" onclick="goToAdminStep('qr')">Seterusnya: QR Tersembunyi &#8594;</button>
@@ -607,12 +630,36 @@ function placeJourneyShip(point){
   ship.style.left=point.x+'%';
   ship.style.top=point.y+'%';
 }
+function stopJourneyShipAudio(){
+  const audio=document.getElementById('journeyShipAudio');
+  if(!audio) return;
+  audio.pause();
+  try{ audio.currentTime=0; }catch(_){}
+}
+function playJourneyShipAudio(){
+  const audio=document.getElementById('journeyShipAudio');
+  if(!audio) return;
+  stopJourneyShipAudio();
+  audio.volume=.42;
+  audio.play().catch(()=>{});
+}
+function unlockJourneyShipAudio(){
+  const audio=document.getElementById('journeyShipAudio');
+  if(!audio) return;
+  audio.muted=true;
+  audio.play().then(()=>{
+    audio.pause();
+    audio.currentTime=0;
+    audio.muted=false;
+  }).catch(()=>{ audio.muted=false; });
+}
 function hideJourneyMap(){
   journeyToken++;
   const map=document.getElementById('journeyMap');
   const video=document.getElementById('journeyMapVideo');
   if(map) map.hidden=true;
   if(video) video.pause();
+  stopJourneyShipAudio();
   document.body.classList.remove('map-clue-mode');
 }
 function playStationJourney(fromStation,toStation,onArrive){
@@ -621,11 +668,14 @@ function playStationJourney(fromStation,toStation,onArrive){
   const status=document.getElementById('journeyStatus');
   const from=MAP_STOPS[fromStation]||MAP_STOPS[0];
   const to=MAP_STOPS[toStation]||MAP_STOPS[1];
+  const ship=document.getElementById('journeyShip');
   const token=++journeyToken;
   document.body.classList.remove('map-clue-mode');
   map.hidden=false;
+  if(ship) ship.classList.toggle('facing-left',to.x<from.x);
   placeJourneyShip(from);
   setJourneyShipFrame(0);
+  playJourneyShipAudio();
   if(status) status.textContent=`Berlayar ke Pulau ${toStation}...`;
   if(video){
     video.loop=true;
@@ -641,11 +691,12 @@ function playStationJourney(fromStation,toStation,onArrive){
     placeJourneyShip({x:from.x+(to.x-from.x)*eased,y:from.y+(to.y-from.y)*eased});
     setJourneyShipFrame(Math.floor((now-startedAt)/SHIP_SPRITE.frameMs));
     if(progress<1){ requestAnimationFrame(animate); return; }
+    stopJourneyShipAudio();
     if(status) status.textContent=`Tiba di Pulau ${toStation}!`;
     window.setTimeout(()=>{
       if(token!==journeyToken) return;
       onArrive && onArrive();
-    },350);
+    },1000);
   };
   requestAnimationFrame(animate);
 }
@@ -787,14 +838,14 @@ function loginAsAdmin(){
 }
 function loginAsGroup(){
   const gid = document.getElementById('groupLoginSelect').value;
-  const inputPass = document.getElementById('groupLoginPass').value.trim().toUpperCase();
+  const inputPass = document.getElementById('groupLoginPass').value.trim();
   const g = groups[gid];
   const msg = document.getElementById('groupLoginMsg');
   if(!g || !g.loginPassword){
     msg.innerHTML='<div class="msg err">Config kumpulan belum di-push oleh admin.</div>';
     return;
   }
-  if(inputPass !== String(g.loginPassword).toUpperCase()){
+  if(inputPass !== numericLoginPassword(g.loginPassword)){
     msg.innerHTML='<div class="msg err">❌ Password kumpulan salah.</div>';
     return;
   }
@@ -1028,17 +1079,33 @@ function rotationFor(startStation){
   for(let k=0;k<6;k++) order.push(((startStation-1+k)%6)+1);
   return order;
 }
-function randomLoginPassword(gid){
-  const rand = Math.floor(1000+Math.random()*9000);
-  return 'K'+gid+'-'+rand;
+const LOGIN_PASSWORD_LENGTH = 4;
+function numericLoginPassword(value){
+  const text=String(value||'').trim();
+  if(new RegExp(`^\\d{${LOGIN_PASSWORD_LENGTH}}$`).test(text)) return text;
+  // Migrates old values such as K10-5905 to their four-digit password part.
+  const legacy=text.match(new RegExp(`(\\d{${LOGIN_PASSWORD_LENGTH}})$`));
+  return legacy ? legacy[1] : '';
+}
+function generateLoginPassword(usedPasswords=new Set()){
+  let password='';
+  do { password=String(Math.floor(1000+Math.random()*9000)); }
+  while(usedPasswords.has(password));
+  usedPasswords.add(password);
+  return password;
 }
 function collectGroups(){
   const out={};
+  const usedPasswords=new Set();
   for(let i=1;i<=NUM_GROUPS;i++){
     const start = ((i-1)%6)+1;
-    // preserve existing login password if already assigned, so re-pushing config mid-event doesn't lock groups out
-    const existingPass = (groups && groups[i] && groups[i].loginPassword) ? groups[i].loginPassword : randomLoginPassword(i);
-    out[i]={id:i, name:'Kumpulan '+i, order:rotationFor(start), loginPassword:existingPass};
+    // Preserve valid numeric passwords; legacy K1-1234 values are migrated to
+    // 1234, and any duplicate/invalid value gets a new unique four-digit code.
+    const existingPass=numericLoginPassword(groups && groups[i] && groups[i].loginPassword);
+    const loginPassword=existingPass && !usedPasswords.has(existingPass)
+      ? (usedPasswords.add(existingPass),existingPass)
+      : generateLoginPassword(usedPasswords);
+    out[i]={id:i, name:'Kumpulan '+i, order:rotationFor(start), loginPassword};
   }
   return out;
 }
@@ -1059,17 +1126,84 @@ function pushConfig(){
     document.getElementById('pushStatus').innerHTML='<div class="msg ok">✅ Config di-push. 14 kumpulan sedia.</div>'+listHtml;
   });
 }
-function showLoginPasswords(){
+function showLoginPasswords(message=''){
   const area = document.getElementById('loginPassArea');
   if(!area) return;
   if(!groups || !Object.keys(groups).length){
     area.innerHTML='<div class="empty-state">Password belum dijana. Kembali ke Setup Stesen dan tekan <b>Simpan Setup &amp; Jana Password</b>.</div>';
     return;
   }
-  let html = '<h4>Password Login Kumpulan</h4><table><tr><th>Kumpulan</th><th>Password</th></tr>';
-  Object.values(groups).forEach(g=>{ html += `<tr><td>${g.name}</td><td><b>${g.loginPassword||'-'}</b></td></tr>`; });
+  const needsMigration=Object.values(groups).some(g=>String(g.loginPassword||'')!==numericLoginPassword(g.loginPassword));
+  let html = `<div class="password-actions"><button class="secondary" onclick="saveLoginPasswords()">Simpan Password</button><button onclick="regenerateAllLoginPasswords()">Jana Semula Semua Password</button><button onclick="printLoginPasswords()">Cetak Password Kumpulan</button></div>
+    ${needsMigration?'<p class="password-note">Password lama akan ditukar kepada 4 digit nombor apabila anda menekan Simpan Password.</p>':''}
+    ${message?`<div class="msg ok">${message}</div>`:''}
+    <h4>Password Login Kumpulan</h4><table><tr><th>Kumpulan</th><th>Password 4 Digit</th></tr>`;
+  Object.keys(groups).sort((a,b)=>Number(a)-Number(b)).forEach(gid=>{
+    const g=groups[gid]; const password=numericLoginPassword(g.loginPassword);
+    html += `<tr><td>${g.name}</td><td><div class="password-edit"><input id="login_password_${gid}" value="${escapeHtml(password)}" inputmode="numeric" pattern="[0-9]*" maxlength="${LOGIN_PASSWORD_LENGTH}" aria-label="Password Kumpulan ${gid}" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,${LOGIN_PASSWORD_LENGTH})"><button type="button" onclick="regenerateLoginPassword('${gid}')">Jana Semula</button></div></td></tr>`;
+  });
   html += '</table>';
   area.innerHTML = html;
+}
+function collectEditedLoginPasswords(){
+  const edited={};
+  const usedPasswords=new Set();
+  const invalid=[];
+  Object.keys(groups||{}).forEach(gid=>{
+    const input=document.getElementById('login_password_'+gid);
+    const password=String(input&&input.value||'').trim();
+    if(!new RegExp(`^\\d{${LOGIN_PASSWORD_LENGTH}}$`).test(password) || usedPasswords.has(password)) invalid.push(gid);
+    usedPasswords.add(password);
+    edited[gid]=password;
+  });
+  return {edited,invalid};
+}
+function regenerateLoginPassword(gid){
+  const input=document.getElementById('login_password_'+gid);
+  if(!input) return;
+  const usedPasswords=new Set();
+  Object.keys(groups||{}).forEach(id=>{
+    if(id===String(gid)) return;
+    const value=document.getElementById('login_password_'+id)?.value;
+    if(/^\d{4}$/.test(value||'')) usedPasswords.add(value);
+  });
+  input.value=generateLoginPassword(usedPasswords);
+}
+function regenerateAllLoginPasswords(){
+  if(!confirm('Jana semula semua password kumpulan? Password lama tidak boleh digunakan selepas anda menekan Simpan Password.')) return;
+  const usedPasswords=new Set();
+  Object.keys(groups||{}).sort((a,b)=>Number(a)-Number(b)).forEach(gid=>{
+    const input=document.getElementById('login_password_'+gid);
+    if(input) input.value=generateLoginPassword(usedPasswords);
+  });
+}
+function saveLoginPasswords(){
+  const {edited,invalid}=collectEditedLoginPasswords();
+  if(invalid.length){
+    alert(`Password Kumpulan ${invalid.join(', ')} mesti 4 digit nombor unik.`);
+    return;
+  }
+  const updated={};
+  Object.keys(groups||{}).forEach(gid=>{ updated[gid]={...groups[gid],loginPassword:edited[gid]}; });
+  db.ref(PATH+'/config/groups').set(updated).then(()=>{
+    groups=updated;
+    showLoginPasswords('Password kumpulan berjaya disimpan.');
+  }).catch(error=>alert('Tidak dapat simpan password: '+error.message));
+}
+function printLoginPasswords(){
+  const {edited,invalid}=collectEditedLoginPasswords();
+  if(invalid.length){
+    alert(`Semak Password Kumpulan ${invalid.join(', ')} dahulu. Setiap password mesti 4 digit nombor unik sebelum dicetak.`);
+    return;
+  }
+  const output=document.getElementById('passwordPrintOutput');
+  if(!output) return;
+  const rows=Object.keys(groups||{}).sort((a,b)=>Number(a)-Number(b)).map(gid=>
+    `<tr><td>Kumpulan ${gid}</td><td>${escapeHtml(edited[gid])}</td></tr>`).join('');
+  output.innerHTML=`<section class="password-print-sheet"><h1>Game Station — Password Kumpulan</h1><p>Berikan password kepada kumpulan masing-masing sebelum permainan bermula.</p><table><thead><tr><th>Kumpulan</th><th>Password 4 Digit</th></tr></thead><tbody>${rows}</tbody></table></section>`;
+  document.body.classList.add('printing-passwords');
+  window.addEventListener('afterprint',()=>document.body.classList.remove('printing-passwords'),{once:true});
+  window.print();
 }
 function generateQRs(){
   const st = collectStations();
@@ -1814,6 +1948,16 @@ function playChestOpen(cardEl, done){
     else done && done(()=>ov.remove());
   })(performance.now());
 }
+function showChestWinCelebration(gid,finalScore,done){
+  const celebration=document.createElement('div');
+  celebration.className='chest-win-celebration';
+  celebration.innerHTML=`<div class="chest-win-card"><p class="win-kicker">Peti Harta Dibuka!</p><h1>Kumpulan ${gid}</h1><p class="win-score">${finalScore} Markah</p></div>`;
+  document.body.appendChild(celebration);
+  window.setTimeout(()=>{
+    celebration.remove();
+    done && done();
+  },5000);
+}
 function openChestOnBoard(gid){
   if(animatingGids.has(gid)) return;
   db.ref(PATH+'/progress/'+gid).once('value').then(snap=>{
@@ -1832,7 +1976,13 @@ function openChestOnBoard(gid){
         const bonus = CHEST_BONUS[Math.min(order-1, CHEST_BONUS.length-1)];
         const finalScore = (p.totalScore||0) + bonus;
         db.ref(PATH+'/progress/'+gid).update({status:'won', finishOrder:order, finishBonus:bonus, finalScore, openedAt:Date.now()})
-          .then(()=>{ removeOverlay(); animatingGids.delete(gid); });
+          .then(()=>{
+            showChestWinCelebration(gid,finalScore,()=>{
+              removeOverlay();
+              animatingGids.delete(gid);
+            });
+          })
+          .catch(()=>{ removeOverlay(); animatingGids.delete(gid); });
         flashBoardMsg(`🎉 Kumpulan ${gid} buka peti! +${bonus} bonus (buka ke-${order}) · Markah akhir ${finalScore}`);
       }).catch(()=>{ removeOverlay(); animatingGids.delete(gid); });
     });
@@ -1846,6 +1996,7 @@ function flashBoardMsg(msg){
 }
 
 window.onload=()=>{
+  document.addEventListener('pointerdown', unlockJourneyShipAudio, {once:true, passive:true});
   playDailyIntro();
   connectFirebase();
 };
