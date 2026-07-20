@@ -26,6 +26,18 @@
   .daily-intro.is-fading .daily-intro-video{opacity:0;transition:opacity 1s linear;}
   .daily-intro.is-fading .daily-intro-blackout{opacity:1;transition:opacity 1s linear;}
   @media (prefers-reduced-motion:reduce){.daily-intro{display:none!important;}}
+  /* Journey map: a looping video map with the transparent pirate-ship sprite. */
+  .journey-map{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#063a66;}
+  .journey-map[hidden]{display:none;}
+  .journey-map-canvas{position:relative;width:min(100vw,calc(100vh * 9 / 16));height:min(100vh,calc(100vw * 16 / 9));overflow:hidden;background:#087dbd;}
+  .journey-map-video{display:block;width:100%;height:100%;object-fit:cover;}
+  .journey-ship{position:absolute;z-index:2;width:25%;aspect-ratio:320/403;transform:translate(-50%,-88%);background-image:url('assets/ship/ship-sail-sheet.png?v=ship-sail-1');background-size:600% 400%;background-repeat:no-repeat;image-rendering:pixelated;filter:drop-shadow(3px 5px 0 rgba(0,46,81,.36));will-change:left,top,background-position;}
+  .journey-status{position:absolute;z-index:3;left:50%;top:16px;transform:translateX(-50%);width:max-content;max-width:88%;padding:9px 14px;border:3px solid #704018;border-radius:5px;background:linear-gradient(180deg,#fff5b6,#f0bd53);box-shadow:3px 3px 0 #063a66;color:#12385b;font-family:"Trebuchet MS",system-ui,sans-serif;font-weight:900;text-align:center;text-shadow:1px 1px 0 #fffde6;}
+  body.map-clue-mode .topbar,body.map-clue-mode .wrap{position:relative;z-index:81;}
+  body.map-clue-mode .topbar{background:rgba(10,47,79,.94);backdrop-filter:blur(2px);}
+  body.map-clue-mode .wrap{min-height:calc(100vh - 64px);padding-top:28px;}
+  body.map-clue-mode #view-clue .card{background:linear-gradient(135deg,#fff9df,#f7df9b);}
+  @media (max-width:420px){.journey-status{font-size:14px;top:12px;}.journey-ship{width:28%;}}
   .topbar{background:var(--navy);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;}
   .topbar h1{margin:0;font-size:18px;color:var(--gold);}
   #timer{font-size:22px;font-weight:800;background:#fff2;padding:4px 14px;border-radius:10px;}
@@ -280,6 +292,15 @@
     <source src="Pixel_art_game_intro_animation_202607201130.mp4" type="video/mp4">
   </video>
   <div class="daily-intro-blackout" aria-hidden="true"></div>
+</section>
+<section class="journey-map" id="journeyMap" hidden aria-label="Peta perjalanan stesen">
+  <div class="journey-map-canvas" id="journeyMapCanvas">
+    <video class="journey-map-video" id="journeyMapVideo" muted playsinline loop preload="auto" aria-hidden="true">
+      <source src="map idle.mp4" type="video/mp4">
+    </video>
+    <div class="journey-ship" id="journeyShip" aria-hidden="true"></div>
+    <div class="journey-status" id="journeyStatus">Sedia berlayar!</div>
+  </div>
 </section>
 <div class="wrap">
 
@@ -565,10 +586,75 @@ function playDailyIntro(){
   video.addEventListener('error', startIntroFade, {once:true});
 }
 
+const MAP_STOPS = {
+  0:{x:50,y:89}, 1:{x:57,y:78}, 2:{x:34,y:66}, 3:{x:59,y:55},
+  4:{x:36,y:46}, 5:{x:62,y:36}, 6:{x:50,y:27}
+};
+const SHIP_SPRITE = {frames:24, cols:6, rows:4, frameMs:82};
+let journeyToken=0;
+
+function setJourneyShipFrame(frame){
+  const ship=document.getElementById('journeyShip');
+  if(!ship) return;
+  const current=frame%SHIP_SPRITE.frames;
+  const col=current%SHIP_SPRITE.cols;
+  const row=Math.floor(current/SHIP_SPRITE.cols);
+  ship.style.backgroundPosition=`${col/(SHIP_SPRITE.cols-1)*100}% ${row/(SHIP_SPRITE.rows-1)*100}%`;
+}
+function placeJourneyShip(point){
+  const ship=document.getElementById('journeyShip');
+  if(!ship) return;
+  ship.style.left=point.x+'%';
+  ship.style.top=point.y+'%';
+}
+function hideJourneyMap(){
+  journeyToken++;
+  const map=document.getElementById('journeyMap');
+  const video=document.getElementById('journeyMapVideo');
+  if(map) map.hidden=true;
+  if(video) video.pause();
+  document.body.classList.remove('map-clue-mode');
+}
+function playStationJourney(fromStation,toStation,onArrive){
+  const map=document.getElementById('journeyMap');
+  const video=document.getElementById('journeyMapVideo');
+  const status=document.getElementById('journeyStatus');
+  const from=MAP_STOPS[fromStation]||MAP_STOPS[0];
+  const to=MAP_STOPS[toStation]||MAP_STOPS[1];
+  const token=++journeyToken;
+  document.body.classList.remove('map-clue-mode');
+  map.hidden=false;
+  placeJourneyShip(from);
+  setJourneyShipFrame(0);
+  if(status) status.textContent=`Berlayar ke Pulau ${toStation}...`;
+  if(video){
+    video.loop=true;
+    video.play().catch(()=>{});
+  }
+  const duration=2700;
+  let startedAt=null;
+  const animate=(now)=>{
+    if(token!==journeyToken) return;
+    if(startedAt===null) startedAt=now;
+    const progress=Math.min(1,(now-startedAt)/duration);
+    const eased=progress<.5 ? 2*progress*progress : 1-Math.pow(-2*progress+2,2)/2;
+    placeJourneyShip({x:from.x+(to.x-from.x)*eased,y:from.y+(to.y-from.y)*eased});
+    setJourneyShipFrame(Math.floor((now-startedAt)/SHIP_SPRITE.frameMs));
+    if(progress<1){ requestAnimationFrame(animate); return; }
+    if(status) status.textContent=`Tiba di Pulau ${toStation}!`;
+    window.setTimeout(()=>{
+      if(token!==journeyToken) return;
+      onArrive && onArrive();
+    },350);
+  };
+  requestAnimationFrame(animate);
+}
+
 function show(id){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.body.classList.toggle('participant-mode', PARTICIPANT_VIEW_IDS.has(id));
+  if(id!=='view-clue') hideJourneyMap();
   const wrap = document.querySelector('.wrap');
   if(wrap) wrap.classList.toggle('admin-wrap', id==='view-admin');
   const adminBtn = document.getElementById('adminAccessBtn');
@@ -1031,7 +1117,14 @@ function loadGroupProgress(){
   });
 }
 function showClueScreen(){
+  const g = groups[currentGroupId];
+  const stId = g.order[progress.currentIndex];
+  const fromStation = progress.currentIndex>0 ? g.order[progress.currentIndex-1] : 0;
+  playStationJourney(fromStation,stId,openCluePopup);
+}
+function openCluePopup(){
   show('view-clue');
+  document.body.classList.add('map-clue-mode');
   document.getElementById('clueGroupName').innerText = 'Kumpulan '+currentGroupId;
   renderKeyrowMini();
   const g = groups[currentGroupId];
