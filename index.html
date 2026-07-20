@@ -34,6 +34,16 @@
   .journey-ship{position:absolute;z-index:2;width:25%;aspect-ratio:320/403;transform:translate(-50%,-88%);background-image:url('assets/ship/ship-sail-sheet.png?v=ship-sail-1');background-size:600% 400%;background-repeat:no-repeat;image-rendering:pixelated;filter:drop-shadow(3px 5px 0 rgba(0,46,81,.36));will-change:left,top,background-position,transform;}
   .journey-ship.facing-left{transform:translate(-50%,-88%) scaleX(-1);}
   .journey-status{position:absolute;z-index:3;left:50%;top:16px;transform:translateX(-50%);width:max-content;max-width:88%;padding:9px 14px;border:3px solid #704018;border-radius:5px;background:linear-gradient(180deg,#fff5b6,#f0bd53);box-shadow:3px 3px 0 #063a66;color:#12385b;font-family:"Trebuchet MS",system-ui,sans-serif;font-weight:900;text-align:center;text-shadow:1px 1px 0 #fffde6;}
+  .journey-island-button{position:absolute;z-index:4;width:19%;aspect-ratio:1.25;transform:translate(-50%,-50%);margin:0;padding:0;border:2px solid transparent;border-radius:50%;background:transparent;box-shadow:none;touch-action:manipulation;}
+  .journey-island-button:not(:disabled){cursor:pointer;}
+  .journey-island-button:not(:disabled):hover,.journey-island-button:not(:disabled):focus-visible{border-color:#fff3a5;background:rgba(255,239,136,.14);box-shadow:0 0 0 3px rgba(6,58,102,.72);outline:none;}
+  .journey-island-button:disabled{cursor:default;}
+  .journey-score-popup{position:absolute;z-index:5;left:50%;top:50%;width:min(280px,78%);transform:translate(-50%,-50%);padding:18px 20px;border:3px solid #704018;border-radius:6px;background:linear-gradient(180deg,#fff7c7,#f3c762);box-shadow:5px 5px 0 rgba(6,58,102,.84);color:#12385b;font-family:"Trebuchet MS",system-ui,sans-serif;text-align:center;}
+  .journey-score-popup[hidden]{display:none;}
+  .journey-score-popup h2{margin:0 28px 8px 0;font-size:20px;}
+  .journey-score-popup p{margin:0;font-size:16px;font-weight:700;}
+  .journey-popup-close{position:absolute;right:7px;top:5px;margin:0;padding:0;width:30px;height:30px;border:0;border-radius:0;background:transparent;box-shadow:none;color:#12385b;font-size:28px;line-height:26px;}
+  .journey-popup-close:hover,.journey-popup-close:focus-visible{background:rgba(112,64,24,.12);outline:2px solid #704018;outline-offset:1px;}
   body.map-clue-mode .topbar,body.map-clue-mode .wrap{position:relative;z-index:81;}
   body.map-clue-mode .topbar{background:rgba(10,47,79,.94);backdrop-filter:blur(2px);}
   body.map-clue-mode .wrap{min-height:calc(100vh - 64px);padding-top:28px;}
@@ -319,6 +329,12 @@
     </video>
     <div class="journey-ship" id="journeyShip" aria-hidden="true"></div>
     <div class="journey-status" id="journeyStatus">Sedia berlayar!</div>
+    <div id="journeyIslandButtons" aria-label="Pilih pulau"></div>
+    <section class="journey-score-popup" id="journeyScorePopup" role="dialog" aria-modal="true" aria-labelledby="journeyScoreTitle" hidden>
+      <button class="journey-popup-close" type="button" onclick="closeJourneyScorePopup()" aria-label="Tutup maklumat markah" title="Tutup">&times;</button>
+      <h2 id="journeyScoreTitle">Pulau</h2>
+      <p id="journeyScoreText"></p>
+    </section>
   </div>
 </section>
 <audio id="journeyShipAudio" preload="auto">
@@ -616,6 +632,8 @@ const MAP_STOPS = {
 };
 const SHIP_SPRITE = {frames:24, cols:6, rows:4, frameMs:82};
 let journeyToken=0;
+let journeyShipStation=0;
+let journeyMoving=false;
 
 function setJourneyShipFrame(frame){
   const ship=document.getElementById('journeyShip');
@@ -630,6 +648,12 @@ function placeJourneyShip(point){
   if(!ship) return;
   ship.style.left=point.x+'%';
   ship.style.top=point.y+'%';
+}
+function setJourneyShipDirection(from,to){
+  const ship=document.getElementById('journeyShip');
+  if(!ship || Math.abs(to.x-from.x)<.5) return;
+  // The source sprite faces right; mirror it only while travelling left.
+  ship.classList.toggle('facing-left',to.x<from.x);
 }
 function stopJourneyShipAudio(){
   const audio=document.getElementById('journeyShipAudio');
@@ -656,12 +680,91 @@ function unlockJourneyShipAudio(){
 }
 function hideJourneyMap(){
   journeyToken++;
+  journeyMoving=false;
   const map=document.getElementById('journeyMap');
   const video=document.getElementById('journeyMapVideo');
+  const popup=document.getElementById('journeyScorePopup');
   if(map) map.hidden=true;
   if(video) video.pause();
+  if(popup) popup.hidden=true;
   stopJourneyShipAudio();
   document.body.classList.remove('map-clue-mode');
+}
+function renderJourneyIslandButtons(){
+  const holder=document.getElementById('journeyIslandButtons');
+  const g=groups && groups[currentGroupId];
+  if(!holder || !g) return;
+  const currentIndex=Number(progress.currentIndex)||0;
+  const nextStation=g.order[currentIndex];
+  const completedStations=progress.completedStations||{};
+  holder.innerHTML='';
+  for(let stationId=1;stationId<=6;stationId++){
+    const point=MAP_STOPS[stationId];
+    const isComplete=Boolean(completedStations[stationId]);
+    const isNext=stationId===nextStation;
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='journey-island-button';
+    button.style.left=point.x+'%';
+    button.style.top=(point.y-5)+'%';
+    button.disabled=!isComplete&&!isNext;
+    button.setAttribute('aria-label',isNext ? `Pergi ke Pulau ${stationId}` : isComplete ? `Lihat markah Pulau ${stationId}` : `Pulau ${stationId} masih terkunci`);
+    if(isNext) button.setAttribute('aria-current','step');
+    if(isComplete||isNext) button.addEventListener('click',()=>selectJourneyIsland(stationId));
+    holder.appendChild(button);
+  }
+}
+function closeJourneyScorePopup(){
+  const popup=document.getElementById('journeyScorePopup');
+  const status=document.getElementById('journeyStatus');
+  if(popup) popup.hidden=true;
+  if(status) status.textContent='Pilih pulau seterusnya atau pulau yang sudah selesai.';
+}
+function showJourneyScore(stationId){
+  const popup=document.getElementById('journeyScorePopup');
+  const title=document.getElementById('journeyScoreTitle');
+  const text=document.getElementById('journeyScoreText');
+  const status=document.getElementById('journeyStatus');
+  const score=(progress.completedStations||{})[stationId]?.score;
+  if(!popup || score==null) return;
+  if(title) title.textContent=`Pulau ${stationId} sudah selesai`;
+  if(text) text.textContent=`Markah diperoleh: ${score}`;
+  if(status) status.textContent=`Pulau ${stationId} sudah selesai.`;
+  popup.hidden=false;
+}
+function showJourneyMap(){
+  const map=document.getElementById('journeyMap');
+  const video=document.getElementById('journeyMapVideo');
+  const status=document.getElementById('journeyStatus');
+  const g=groups && groups[currentGroupId];
+  if(!map || !g) return;
+  const currentIndex=Number(progress.currentIndex)||0;
+  journeyShipStation=currentIndex>0 ? g.order[currentIndex-1] : 0;
+  const shipPoint=MAP_STOPS[journeyShipStation]||MAP_STOPS[0];
+  journeyMoving=false;
+  map.hidden=false;
+  closeJourneyScorePopup();
+  placeJourneyShip(shipPoint);
+  setJourneyShipFrame(0);
+  if(status) status.textContent='Pilih pulau seterusnya atau pulau yang sudah selesai.';
+  renderJourneyIslandButtons();
+  if(video){
+    video.loop=true;
+    video.play().catch(()=>{});
+  }
+}
+function selectJourneyIsland(stationId){
+  if(journeyMoving || !document.getElementById('journeyScorePopup')?.hidden) return;
+  const g=groups && groups[currentGroupId];
+  if(!g) return;
+  const currentIndex=Number(progress.currentIndex)||0;
+  const nextStation=g.order[currentIndex];
+  const completed=(progress.completedStations||{})[stationId];
+  if(stationId===nextStation){
+    playStationJourney(journeyShipStation,stationId,openCluePopup);
+  }else if(completed){
+    playStationJourney(journeyShipStation,stationId,()=>showJourneyScore(stationId));
+  }
 }
 function playStationJourney(fromStation,toStation,onArrive){
   const map=document.getElementById('journeyMap');
@@ -671,11 +774,18 @@ function playStationJourney(fromStation,toStation,onArrive){
   const to=MAP_STOPS[toStation]||MAP_STOPS[1];
   const ship=document.getElementById('journeyShip');
   const token=++journeyToken;
+  journeyMoving=true;
   document.body.classList.remove('map-clue-mode');
   map.hidden=false;
-  if(ship) ship.classList.toggle('facing-left',to.x<from.x);
+  setJourneyShipDirection(from,to);
   placeJourneyShip(from);
   setJourneyShipFrame(0);
+  if(fromStation===toStation){
+    journeyMoving=false;
+    if(status) status.textContent=`Tiba di Pulau ${toStation}!`;
+    onArrive && onArrive();
+    return;
+  }
   playJourneyShipAudio();
   if(status) status.textContent=`Berlayar ke Pulau ${toStation}...`;
   if(video){
@@ -692,6 +802,8 @@ function playStationJourney(fromStation,toStation,onArrive){
     placeJourneyShip({x:from.x+(to.x-from.x)*eased,y:from.y+(to.y-from.y)*eased});
     setJourneyShipFrame(Math.floor((now-startedAt)/SHIP_SPRITE.frameMs));
     if(progress<1){ requestAnimationFrame(animate); return; }
+    journeyShipStation=toStation;
+    journeyMoving=false;
     stopJourneyShipAudio();
     if(status) status.textContent=`Tiba di Pulau ${toStation}!`;
     window.setTimeout(()=>{
@@ -1252,10 +1364,7 @@ function loadGroupProgress(){
   });
 }
 function showClueScreen(){
-  const g = groups[currentGroupId];
-  const stId = g.order[progress.currentIndex];
-  const fromStation = progress.currentIndex>0 ? g.order[progress.currentIndex-1] : 0;
-  playStationJourney(fromStation,stId,openCluePopup);
+  showJourneyMap();
 }
 function openCluePopup(){
   show('view-clue');
@@ -1825,7 +1934,7 @@ function showResult(onTime, score, done){
   const g = groups[currentGroupId];
   let nextHtml='';
   if(done){ nextHtml=`<button class="big" onclick="showGoToBoard()">🏁 Selesai! Ke Peti Harta</button>`; }
-  else { nextHtml=`<button class="big" onclick="showClueScreen()">➡️ Lihat Clue Seterusnya</button>`; }
+  else { nextHtml=`<button class="big" onclick="showClueScreen()">Pilih Pulau Seterusnya</button>`; }
   document.getElementById('resultCard').innerHTML=`<div class="finalbox">
     <div style="font-size:50px;">🔑</div>
     <h2>${onTime?'Tepat Masa!':'Masa Tamat — Markah Ditolak'}</h2>
