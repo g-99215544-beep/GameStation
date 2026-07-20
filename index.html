@@ -12,7 +12,7 @@
 <script src="tangram/shapes.js"></script>
 <script src="tangram/ui.js"></script>
 <style>
-  :root{--navy:#1e2a4a;--gold:#d4a94e;--cream:#faf6ee;--green:#3a7d5c;--red:#c0453a;}
+  :root{--navy:#12385b;--gold:#ffc63d;--cream:#fff1c8;--green:#178363;--red:#c8493f;}
   *{box-sizing:border-box;}
   body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--cream);margin:0;padding:0;color:var(--navy);min-height:100vh;}
   .view{display:none;}
@@ -193,6 +193,43 @@
   .qr-print{background:#fff;}
   .feature-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
   .feature-actions button{margin:0;}
+  /* ---- Participant experience: pixel-art pirate treasure adventure ---- */
+  body.participant-mode{background-color:#087ec1;background-image:linear-gradient(180deg,#07518d 0,#0c8bd1 36%,#0476b7 100%),repeating-linear-gradient(0deg,transparent 0 17px,rgba(255,255,255,.045) 17px 19px),repeating-linear-gradient(90deg,transparent 0 23px,rgba(255,255,255,.035) 23px 25px);color:#17324d;min-height:100vh;}
+  .participant-mode .topbar{background:linear-gradient(180deg,#12385b 0 78%,#0a2a49 78% 100%);border-bottom:4px solid #ffcb42;box-shadow:0 4px 0 #063056;padding:13px 16px;}
+  .participant-mode .topbar h1{color:#ffe27a;font-family:"Trebuchet MS",system-ui,sans-serif;font-weight:900;letter-spacing:.035em;text-shadow:2px 2px 0 #754116;}
+  .participant-mode .icon-btn{border:2px solid #8bb9d7;border-radius:6px;background:#174b78;box-shadow:2px 2px 0 #061e38;color:#fff2ca;}
+  .participant-mode .wrap{position:relative;max-width:640px;min-height:calc(100vh - 64px);padding:24px 16px 38px;}
+  .participant-mode .wrap::before,.participant-mode .wrap::after{position:absolute;z-index:-1;color:rgba(255,255,255,.45);font-size:30px;line-height:1;content:'✦';text-shadow:2px 2px 0 rgba(4,65,110,.35);}
+  .participant-mode .wrap::before{top:16px;left:8px;}.participant-mode .wrap::after{right:10px;bottom:24px;}
+  .participant-mode .card{position:relative;overflow:hidden;background:linear-gradient(135deg,#fff9df,#f7df9b);border:4px solid #704018;border-radius:8px;box-shadow:5px 5px 0 #063a66,0 10px 22px rgba(0,36,78,.28);padding:22px 20px;margin-bottom:16px;}
+  .participant-mode .card::before,.participant-mode .card::after{position:absolute;z-index:0;width:12px;height:12px;content:'';background:#ffcd40;border:3px solid #704018;box-shadow:1px 1px 0 #fff1a8;}
+  .participant-mode .card::before{top:8px;left:8px;}.participant-mode .card::after{right:8px;bottom:8px;}
+  .participant-mode .card > *{position:relative;z-index:1;}
+  .participant-mode h2{color:#12385b;font-family:"Trebuchet MS",system-ui,sans-serif;font-weight:900;letter-spacing:.01em;text-shadow:1px 1px 0 #fff6ce;}
+  .participant-mode p,.participant-mode label{color:#4a3825;font-weight:700;}
+  .participant-mode select,.participant-mode input,.participant-mode textarea{background:#fffdf2;border:3px solid #7d4a20;border-radius:5px;box-shadow:inset 2px 2px 0 #e3c574;color:#17324d;font-weight:700;}
+  .participant-mode select:focus,.participant-mode input:focus,.participant-mode textarea:focus{outline:3px solid #2aa9df;outline-offset:2px;border-color:#12385b;}
+  .participant-mode button{border:3px solid #6c3614;border-radius:5px;background:linear-gradient(180deg,#f4a72b 0 48%,#cf6a1e 48% 100%);box-shadow:3px 3px 0 #063a66;color:#fffbed;font-family:"Trebuchet MS",system-ui,sans-serif;font-weight:900;text-shadow:1px 1px 0 #693615;transition:transform .12s,filter .12s;}
+  .participant-mode button:hover{background:linear-gradient(180deg,#ffd85a 0 48%,#ee8b28 48% 100%);color:#fff;border-color:#6c3614;filter:brightness(1.05);}
+  .participant-mode button:active{transform:translate(2px,2px);box-shadow:1px 1px 0 #063a66;}
+  .participant-mode button.secondary{background:linear-gradient(180deg,#237da2 0 48%,#15506f 48% 100%);border-color:#0c3857;text-shadow:1px 1px 0 #062a44;}
+  .participant-mode .linkbtn{border:0;box-shadow:none;background:none;color:#12385b;text-shadow:none;text-decoration:underline;}
+  .participant-mode .linkbtn:hover{background:none;color:#b3471e;}
+  .participant-mode .msg{border:3px solid #754017;border-radius:5px;box-shadow:2px 2px 0 rgba(91,47,15,.24);}
+  .participant-mode .ok{background:#d7f1ba;color:#155a45;}.participant-mode .err{background:#ffe0c6;color:#9b3028;}
+  .participant-mode .clue{background:linear-gradient(135deg,#164e76,#0a3158);border:3px solid #072846;border-radius:5px;box-shadow:inset 0 0 0 2px #4ea5cd,3px 3px 0 #754017;color:#ffdf72;font-size:19px;text-shadow:1px 1px 0 #06243e;}
+  .participant-mode .password-or{color:#80522d;font-weight:900;}.participant-mode .password-or::before,.participant-mode .password-or::after{background:#b77b3b;}
+  .participant-mode #reader{border-color:#ffcb42;border-radius:5px;box-shadow:3px 3px 0 #063a66;}
+  .participant-mode .key{border:3px solid #704018;border-radius:4px;background:linear-gradient(135deg,#ffe775,#e89020);box-shadow:2px 2px 0 #063a66;color:#58310d;text-shadow:1px 1px 0 #fff5b0;}
+  .participant-mode .key.empty{background:#bed9df;border-color:#3b7188;color:#4d798a;text-shadow:none;}
+  .participant-mode .qitem{background:#fff8d8;border:3px solid #c88938;border-radius:5px;box-shadow:2px 2px 0 rgba(99,52,17,.2);}
+  .participant-mode .chip{border:3px solid #754017;border-radius:4px;background:#ffcb42;box-shadow:2px 2px 0 #063a66;color:#51300f;}
+  .participant-mode .match-btn{background:#fff9df;border:3px solid #b37532;box-shadow:2px 2px 0 #d6a55a;color:#17324d;text-shadow:none;}
+  .participant-mode .match-btn.selected{border-color:#0c5f91;background:#cceeff;}.participant-mode .match-btn.matched{border-color:#178363;background:#d8f2c8;}
+  .participant-mode .sudoku-board{background:#0d4268;border:4px solid #704018;border-radius:5px;box-shadow:4px 4px 0 #063a66;}
+  .participant-mode .sudoku-cell{border-color:#8b5427!important;border-radius:0!important;background:#fff9df;color:#17324d;}.participant-mode .sudoku-cell.given{background:#ffe784;color:#713c13;}.participant-mode .sudoku-cell.error{background:#ffd4cd!important;border-color:#c8493f!important;}
+  .participant-mode .sudoku-progress span{border:3px solid #704018;border-radius:4px;background:#d6e8df;color:#50746f;}.participant-mode .sudoku-progress span.active{background:#ffcb42;color:#58310d;}.participant-mode .sudoku-progress span.done{background:#178363;color:#fff;}
+  .participant-mode .finalbox{padding:24px 10px;}.participant-mode .finalbox h2{color:#12385b;}.participant-mode #timer{border:2px solid #ffcb42;background:#092844;box-shadow:2px 2px 0 #061e38;color:#fff0ad;border-radius:4px;}
   @media (max-width:720px){
     .topbar{padding:12px 16px;}
     .topbar h1{font-size:16px;}
@@ -479,6 +516,7 @@ let db, stations, groups, currentGroupId, progress={}, timerInterval, timeLeftSe
 // Session lifecycle so the app is reusable across events: admin presses Mula to
 // start, Tamat to end. status: 'setup' (not started) | 'active' | 'ended'.
 let sessionInfo = {status:'setup'};
+const PARTICIPANT_VIEW_IDS = new Set(['view-login','view-session','view-clue','view-game','view-result','view-chest']);
 
 const DAILY_INTRO_KEY = 'game_station_intro_last_seen';
 const DAILY_INTRO_PLAY_MS = 3000;
@@ -523,6 +561,7 @@ function playDailyIntro(){
 function show(id){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  document.body.classList.toggle('participant-mode', PARTICIPANT_VIEW_IDS.has(id));
   const wrap = document.querySelector('.wrap');
   if(wrap) wrap.classList.toggle('admin-wrap', id==='view-admin');
   const adminBtn = document.getElementById('adminAccessBtn');
