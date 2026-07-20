@@ -28,6 +28,10 @@
       pos: { x: 1.2 + (i % perRow) * 2.1, y: 1.3 + Math.floor(i / perRow) * 2.2 }
     }));
     let selected = null, dragging = false, startPx = null, grab = null, solved = false;
+    // Cut-line opacity, 0..1. Starts fully on when targetGuideLines is set
+    // (stages that always show the guide); otherwise off, and toggled at
+    // runtime by setGuideAlpha() for the timed stuck-hint assist.
+    let guideAlpha = targetGuideLines ? 1 : 0;
 
     const wp = p => E.transformPolygon(polygons[p.type], p.pos, p.angle, p.flipped);
     const u2p = p => ({ x: p.x * PPU, y: p.y * PPU });
@@ -52,17 +56,27 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (boardTargetPolys) {
         ctx.save();
-        // Solid slate fill. With targetGuideLines, stroke each piece in white to
-        // reveal the internal cut-lines (a guided hint); otherwise stroke in the
-        // fill colour so only the outer silhouette shows (harder).
+        // Solid slate fill, stroked in the fill colour so only the outer
+        // silhouette shows and sub-pixel seams between pieces stay hidden.
         ctx.fillStyle = '#c7cedb';
-        ctx.strokeStyle = targetGuideLines ? '#ffffff' : '#c7cedb';
-        ctx.lineWidth = targetGuideLines ? 2 : 1.5; ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#c7cedb';
+        ctx.lineWidth = 1.5; ctx.lineJoin = 'round';
         boardTargetPolys.forEach(poly => {
           ctx.beginPath();
           poly.forEach((v, i) => { const p = u2p(v); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
           ctx.closePath(); ctx.fill(); ctx.stroke();
         });
+        // Internal cut-lines, drawn as a second stroke pass so their opacity
+        // can fade independently of the silhouette fill (the stuck-hint assist).
+        if (guideAlpha > 0) {
+          ctx.strokeStyle = `rgba(255,255,255,${guideAlpha})`;
+          ctx.lineWidth = 2;
+          boardTargetPolys.forEach(poly => {
+            ctx.beginPath();
+            poly.forEach((v, i) => { const p = u2p(v); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
+            ctx.closePath(); ctx.stroke();
+          });
+        }
         ctx.restore();
       }
       pieces.forEach(p => {
@@ -110,16 +124,6 @@
     };
     const hit = u => { for (let i = pieces.length - 1; i >= 0; i--) if (E.pointInPolygon(u, wp(pieces[i]))) return pieces[i]; return null; };
     var SLOT_SNAP = 0.7; // must be dropped this close (units) AND already at the right angle
-    function polysCoincide(a, b, tol) {
-      if (a.length !== b.length) return false;
-      const used = new Array(b.length).fill(false);
-      for (const va of a) {
-        let f = -1;
-        for (let j = 0; j < b.length; j++) if (!used[j] && Math.hypot(va.x - b[j].x, va.y - b[j].y) <= tol) { f = j; break; }
-        if (f < 0) return false; used[f] = true;
-      }
-      return true;
-    }
     function snap(p) {
       // 1) Stick to the gray target ONLY if the piece is ALREADY rotated correctly
       //    for a slot AND dropped close to it. It does NOT fix a wrong angle for you
@@ -134,7 +138,7 @@
           // orientation gate: the piece, at its CURRENT angle/flip, must produce the slot's shape
           const mine = E.transformPolygon(polygons[p.type], slot.pos, p.angle, p.flipped);
           const want = E.transformPolygon(polygons[slot.type], slot.pos, slot.angle, slot.flipped);
-          if (!polysCoincide(mine, want, 0.02)) continue;
+          if (!E.polysMatch(mine, want, 0.02)) continue;
           bestD = d; best = slot;
         }
         if (best) { p.pos = { x: best.pos.x, y: best.pos.y }; return; } // fine-tune position only; angle already right
@@ -174,6 +178,10 @@
       flipSelected: () => { if (!selected) return; selected.flipped = !selected.flipped; snap(selected); draw(); check(); },
       getSelected: () => selected,
       redraw: draw,
+      // Stuck-hint assist support: fade the cut-lines in/out on demand, and
+      // report how many pieces currently sit correctly in their target slot.
+      setGuideAlpha: (a) => { guideAlpha = Math.max(0, Math.min(1, a)); draw(); },
+      getPlacedCount: () => targetSlots ? E.countPlacedInSlots(pieces, targetSlots, polygons) : 0,
       destroy: () => { canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove); canvas.removeEventListener('pointerup', onUp); }
     };
   }

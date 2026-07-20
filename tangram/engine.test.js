@@ -117,6 +117,26 @@ test('isSolved: swapping the two duplicate "a" pieces still solves', () => {
   assert.strictEqual(E.isSolved(swapped, SOL, FIX), true);
 });
 
+test('countPlacedInSlots: 0 when pieces are far from every slot', () => {
+  const scattered = SOL.map(p => ({ ...p, pos: { x: p.pos.x + 50, y: p.pos.y + 50 } }));
+  assert.strictEqual(E.countPlacedInSlots(scattered, SOL, FIX), 0);
+});
+
+test('countPlacedInSlots: all slots filled when pieces match the solution exactly', () => {
+  assert.strictEqual(E.countPlacedInSlots(SOL, SOL, FIX), SOL.length);
+});
+
+test('countPlacedInSlots: counts only the pieces that are actually correct', () => {
+  const partial = SOL.map(p => ({ ...p, pos: { ...p.pos } }));
+  partial[1].pos.x += 5; // move the 'b' piece away; the two 'a' pieces stay put
+  assert.strictEqual(E.countPlacedInSlots(partial, SOL, FIX), 2);
+});
+
+test('countPlacedInSlots: two identical pieces stacked on one slot count once', () => {
+  const stacked = [SOL[0], { ...SOL[0] }, SOL[1]]; // both 'a' pieces on SOL[0]'s slot
+  assert.strictEqual(E.countPlacedInSlots(stacked, SOL, FIX), 2); // that slot + the 'b' slot
+});
+
 // Shrink a polygon slightly toward its centroid, so that pieces which merely
 // share an edge (a legal, common tangram situation) are not counted as
 // overlapping just because sample points land on the shared boundary line.

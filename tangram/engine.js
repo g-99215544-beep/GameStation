@@ -133,6 +133,27 @@
     }
     return true;
   }
+  // How many target slots are currently filled by a correctly placed piece.
+  // Each slot is consumed at most once, so two identical pieces stacked on the
+  // same slot still count as one. Used to measure a student's progress on the
+  // board (see the stuck-hint assist in index.html).
+  function countPlacedInSlots(pieces, slots, polygons, tol) {
+    tol = tol == null ? 0.05 : tol;
+    const used = new Array(slots.length).fill(false);
+    let n = 0;
+    for (const p of pieces) {
+      const mine = transformPolygon(polygons[p.type], p.pos, p.angle, p.flipped);
+      for (let j = 0; j < slots.length; j++) {
+        const s = slots[j];
+        if (used[j] || s.type !== p.type) continue;
+        if (_polysMatch(mine, transformPolygon(polygons[s.type], s.pos, s.angle, s.flipped), tol)) {
+          used[j] = true; n++; break;
+        }
+      }
+    }
+    return n;
+  }
+
   function isSolved(current, solution, polygons, posTol) {
     posTol = posTol == null ? POS_TOL : posTol;
     if (current.length !== solution.length) return false;
@@ -163,5 +184,6 @@
 
   return { rotatePoint, transformPolygon, polygonArea, polygonCentroid,
     pointInPolygon, snapAngle, snapToGrid, findVertexSnap, overlapMTV,
-    snapPieceToNeighbors, isSolved, POS_TOL, GRID_SIZE, SNAP_RADIUS };
+    snapPieceToNeighbors, polysMatch: _polysMatch, countPlacedInSlots, isSolved,
+    POS_TOL, GRID_SIZE, SNAP_RADIUS };
 });
