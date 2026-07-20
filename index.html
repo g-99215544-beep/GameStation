@@ -193,6 +193,12 @@
   .qr-print{background:#fff;}
   .feature-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
   .feature-actions button{margin:0;}
+  .worksheet-editor{margin-top:14px;padding:14px;background:#fff8df;border:2px solid var(--gold);border-radius:10px;}
+  .worksheet-help{margin:0 0 12px;color:#65513a;font-size:13px;line-height:1.45;}
+  .worksheet-question-row{padding:10px 0;border-top:1px solid #ead7aa;}.worksheet-question-row:first-of-type{border-top:0;}
+  .worksheet-question-row label{margin:0 0 5px;color:var(--navy);}.worksheet-question-row > div{display:flex;gap:8px;align-items:center;}.worksheet-question-row input{margin:0;}
+  .worksheet-question-row .worksheet-remove,.worksheet-add{margin:0;white-space:nowrap;}.worksheet-question-row .worksheet-remove{background:var(--red);}
+  .worksheet-add{font-size:13px;padding:9px 12px;}
   /* ---- Participant experience: pixel-art pirate treasure adventure ---- */
   body.participant-mode{background-color:#087ec1;background-image:linear-gradient(180deg,#07518d 0,#0c8bd1 36%,#0476b7 100%),repeating-linear-gradient(0deg,transparent 0 17px,rgba(255,255,255,.045) 17px 19px),repeating-linear-gradient(90deg,transparent 0 23px,rgba(255,255,255,.035) 23px 25px);color:#17324d;min-height:100vh;}
   .participant-mode .topbar{background:linear-gradient(180deg,#12385b 0 78%,#0a2a49 78% 100%);border-bottom:4px solid #ffcb42;box-shadow:0 4px 0 #063056;padding:13px 16px;}
@@ -497,6 +503,7 @@ const GAME_TYPES = [
   {id:'pilihan', name:'Pilihan Bergambar'},
   {id:'grid_nombor', name:'Grid Nombor'},
   {id:'puzzle_susun', name:'Puzzle Cantum Nombor'},
+  {id:'lembaran_kerja', name:'Lembaran Kerja'},
   {id:'sudoku', name:'Sudoku Challenge (3 Stage)'},
   {id:'tangram', name:'Tangram Challenge'}
 ];
@@ -833,6 +840,48 @@ function generateStationPassword(){
   for(let i=0;i<5;i++) password += chars[Math.floor(Math.random()*chars.length)];
   return password;
 }
+function worksheetQuestionsFromRaw(raw){
+  let data={}; try{ data=JSON.parse(raw||'{}'); }catch(e){}
+  const questions=Array.isArray(data.questions) ? data.questions : [];
+  const clean=questions
+    .filter(q=>q && Object.prototype.hasOwnProperty.call(q,'answer'))
+    .map(q=>({answer:String(q.answer==null?'':q.answer).trim()}));
+  return clean.length ? clean : [{answer:''}];
+}
+function escapeHtml(value){
+  return String(value==null?'':value).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function getWorksheetQuestionsFromEditor(i){
+  const inputs=document.querySelectorAll(`#worksheet_editor_${i} .worksheet-answer`);
+  const questions=Array.from(inputs).map(input=>({answer:input.value.trim()}));
+  return questions.length ? questions : [{answer:''}];
+}
+function renderWorksheetEditor(i,questions){
+  const editor=document.getElementById('worksheet_editor_'+i);
+  if(!editor) return;
+  const rows=questions.map((question,index)=>`<div class="worksheet-question-row">
+    <label>Soalan ${index+1} — jawapan betul</label>
+    <div><input class="worksheet-answer" value="${escapeHtml(question.answer)}" placeholder="Contoh: 23440 atau sabun" autocomplete="off">${questions.length>1?`<button type="button" class="worksheet-remove" onclick="removeWorksheetQuestion(${i},${index})" aria-label="Buang Soalan ${index+1}">Buang</button>`:''}</div>
+  </div>`).join('');
+  editor.innerHTML=`<p class="worksheet-help">Soalan disediakan pada lembaran kerja bercetak. Murid hanya masukkan jawapan di app, satu demi satu.</p>${rows}<button type="button" class="secondary worksheet-add" onclick="addWorksheetQuestion(${i})">+ Tambah Soalan</button>`;
+}
+function addWorksheetQuestion(i){
+  const questions=getWorksheetQuestionsFromEditor(i);
+  questions.push({answer:''});
+  renderWorksheetEditor(i,questions);
+}
+function removeWorksheetQuestion(i,index){
+  const questions=getWorksheetQuestionsFromEditor(i);
+  questions.splice(index,1);
+  renderWorksheetEditor(i,questions.length?questions:[{answer:''}]);
+}
+function toggleWorksheetEditor(i){
+  const isWorksheet=document.getElementById('st_gametype_'+i).value==='lembaran_kerja';
+  const editor=document.getElementById('worksheet_editor_'+i);
+  const rawField=document.getElementById('game_data_field_'+i);
+  if(editor) editor.style.display=isWorksheet?'block':'none';
+  if(rawField) rawField.style.display=isWorksheet?'none':'block';
+}
 function buildStationsUI(existing){
   const area = document.getElementById('stationsArea');
   area.innerHTML='';
@@ -846,22 +895,28 @@ function buildStationsUI(existing){
       <label>Nama Stesen</label><input id="st_name_${i}" value="${s.name||''}" placeholder="cth: Stesen Sifir">
       <label>Lokasi (teks clue)</label><input id="st_loc_${i}" value="${s.location||''}" placeholder="cth: Tempat membaca buku">
       <label>Password Stesen (tepat 5 huruf atau digit)</label><input id="st_pass_${i}" value="${stationPassword}" maxlength="5" pattern="[A-Za-z0-9]{5}" placeholder="cth: 14542 atau sabun" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5)">
-      <label>Jenis Game</label><select id="st_gametype_${i}">${opts}</select>
-      <label>Data Game (JSON)</label><input id="st_gamedata_${i}" value='${(s.gameDataRaw||"{}").replace(/'/g,"&apos;")}'>
+      <label>Jenis Game</label><select id="st_gametype_${i}" onchange="toggleWorksheetEditor(${i})">${opts}</select>
+      <div id="game_data_field_${i}"><label>Data Game (JSON)</label><input id="st_gamedata_${i}" value='${(s.gameDataRaw||"{}").replace(/'/g,"&apos;")}'></div>
+      <div class="worksheet-editor" id="worksheet_editor_${i}"></div>
       <button class="secondary" onclick="testStation(${i})">▶️ Uji Cara Main Stesen Ini</button>
     </div>`;
+    renderWorksheetEditor(i,worksheetQuestionsFromRaw(s.gameDataRaw));
+    toggleWorksheetEditor(i);
   }
 }
 function collectStations(){
   const out={};
   for(let i=1;i<=6;i++){
+    const gameType=document.getElementById('st_gametype_'+i).value;
     out[i]={id:i,
       name:document.getElementById('st_name_'+i).value,
       location:document.getElementById('st_loc_'+i).value,
       password:document.getElementById('st_pass_'+i).value.trim(),
       timeLimitMin:10,
-      gameType:document.getElementById('st_gametype_'+i).value,
-      gameDataRaw:document.getElementById('st_gamedata_'+i).value};
+      gameType,
+      gameDataRaw:gameType==='lembaran_kerja'
+        ? JSON.stringify({questions:getWorksheetQuestionsFromEditor(i)})
+        : document.getElementById('st_gamedata_'+i).value};
   }
   return out;
 }
@@ -870,6 +925,15 @@ function validateStationPasswords(stationConfig){
   if(!invalid.length) return true;
   const numbers = invalid.map(st=>st.id).join(', ');
   alert(`Password Stesen ${numbers} mesti tepat 5 huruf atau digit. Contoh: 14542, sabun, atau 34gbs.`);
+  return false;
+}
+function validateWorksheetStations(stationConfig){
+  const invalid=Object.values(stationConfig).filter(st=>{
+    if(st.gameType!=='lembaran_kerja') return false;
+    return worksheetQuestionsFromRaw(st.gameDataRaw).some(q=>!q.answer);
+  });
+  if(!invalid.length) return true;
+  alert(`Isi jawapan betul bagi semua soalan Lembaran Kerja di Stesen ${invalid.map(st=>st.id).join(', ')}.`);
   return false;
 }
 // rotation: group i starts at station ((i-1)%6)+1, so groups 1,7,13 share start=1; 2,8,14 share start=2 etc (2 groups per station approx, since 14 groups /6)
@@ -894,7 +958,7 @@ function collectGroups(){
 }
 function pushConfig(){
   const st = collectStations();
-  if(!validateStationPasswords(st)) return;
+  if(!validateStationPasswords(st) || !validateWorksheetStations(st)) return;
   const gr = collectGroups();
   const prog={};
   Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
@@ -923,7 +987,7 @@ function showLoginPasswords(){
 }
 function generateQRs(){
   const st = collectStations();
-  if(!validateStationPasswords(st)) return;
+  if(!validateStationPasswords(st) || !validateWorksheetStations(st)) return;
   stations = st;
   const out = document.getElementById('qrOutput');
   out.innerHTML='';
@@ -1024,19 +1088,23 @@ function checkPassword(){
 // Lets admin play through any station using the current (unsaved) form values,
 // without scanning a QR. Nothing is written to Firebase progress.
 function testStation(i){
+  const gameType=document.getElementById('st_gametype_'+i).value;
   const st = {
     id:i,
     name:document.getElementById('st_name_'+i).value || ('Stesen '+i),
     location:document.getElementById('st_loc_'+i).value,
     password:document.getElementById('st_pass_'+i).value,
     timeLimitMin:10,
-    gameType:document.getElementById('st_gametype_'+i).value,
-    gameDataRaw:document.getElementById('st_gamedata_'+i).value
+    gameType,
+    gameDataRaw:gameType==='lembaran_kerja'
+      ? JSON.stringify({questions:getWorksheetQuestionsFromEditor(i)})
+      : document.getElementById('st_gamedata_'+i).value
   };
   if(!isValidStationPassword(st.password)){
     alert('Password stesen mesti tepat 5 huruf atau digit sebelum diuji.');
     return;
   }
+  if(!validateWorksheetStations({[i]:st})) return;
   window._testMode = true;
   startGame(st.id, st);
 }
@@ -1150,6 +1218,15 @@ function renderGame(st){
     html+=`</div><button class="big" onclick="checkGrid()">Semak Grid</button>`;
     card.innerHTML=html;
   }
+  else if(st.gameType==='lembaran_kerja'){
+    const questions=worksheetQuestionsFromRaw(st.gameDataRaw);
+    gameState.questions=questions;
+    gameState.total=questions.length;
+    gameState.currentQuestion=0;
+    gameState.correct=0;
+    gameState.stationName=st.name;
+    renderWorksheetQuestion();
+  }
   else if(st.gameType==='sudoku'){
     startSudoku(st);
     return;
@@ -1161,6 +1238,38 @@ function renderGame(st){
   else {
     card.innerHTML=`<h2>${st.name}</h2><p>Game belum dikonfigurasi.</p><button class="big" onclick="finishGame(true)">Selesai</button>`;
   }
+}
+function normalizeWorksheetAnswer(value){
+  return String(value||'').trim().replace(/\s+/g,' ').toLocaleLowerCase();
+}
+function renderWorksheetQuestion(){
+  const card=document.getElementById('gameCard');
+  const current=gameState.currentQuestion;
+  const total=gameState.total;
+  card.innerHTML=`<h2>📜 ${gameState.stationName}</h2>
+    <div class="clue">Rujuk lembaran kerja anda dan masukkan jawapan Soalan ${current+1}.</div>
+    <div class="qitem" style="margin-top:16px;">
+      <b>Soalan ${current+1} daripada ${total}</b>
+      <input id="worksheetAnswer" type="text" autocomplete="off" placeholder="Masukkan jawapan" onkeydown="if(event.key==='Enter') submitWorksheetAnswer()">
+    </div>
+    <button class="big" onclick="submitWorksheetAnswer()">Semak Jawapan</button>
+    <div id="worksheetMsg"></div>`;
+  setTimeout(()=>document.getElementById('worksheetAnswer')?.focus(),0);
+}
+function submitWorksheetAnswer(){
+  if(window._gameOver) return;
+  const input=document.getElementById('worksheetAnswer');
+  const message=document.getElementById('worksheetMsg');
+  const expected=gameState.questions[gameState.currentQuestion].answer;
+  if(normalizeWorksheetAnswer(input&&input.value)!==normalizeWorksheetAnswer(expected)){
+    if(message) message.innerHTML='<div class="msg err">Jawapan belum tepat. Semak lembaran kerja dan cuba lagi.</div>';
+    if(input){ input.focus(); input.select(); }
+    return;
+  }
+  gameState.correct++;
+  gameState.currentQuestion++;
+  if(gameState.currentQuestion>=gameState.total){ finishGame(); return; }
+  renderWorksheetQuestion();
 }
 function pickChoice(i,c){
   gameState.answers[i]=c;
