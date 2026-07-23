@@ -989,6 +989,16 @@ function renderGroupCards(){
     </div>`;
   }).join('');
 }
+function syncGroupManagerLock(){
+  const panel = document.getElementById('admin-panel-groups');
+  if(!panel || !panel.classList.contains('active')) return; // only act when the tab is open
+  const locked = !!(sessionInfo && sessionInfo.status==='active');
+  const lock = document.getElementById('groupManagerLock');
+  if(lock) lock.innerHTML = locked
+    ? '<div class="msg">🔒 Sesi sedang aktif — pengurusan kumpulan dikunci. Tekan Tamat sebelum mengubah kumpulan.</div>' : '';
+  panel.querySelectorAll('.group-setup input, .group-setup textarea, .group-setup button, .feature-actions button, #groupCards select, #groupCards button, #groupCards input')
+    .forEach(el=>{ el.disabled = locked; });
+}
 function groupAgih(){
   const ng = parseInt(document.getElementById('group_num_groups').value,10);
   const mp = parseInt(document.getElementById('group_members_per').value,10);
@@ -1207,6 +1217,7 @@ function watchSession(){
     sessionInfo = snap.val() || {status:'setup'};
     renderSessionControls();      // admin card (no-op when not on admin)
     syncStartStationControlLock();
+    syncGroupManagerLock();
     reactToSessionForGroup();     // group waiting/ended/enter
   });
 }
