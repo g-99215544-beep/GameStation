@@ -2,8 +2,12 @@ const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { test, expect } = require('playwright/test');
 
-function seedPage(page, seed) {
-  return page.addInitScript(data => {
+async function seedPage(page, seed) {
+  // Block the real Firebase CDN scripts so the injected mock below is authoritative.
+  // Without this, when network is available the real SDK loads, overwrites the mock,
+  // and db.ref().set() would hit the real production database.
+  await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({ body: '' }));
+  await page.addInitScript(data => {
     const store = structuredClone(data);
     const at = key => key.split('/').filter(Boolean).reduce((v, p) => v && v[p], store);
     const write = (key, value) => {
