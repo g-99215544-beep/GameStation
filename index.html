@@ -1083,6 +1083,8 @@ function saveGroupManager(){
     sessionInfo = {status:'setup'};
     renderGroupLoginOptions();
     if(msg) msg.innerHTML=`<div class="msg ok">✅ ${Object.keys(gr).length} kumpulan disimpan. Progress direset.</div>`;
+  }).catch(err=>{
+    if(msg) msg.innerHTML=`<div class="msg err">❌ Gagal menyimpan kumpulan: ${escapeHtml(err && err.message ? err.message : err)}. Cuba lagi.</div>`;
   });
 }
 function renderGroupLoginOptions(){
