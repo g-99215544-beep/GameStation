@@ -13,6 +13,7 @@
 <script src="tangram/ui.js"></script>
 <script src="run/tracker.js"></script>
 <script src="groups/roster.js"></script>
+<script src="stations/layout.js"></script>
 <style>
   :root{--navy:#12385b;--gold:#ffc63d;--cream:#fff1c8;--green:#178363;--red:#c8493f;}
   *{box-sizing:border-box;}
@@ -394,41 +395,18 @@
       <div class="admin-nav">
         <label for="adminTabSelect">Menu admin</label>
         <select id="adminTabSelect" onchange="selectAdminTab(this.value)">
-          <option value="setup">Langkah 1: Setup Stesen</option>
-          <option value="groups">Kumpulan &amp; Ahli</option>
-          <option value="passwords">Langkah 2: Password Kumpulan</option>
-          <option value="qr">Langkah 3: QR Tersembunyi</option>
-          <option value="session">Langkah 4: Mula / Tamat Treasure Hunt</option>
+          <option value="groups">Langkah 1: Pengurusan Ahli &amp; Kumpulan</option>
+          <option value="setup">Langkah 2: Pengurusan Stesen</option>
+          <option value="passwords">Langkah 3: Password Kumpulan</option>
+          <option value="qr">Langkah 4: QR Tersembunyi</option>
+          <option value="session">Langkah 5: Mula / Tamat Treasure Hunt</option>
           <option value="treasure">Peti Harta Karun</option>
           <option value="dashboard">Dashboard Live</option>
         </select>
       </div>
       <p class="admin-tab-note" id="adminTabNote"></p>
 
-      <section class="admin-panel active" id="admin-panel-setup">
-        <div class="card">
-          <div class="setup-steps" aria-label="Progress setup">
-            <div class="setup-step active" data-step="1"><span class="step-number">1</span>Setup Stesen</div>
-            <div class="setup-step" data-step="2"><span class="step-number">2</span>Password Kumpulan</div>
-            <div class="setup-step" data-step="3"><span class="step-number">3</span>QR Tersembunyi</div>
-            <div class="setup-step" data-step="4"><span class="step-number">4</span>Mula Hunt</div>
-          </div>
-          <h3>Setup Stesen</h3>
-          <p class="admin-panel-intro">Lengkapkan enam stesen. Selepas disimpan, teruskan ke langkah password kumpulan.</p>
-          <div id="stationsArea"></div>
-          <div class="feature-actions">
-            <button class="secondary" onclick="pushConfig()">Simpan Setup &amp; Sedia Password</button>
-            <button onclick="testStation(1)">Uji Stesen 1</button>
-          </div>
-          <div id="pushStatus"></div>
-          <div class="step-actions">
-            <span class="admin-tab-note">Langkah 1 daripada 4</span>
-            <button class="step-next" onclick="goToAdminStep('passwords')">Seterusnya: Password Kumpulan &#8594;</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="admin-panel" id="admin-panel-groups">
+      <section class="admin-panel active" id="admin-panel-groups">
         <div class="card">
           <h3>Kumpulan &amp; Ahli</h3>
           <p class="admin-panel-intro">Tetapkan bilangan kumpulan dan ahli, kemudian tampal senarai nama untuk mengagihkan murid. Anda boleh pindah, tambah, atau padam ahli dan kumpulan.</p>
@@ -449,6 +427,38 @@
             <button class="secondary" onclick="saveGroupManager()">Simpan Kumpulan</button>
           </div>
           <div id="groupSaveMsg"></div>
+          <div class="step-actions">
+            <button class="step-next" onclick="goToAdminStep('setup')">Seterusnya: Pengurusan Stesen &#8594;</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="admin-panel" id="admin-panel-setup">
+        <div class="card">
+          <div class="setup-steps" aria-label="Progress setup">
+            <div class="setup-step" data-step="1"><span class="step-number">1</span>Ahli &amp; Kumpulan</div>
+            <div class="setup-step" data-step="2"><span class="step-number">2</span>Stesen</div>
+            <div class="setup-step" data-step="3"><span class="step-number">3</span>Password</div>
+            <div class="setup-step" data-step="4"><span class="step-number">4</span>QR</div>
+            <div class="setup-step" data-step="5"><span class="step-number">5</span>Mula Hunt</div>
+          </div>
+          <h3>Pengurusan Stesen (<span id="stationCountLabel">3</span>)</h3>
+          <p class="admin-panel-intro">Tetapkan bilangan stesen (3–6) dan lengkapkan setiap stesen. Tekan ＋ Stesen / − Stesen untuk melaraskan bilangan.</p>
+          <div id="stationSetupLock"></div>
+          <div class="feature-actions">
+            <button id="btnAddStation" class="secondary" onclick="addStation()">＋ Stesen</button>
+            <button id="btnRemoveStation" onclick="removeStation()">− Stesen</button>
+          </div>
+          <div id="stationsArea"></div>
+          <div class="feature-actions">
+            <button class="secondary" onclick="pushConfig()">Simpan Setup &amp; Sedia Password</button>
+            <button onclick="testStation(1)">Uji Stesen 1</button>
+          </div>
+          <div id="pushStatus"></div>
+          <div class="step-actions">
+            <button onclick="goToAdminStep('groups')">&#8592; Kembali</button>
+            <button class="step-next" onclick="goToAdminStep('passwords')">Seterusnya: Password Kumpulan &#8594;</button>
+          </div>
         </div>
       </section>
 
@@ -528,7 +538,7 @@
       <p style="font-size:13px;color:#888;margin-top:12px;">Aliran: setup stesen &amp; <b>Push Config</b> (password) → tekan <b>Mula</b> untuk buka sesi. Kumpulan hanya boleh main bila sesi <b>Aktif</b>. Tekan <b>Tamat</b> bila habis. Guna <b>Sesi Baru</b> untuk mula semula dengan murid baru (progress direset, stesen &amp; password kekal).</p>
     </div>
     <div class="card">
-      <h2>⚙️ Setup Stesen (6)</h2>
+      <h2>⚙️ Setup Stesen</h2>
       <div id="stationsArea"></div>
       <button class="secondary" onclick="pushConfig()">🚀 Push Config & Reset Progress</button>
       <button onclick="generateQRs()">🖨️ Generate QR Tersembunyi</button>
@@ -633,6 +643,8 @@ const FIREBASE_CONFIG = {
 const PATH = 'gamestation2026';
 let db, stations, groups, currentGroupId, progress={}, timerInterval, timeLeftSec, timeUp=false, gameState={}, html5QrCode;
 let groupDraft = [];
+let stationCount = 3;
+function currentStationCount(){ return StationLayout.clampStationCount(Object.keys(stations||{}).length); }
 // Session lifecycle so the app is reusable across events: admin presses Mula to
 // start, Tamat to end. status: 'setup' (not started) | 'active' | 'ended'.
 let sessionInfo = {status:'setup'};
@@ -783,7 +795,7 @@ function renderJourneyIslandButtons(){
   const currentIndex=Number(progress.currentIndex)||0;
   const completedStations=progress.completedStations||{};
   holder.innerHTML='';
-  for(let position=1;position<=6;position++){
+  for(let position=1;position<=currentStationCount();position++){
     const point=MAP_ISLANDS[position];
     const stationId=stationIdAtPosition(position);
     const isComplete=Boolean(completedStations[stationId]);
@@ -1045,18 +1057,20 @@ function groupRemoveGroup(gIdx){
   renderGroupCards();
 }
 function buildGroupsFromDraft(draftMembers, existingGroups){
+  const N = currentStationCount();
   const out = {};
   const usedPasswords = new Set();
   draftMembers.forEach((members, idx)=>{
     const id = idx+1;
-    const defaultStart = ((id-1)%6)+1;
     const existing = existingGroups && existingGroups[id];
     const existingPass = numericLoginPassword(existing && existing.loginPassword);
     const loginPassword = existingPass && !usedPasswords.has(existingPass)
       ? (usedPasswords.add(existingPass), existingPass)
       : generateLoginPassword(usedPasswords);
-    const startStation = startStationForGroup(existing, defaultStart);
-    out[id] = { id, name:'Kumpulan '+id, startStation, order:rotationFor(startStation),
+    let startStation = StationLayout.defaultStartStation(id, N);
+    const currentStart = Number(existing && existing.startStation);
+    if(Number.isInteger(currentStart) && currentStart>=1 && currentStart<=N) startStation=currentStart;
+    out[id] = { id, name:'Kumpulan '+id, startStation, order:StationLayout.rotationOrder(startStation, N),
                 loginPassword, members: members.slice() };
   });
   return out;
@@ -1150,6 +1164,7 @@ function loadConfigCache(){
     const cfg = snap.val()||{};
     stations = cfg.stations || {};
     groups = cfg.groups || {};
+    stationCount = StationLayout.clampStationCount(Object.keys(stations).length);
     renderGroupLoginOptions();
     buildStationsUI(stations);
   });
@@ -1184,7 +1199,7 @@ function loginAsAdmin(){
     document.getElementById('topTitle').innerText='⚙️ Admin Panel';
     watchDashboard();
     renderSessionControls();
-    selectAdminTab('setup');
+    selectAdminTab('groups');
   } else {
     document.getElementById('adminLoginMsg').innerHTML='<div class="msg err">PIN salah</div>';
   }
@@ -1211,15 +1226,15 @@ function loginAsGroup(){
 }
 // ---------- ADMIN NAVIGATION ----------
 const ADMIN_TAB_NOTES = {
-  setup:'Langkah pertama: lengkapkan maklumat dan permainan untuk enam stesen.',
-  groups:'Urus kumpulan: tetapkan bilangan, agih nama murid, dan pindah/tambah/padam ahli.',
-  passwords:'Langkah kedua: semak dan agihkan password login kepada semua kumpulan.',
-  qr:'Langkah ketiga: jana QR, cetak, dan sorokkan di lokasi yang dinyatakan.',
+  groups:'Langkah 1: tetapkan kumpulan, agih nama murid, dan urus ahli.',
+  setup:'Langkah 2: lengkapkan maklumat dan permainan untuk setiap stesen.',
+  passwords:'Langkah 3: semak dan agihkan password login kepada semua kumpulan.',
+  qr:'Langkah 4: jana QR, cetak, dan sorokkan di lokasi yang dinyatakan.',
   session:'Langkah terakhir: mula atau tamatkan Treasure Hunt dari sini.',
   treasure:'Buka Smart Board untuk kawal peti harta karun dan bonus tamat.',
   dashboard:'Pantau status, stesen semasa, kunci, dan markah semua kumpulan.'
 };
-const ADMIN_STEP_MAP = {setup:1,passwords:2,qr:3,session:4};
+const ADMIN_STEP_MAP = {groups:1,setup:2,passwords:3,qr:4,session:5};
 function selectAdminTab(tab){
   if(!document.getElementById('adminTabSelect')) return;
   const allowed = Object.prototype.hasOwnProperty.call(ADMIN_TAB_NOTES, tab) ? tab : 'setup';
@@ -1261,6 +1276,7 @@ function watchSession(){
     renderSessionControls();      // admin card (no-op when not on admin)
     syncStartStationControlLock();
     syncGroupManagerLock();
+    syncStationSetupLock();
     reactToSessionForGroup();     // group waiting/ended/enter
   });
 }
@@ -1386,10 +1402,41 @@ function toggleWorksheetEditor(i){
   if(runEditor) runEditor.style.display=isRun?'block':'none';
   if(rawField) rawField.style.display=(isWorksheet||isRun)?'none':'block';
 }
+function updateStationButtons(){
+  const label=document.getElementById('stationCountLabel');
+  if(label) label.textContent=String(stationCount);
+  const locked=!!(sessionInfo && sessionInfo.status==='active');
+  const add=document.getElementById('btnAddStation');
+  const rem=document.getElementById('btnRemoveStation');
+  if(add) add.disabled=locked || stationCount>=StationLayout.MAX_STATIONS;
+  if(rem) rem.disabled=locked || stationCount<=StationLayout.MIN_STATIONS;
+}
+function addStation(){
+  if(sessionInfo && sessionInfo.status==='active' || stationCount>=StationLayout.MAX_STATIONS) return;
+  const current=collectStations();
+  stationCount=StationLayout.clampStationCount(stationCount+1);
+  buildStationsUI(current);
+}
+function removeStation(){
+  if(sessionInfo && sessionInfo.status==='active' || stationCount<=StationLayout.MIN_STATIONS) return;
+  const current=collectStations();
+  delete current[stationCount];
+  stationCount=StationLayout.clampStationCount(stationCount-1);
+  buildStationsUI(current);
+}
+function syncStationSetupLock(){
+  const panel=document.getElementById('admin-panel-setup');
+  const lock=document.getElementById('stationSetupLock');
+  const locked=!!(sessionInfo && sessionInfo.status==='active');
+  if(lock) lock.innerHTML=locked
+    ? '<div class="msg">🔒 Sesi sedang aktif — bilangan stesen dikunci. Tekan Tamat sebelum mengubah.</div>' : '';
+  updateStationButtons();
+  if(panel) panel.querySelectorAll('.station-block input, .station-block select, .station-block button').forEach(el=>{ el.disabled=locked; });
+}
 function buildStationsUI(existing){
   const area = document.getElementById('stationsArea');
   area.innerHTML='';
-  for(let i=1;i<=6;i++){
+  for(let i=1;i<=stationCount;i++){
     const s = existing[i] || {};
     const stationPassword = isValidStationPassword(s.password) ? s.password : generateStationPassword();
     const opts = GAME_TYPES.map(g=>`<option value="${g.id}" ${s.gameType===g.id?'selected':''}>${g.name}</option>`).join('');
@@ -1411,6 +1458,7 @@ function buildStationsUI(existing){
     renderWorksheetEditor(i,worksheetQuestionsFromRaw(s.gameDataRaw));
     toggleWorksheetEditor(i);
   }
+  syncStationSetupLock();
 }
 function stationGameDataRaw(i, gameType){
   if(gameType==='lembaran_kerja') return JSON.stringify({questions:getWorksheetQuestionsFromEditor(i)});
@@ -1422,7 +1470,7 @@ function stationGameDataRaw(i, gameType){
 }
 function collectStations(){
   const out={};
-  for(let i=1;i<=6;i++){
+  for(let i=1;i<=stationCount;i++){
     const gameType=document.getElementById('st_gametype_'+i).value;
     out[i]={id:i,
       name:document.getElementById('st_name_'+i).value,
@@ -1450,18 +1498,16 @@ function validateWorksheetStations(stationConfig){
   alert(`Isi jawapan betul bagi semua soalan Lembaran Kerja di Stesen ${invalid.map(st=>st.id).join(', ')}.`);
   return false;
 }
-// rotation: group i starts at station ((i-1)%6)+1, so groups 1,7,13 share start=1; 2,8,14 share start=2 etc (2 groups per station approx, since 14 groups /6)
-function rotationFor(startStation){
-  const order=[];
-  for(let k=0;k<6;k++) order.push(((startStation-1+k)%6)+1);
-  return order;
+function rotationFor(startStation, count){
+  return StationLayout.rotationOrder(startStation, count == null ? currentStationCount() : count);
 }
-function isValidStationId(value){
+function isValidStationId(value, count){
+  const N=count == null ? currentStationCount() : count;
   const id=Number(value);
-  return Number.isInteger(id) && id>=1 && id<=6;
+  return Number.isInteger(id) && id>=1 && id<=N;
 }
-function startStationForGroup(group, fallback){
-  return isValidStationId(group?.startStation) ? Number(group.startStation) : fallback;
+function startStationForGroup(group, fallback, count){
+  return isValidStationId(group?.startStation, count) ? Number(group.startStation) : fallback;
 }
 const LOGIN_PASSWORD_LENGTH = 4;
 function numericLoginPassword(value){
@@ -1478,36 +1524,55 @@ function generateLoginPassword(usedPasswords=new Set()){
   usedPasswords.add(password);
   return password;
 }
-function collectGroups(){
+function collectGroups(count){
+  const N=StationLayout.clampStationCount(count);
   const out={};
   const usedPasswords=new Set();
   for(let i=1;i<=NUM_GROUPS;i++){
-    const defaultStart=((i-1)%6)+1;
-    const startStation=startStationForGroup(groups && groups[i],defaultStart);
+    const defaultStart=StationLayout.defaultStartStation(i, N);
+    const startStation=startStationForGroup(groups && groups[i],defaultStart,N);
     // Preserve valid numeric passwords; legacy K1-1234 values are migrated to
     // 1234, and any duplicate/invalid value gets a new unique four-digit code.
     const existingPass=numericLoginPassword(groups && groups[i] && groups[i].loginPassword);
     const loginPassword=existingPass && !usedPasswords.has(existingPass)
       ? (usedPasswords.add(existingPass),existingPass)
       : generateLoginPassword(usedPasswords);
-    out[i]={id:i, name:'Kumpulan '+i, startStation, order:rotationFor(startStation), loginPassword, members:[]};
+    out[i]={id:i, name:'Kumpulan '+i, startStation, order:StationLayout.rotationOrder(startStation, N), loginPassword, members:[]};
   }
+  return out;
+}
+function reindexGroupsForCount(existingGroups, count){
+  const N=StationLayout.clampStationCount(count);
+  const out={};
+  Object.keys(existingGroups||{}).sort((a,b)=>Number(a)-Number(b)).forEach(gid=>{
+    const g=existingGroups[gid]; const id=Number(gid);
+    let start=StationLayout.defaultStartStation(id, N);
+    const current=Number(g && g.startStation);
+    if(Number.isInteger(current) && current>=1 && current<=N) start=current;
+    out[gid]={...g, startStation:start, order:StationLayout.rotationOrder(start, N)};
+  });
   return out;
 }
 function pushConfig(){
   const st = collectStations();
   if(!validateStationPasswords(st) || !validateWorksheetStations(st)) return;
+  if(sessionInfo && sessionInfo.status==='active'){
+    document.getElementById('pushStatus').innerHTML='<div class="msg err">Tidak boleh simpan semasa sesi aktif. Tekan Tamat dahulu.</div>';
+    return;
+  }
+  const N=StationLayout.clampStationCount(Object.keys(st).length);
   // Preserve an existing roster (managed in the Kumpulan tab); only seed a
   // default set on a brand-new database.
   const hasGroups = groups && Object.keys(groups).length>0;
-  const gr = hasGroups ? groups : collectGroups();
+  const baseGroups=hasGroups ? groups : collectGroups(N);
+  const gr=reindexGroupsForCount(baseGroups, N);
   const prog={};
   Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
   db.ref(PATH+'/config/stations').set(st);
   db.ref(PATH+'/config/groups').set(gr);
   db.ref(PATH+'/session').set({status:'setup'}); // fresh config -> not started yet
   db.ref(PATH+'/progress').set(prog).then(()=>{
-    stations=st; groups=gr;
+    stations=st; groups=gr; stationCount=N;
     renderGroupLoginOptions();
     let listHtml = '<h4>Password Login Kumpulan (beri kepada setiap kumpulan)</h4><table><tr><th>Kumpulan</th><th>Password</th><th>Mula di Stesen</th></tr>';
     Object.values(gr).forEach(g=>{ listHtml += `<tr><td>${g.name}</td><td><b>${g.loginPassword}</b></td><td>${g.startStation}</td></tr>`; });
@@ -1531,8 +1596,8 @@ function showLoginPasswords(message=''){
     <h4>Password &amp; Stesen Mula Kumpulan</h4><table><tr><th>Kumpulan</th><th>Password 4 Digit</th><th>Mula di Stesen</th></tr>`;
   Object.keys(groups).sort((a,b)=>Number(a)-Number(b)).forEach(gid=>{
     const g=groups[gid]; const password=numericLoginPassword(g.loginPassword);
-    const startStation=startStationForGroup(g,((Number(gid)-1)%6)+1);
-    const options=Array.from({length:6},(_,index)=>index+1).map(stationId=>`<option value="${stationId}"${stationId===startStation?' selected':''}>Stesen ${stationId}</option>`).join('');
+    const startStation=startStationForGroup(g,StationLayout.defaultStartStation(Number(gid), currentStationCount()));
+    const options=Array.from({length:currentStationCount()},(_,index)=>index+1).map(stationId=>`<option value="${stationId}"${stationId===startStation?' selected':''}>Stesen ${stationId}</option>`).join('');
     html += `<tr><td>${g.name}</td><td><div class="password-edit"><input id="login_password_${gid}" value="${escapeHtml(password)}" inputmode="numeric" pattern="[0-9]*" maxlength="${LOGIN_PASSWORD_LENGTH}" aria-label="Password Kumpulan ${gid}" oninput="this.value=this.value.replace(/\\D/g,'').slice(0,${LOGIN_PASSWORD_LENGTH})"><button type="button" onclick="regenerateLoginPassword('${gid}')">Jana Semula</button></div></td><td><select id="start_station_${gid}" aria-label="Stesen mula Kumpulan ${gid}"${startStationLocked?' disabled':''}>${options}</select></td></tr>`;
   });
   html += '</table>';
@@ -1546,7 +1611,7 @@ function collectEditedGroupSettings(){
   Object.keys(groups||{}).forEach(gid=>{
     const input=document.getElementById('login_password_'+gid);
     const password=String(input&&input.value||'').trim();
-    const configuredStart=startStationForGroup(groups[gid],((Number(gid)-1)%6)+1);
+    const configuredStart=startStationForGroup(groups[gid],StationLayout.defaultStartStation(Number(gid), currentStationCount()));
     const select=document.getElementById('start_station_'+gid);
     const selectedStart=isValidStationId(select?.value) ? Number(select.value) : configuredStart;
     if(!new RegExp(`^\\d{${LOGIN_PASSWORD_LENGTH}}$`).test(password) || usedPasswords.has(password)) invalidPasswords.push(gid);
@@ -1588,7 +1653,7 @@ function saveLoginPasswords(){
   const updated={};
   const startStationLocked=(sessionInfo||{}).status==='active';
   Object.keys(groups||{}).forEach(gid=>{
-    const currentStart=startStationForGroup(groups[gid],((Number(gid)-1)%6)+1);
+    const currentStart=startStationForGroup(groups[gid],StationLayout.defaultStartStation(Number(gid), currentStationCount()));
     const startStation=startStationLocked ? currentStart : edited[gid].startStation;
     updated[gid]={...groups[gid],loginPassword:edited[gid].loginPassword,startStation,order:rotationFor(startStation)};
   });
@@ -1643,8 +1708,8 @@ function watchDashboard(){
       const g = groups[gid];
       const p = prog[gid]||{currentIndex:0,keys:[],totalScore:0,status:'idle'};
       const currentIndex=Number(p.currentIndex)||0;
-      const curSt = p.status==='won' ? '🏆 Menang' : currentIndex>=6 ? '📦 Selesai 6 Pulau' : `Pulau ${currentIndex+1}: ${stations[g.order[currentIndex]]?.name || '-'}`;
-      rows.innerHTML += `<tr><td>${gid}</td><td><span class="badge ${p.status==='idle'?'idle':'done'}">${p.status}</span></td><td>${curSt}</td><td>${p.currentIndex||0}/6</td><td>${'🔑'.repeat((p.keys||[]).length)}</td><td>${p.totalScore||0}</td></tr>`;
+      const curSt = p.status==='won' ? '🏆 Menang' : StationLayout.isJourneyDone(currentIndex, currentStationCount()) ? `📦 Selesai ${currentStationCount()} Pulau` : `Pulau ${currentIndex+1}: ${stations[g.order[currentIndex]]?.name || '-'}`;
+      rows.innerHTML += `<tr><td>${gid}</td><td><span class="badge ${p.status==='idle'?'idle':'done'}">${p.status}</span></td><td>${curSt}</td><td>${p.currentIndex||0}/${currentStationCount()}</td><td>${'🔑'.repeat((p.keys||[]).length)}</td><td>${p.totalScore||0}</td></tr>`;
     });
   });
 }
@@ -1654,7 +1719,7 @@ function loadGroupProgress(){
   db.ref(PATH+'/progress/'+currentGroupId).once('value').then(snap=>{
     const p = snap.val() || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
     progress = p;
-    if(p.status==='won' || p.currentIndex>=6){ showGoToBoard(); return; }
+    if(p.status==='won' || StationLayout.isJourneyDone(p.currentIndex||0, currentStationCount())){ showGoToBoard(); return; }
     showClueScreen();
   });
 }
@@ -1678,7 +1743,7 @@ function renderKeyrowMini(){
   const row = document.getElementById('keyrowMini');
   row.innerHTML='';
   const keys = progress.keys||[];
-  for(let i=1;i<=6;i++){
+  for(let i=1;i<=currentStationCount();i++){
     row.innerHTML += `<div class="key ${keys.includes(i)?'':'empty'}">${keys.includes(i)?'🔑':'▫️'}</div>`;
   }
 }
@@ -2380,7 +2445,7 @@ function submitCompletion(onTime, score, timeTakenSec){
     const completedStations = p.completedStations||{};
     completedStations[stId]={score, onTime, timeTakenSec, ts:Date.now()};
     const totalScore=(p.totalScore||0)+score;
-    const done = newIndex>=6;
+    const done = StationLayout.isJourneyDone(newIndex, currentStationCount());
     progRef.update({currentIndex:newIndex, keys, completedStations, totalScore, status:done?'ready_chest':'idle'})
       .then(()=>{ progress={...p,currentIndex:newIndex,keys,completedStations,totalScore}; showResult(onTime,score,done); });
   });
@@ -2418,8 +2483,8 @@ function showGoToBoard(){
         <p style="color:#888;">Lihat ranking penuh di Smart Board! 🏆</p>`;
     } else {
       card.innerHTML = `
-        <h2>🎉 Semua 6 Kunci Dikumpul!</h2>
-        <div class="keyrow">${'<div class="key">🔑</div>'.repeat(6)}</div>
+        <h2>🎉 Semua ${currentStationCount()} Kunci Dikumpul!</h2>
+        <div class="keyrow">${'<div class="key">🔑</div>'.repeat(currentStationCount())}</div>
         <div style="font-size:64px;margin:14px 0;">🏃💨📦</div>
         <h2 style="color:var(--gold);margin:0;">Lari ke SMART BOARD!</h2>
         <p style="font-size:16px;">Pergi ke <b>tempat mula</b> dan tekan <b>peti Kumpulan ${currentGroupId}</b> di skrin besar untuk membuka peti &amp; mengira markah akhir anda.</p>`;
@@ -2455,12 +2520,14 @@ function leaveSmartBoard(){
 const KEYHOLES = [[25.1,47.0],[49.9,46.9],[74.7,46.9],[25.1,67.9],[49.9,67.9],[74.8,67.9]];
 const CHEST_ANIM = { N:40, COLS:8, ROWS:5, DUR:1700 };
 const animatingGids = new Set();
-function chestVis(litCount, opened){
-  const holes = KEYHOLES.map((k,i)=>
+function chestVis(litCount, opened, total){
+  const n = StationLayout.clampStationCount(total==null ? 6 : total);
+  const holes = KEYHOLES.slice(0,n).map((k,i)=>
     `<span class="kh${(i<litCount)?' lit':''}" style="left:${k[0]}%;top:${k[1]}%"></span>`).join('');
   return `<div class="chest-vis${opened?' opened':''}">${holes}</div>`;
 }
 function renderSmartBoard(grps, prog){
+  const N=currentStationCount();
   const ids = Object.keys(grps).length ? Object.keys(grps) : Array.from({length:NUM_GROUPS},(_,i)=>String(i+1));
   const opened = ids.map(gid=>({gid, p:prog[gid]||{}}))
     .filter(x=>x.p.status==='won')
@@ -2472,21 +2539,21 @@ function renderSmartBoard(grps, prog){
     : '<p style="text-align:center;color:#ffffffaa;padding:14px;">Belum ada kumpulan buka peti…</p>';
   const chestsHtml = ids.map(gid=>{
     const p = prog[gid]||{currentIndex:0,keys:[],status:'idle'};
-    const keys=Math.min((p.keys||[]).length, 6);
+    const keys=Math.min((p.keys||[]).length, N);
     const id=`chest-card-${gid}`;
     if(p.status==='won'){
-      return `<div class="chest-card won" id="${id}">${chestVis(0,true)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-score">${p.finalScore} mkh</div><div class="c-sub">#${rankOf[gid]} · buka ke-${p.finishOrder}</div></div>`;
+      return `<div class="chest-card won" id="${id}">${chestVis(0,true,N)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-score">${p.finalScore} mkh</div><div class="c-sub">#${rankOf[gid]} · buka ke-${p.finishOrder}</div></div>`;
     }
-    if((p.currentIndex||0)>=6){
-      return `<div class="chest-card ready" id="${id}" onclick="openChestOnBoard('${gid}')">${chestVis(6,false)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-sub" style="color:var(--gold);font-weight:800;">SEDIA! Tekan</div></div>`;
+    if(StationLayout.isJourneyDone(p.currentIndex||0, N)){
+      return `<div class="chest-card ready" id="${id}" onclick="openChestOnBoard('${gid}')">${chestVis(N,false,N)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-sub" style="color:var(--gold);font-weight:800;">SEDIA! Tekan</div></div>`;
     }
-    return `<div class="chest-card locked" id="${id}" onclick="openChestOnBoard('${gid}')">${chestVis(keys,false)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-sub">${keys}/6 kunci</div></div>`;
+    return `<div class="chest-card locked" id="${id}" onclick="openChestOnBoard('${gid}')">${chestVis(keys,false,N)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-sub">${keys}/${N} kunci</div></div>`;
   }).join('');
   document.getElementById('boardWrap').innerHTML = `
     <div class="board-head">
       <button class="board-back" onclick="leaveSmartBoard()">← Kembali</button>
       <h1>🏴‍☠️ Peti Harta Karun</h1>
-      <p>Kumpulan yang sudah kumpul <b>6 kunci</b> — tekan peti kumpulan anda untuk buka!</p>
+      <p>Kumpulan yang sudah kumpul <b>${N} kunci</b> — tekan peti kumpulan anda untuk buka!</p>
     </div>
     <div class="board-cols">
       <div class="chest-grid">${chestsHtml}</div>
@@ -2539,8 +2606,8 @@ function openChestOnBoard(gid){
   db.ref(PATH+'/progress/'+gid).once('value').then(snap=>{
     const p = snap.val()||{};
     if(p.status==='won') return; // already opened
-    if((p.currentIndex||0) < 6){
-      flashBoardMsg(`🔒 Kumpulan ${gid} belum cukup kunci (${(p.keys||[]).length}/6) — belum boleh buka!`);
+    if(!StationLayout.isJourneyDone(p.currentIndex||0, currentStationCount())){
+      flashBoardMsg(`🔒 Kumpulan ${gid} belum cukup kunci (${(p.keys||[]).length}/${currentStationCount()}) — belum boleh buka!`);
       return;
     }
     animatingGids.add(gid);
