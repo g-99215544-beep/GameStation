@@ -1582,7 +1582,7 @@ function startGame(stId, testSt){
   // Tangram runs its own flow: instructions -> Mula -> timer -> 2 shapes, and
   // draws its own test banner, so don't start the timer / banner here for it.
   if(st.gameType==='tangram') return;
-  if(st.gameType==='jejak_lari'){ startRun(st); return; }
+  if(st.gameType==='jejak_lari') return;
   document.getElementById('timer').style.display='block';
   timerInterval = setInterval(tick,1000);
   if(window._testMode){
@@ -1902,6 +1902,7 @@ function beginRun(){
     if(msg) msg.innerHTML='<div class="msg err">GPS tidak disokong pada peranti ini.</div>';
     return;
   }
+  if(window._runWatchId!=null && navigator.geolocation){ navigator.geolocation.clearWatch(window._runWatchId); window._runWatchId=null; }
   if(msg) msg.innerHTML='<div class="msg">📡 Mendapatkan isyarat GPS…</div>';
   window._runWatchId = navigator.geolocation.watchPosition(
     onRunPosition, onRunError, { enableHighAccuracy:true, maximumAge:1000, timeout:15000 });
