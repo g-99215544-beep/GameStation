@@ -12,6 +12,7 @@
 <script src="tangram/shapes.js"></script>
 <script src="tangram/ui.js"></script>
 <script src="run/tracker.js"></script>
+<script src="groups/roster.js"></script>
 <style>
   :root{--navy:#12385b;--gold:#ffc63d;--cream:#fff1c8;--green:#178363;--red:#c8493f;}
   *{box-sizing:border-box;}
@@ -234,6 +235,18 @@
   .worksheet-add{font-size:13px;padding:9px 12px;}
   .run-editor{display:none;margin-top:10px;}
   .run-editor input{max-width:160px;}
+  .group-setup{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
+  .group-setup textarea{width:100%;font-family:inherit;}
+  .group-card{border:2px solid var(--gold);border-radius:10px;padding:12px;margin:10px 0;background:#fff8df;}
+  .group-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .group-card-head h4{margin:0;color:var(--navy);}
+  .group-card .member-count{color:#888;font-weight:400;font-size:13px;}
+  .member-list{list-style:none;margin:8px 0;padding:0;}
+  .member-list li{display:flex;gap:6px;align-items:center;padding:4px 0;border-top:1px solid #ead7aa;}
+  .member-list li:first-child{border-top:0;}
+  .member-list .member-name{flex:1;color:var(--navy);}
+  .member-add{display:flex;gap:6px;margin-top:6px;}
+  .member-add input{flex:1;}
   .password-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px;}.password-actions button{margin:0;}
   .password-edit{display:flex;gap:8px;align-items:center;}.password-edit input{width:128px;min-width:0;margin:0;font-variant-numeric:tabular-nums;font-weight:800;letter-spacing:.08em;}.password-edit button{margin:0;padding:8px 10px;font-size:12px;white-space:nowrap;}
   .password-note{margin:0 0 12px;color:#75582b;font-size:13px;font-weight:700;}
@@ -382,6 +395,7 @@
         <label for="adminTabSelect">Menu admin</label>
         <select id="adminTabSelect" onchange="selectAdminTab(this.value)">
           <option value="setup">Langkah 1: Setup Stesen</option>
+          <option value="groups">Kumpulan &amp; Ahli</option>
           <option value="passwords">Langkah 2: Password Kumpulan</option>
           <option value="qr">Langkah 3: QR Tersembunyi</option>
           <option value="session">Langkah 4: Mula / Tamat Treasure Hunt</option>
@@ -411,6 +425,30 @@
             <span class="admin-tab-note">Langkah 1 daripada 4</span>
             <button class="step-next" onclick="goToAdminStep('passwords')">Seterusnya: Password Kumpulan &#8594;</button>
           </div>
+        </div>
+      </section>
+
+      <section class="admin-panel" id="admin-panel-groups">
+        <div class="card">
+          <h3>Kumpulan &amp; Ahli</h3>
+          <p class="admin-panel-intro">Tetapkan bilangan kumpulan dan ahli, kemudian tampal senarai nama untuk mengagihkan murid. Anda boleh pindah, tambah, atau padam ahli dan kumpulan.</p>
+          <div id="groupManagerLock"></div>
+          <div class="group-setup">
+            <label>Bilangan Kumpulan</label>
+            <input id="group_num_groups" type="number" min="1" value="8">
+            <label>Bilangan Ahli / Kumpulan</label>
+            <input id="group_members_per" type="number" min="1" value="5">
+            <label>Senarai Nama (satu baris satu nama)</label>
+            <textarea id="group_names" rows="6" placeholder="Ali&#10;Siti&#10;Abu"></textarea>
+            <button class="secondary" onclick="groupAgih()">Agih ke Kumpulan</button>
+            <div id="groupAgihMsg"></div>
+          </div>
+          <div id="groupCards"></div>
+          <div class="feature-actions">
+            <button onclick="groupAddGroup()">&#65291; Tambah Kumpulan</button>
+            <button class="secondary" onclick="saveGroupManager()">Simpan Kumpulan</button>
+          </div>
+          <div id="groupSaveMsg"></div>
         </div>
       </section>
 
@@ -594,6 +632,7 @@ const FIREBASE_CONFIG = {
 };
 const PATH = 'gamestation2026';
 let db, stations, groups, currentGroupId, progress={}, timerInterval, timeLeftSec, timeUp=false, gameState={}, html5QrCode;
+let groupDraft = [];
 // Session lifecycle so the app is reusable across events: admin presses Mula to
 // start, Tamat to end. status: 'setup' (not started) | 'active' | 'ended'.
 let sessionInfo = {status:'setup'};
@@ -912,10 +951,152 @@ function connectFirebase(){
   }
 }
 
-function initApp(){
+// ---------- ADMIN: GROUP & MEMBER MANAGER ----------
+function renderGroupManager(){
+  const ids = Object.keys(groups||{}).sort((a,b)=>Number(a)-Number(b));
+  groupDraft = ids.map(gid=>Array.isArray(groups[gid].members)?groups[gid].members.slice():[]);
+  const locked = !!(sessionInfo && sessionInfo.status==='active');
+  const lock = document.getElementById('groupManagerLock');
+  if(lock) lock.innerHTML = locked
+    ? '<div class="msg">🔒 Sesi sedang aktif — pengurusan kumpulan dikunci. Tekan Tamat sebelum mengubah kumpulan.</div>' : '';
+  const ng = document.getElementById('group_num_groups');
+  if(ng && ids.length) ng.value = ids.length;
+  renderGroupCards();
+  document.querySelectorAll('#admin-panel-groups .group-setup input, #admin-panel-groups .group-setup textarea, #admin-panel-groups .group-setup button, #admin-panel-groups .feature-actions button')
+    .forEach(el=>{ el.disabled = locked; });
+}
+function renderGroupCards(){
+  const wrap = document.getElementById('groupCards');
+  if(!wrap) return;
+  const locked = !!(sessionInfo && sessionInfo.status==='active');
+  const dis = locked ? ' disabled' : '';
+  if(!groupDraft.length){
+    wrap.innerHTML = '<div class="empty-state">Tiada kumpulan lagi. Tetapkan bilangan dan tekan “Agih ke Kumpulan”, atau tekan “＋ Tambah Kumpulan”.</div>';
+    return;
+  }
+  wrap.innerHTML = groupDraft.map((members,gIdx)=>{
+    const rows = members.map((name,mIdx)=>{
+      const opts = groupDraft.map((_,j)=> j===gIdx ? '' : `<option value="${j}">Kumpulan ${j+1}</option>`).join('');
+      const move = groupDraft.length>1
+        ? `<select id="group_move_${gIdx}_${mIdx}"${dis}>${opts}</select><button onclick="groupMoveMember(${gIdx},${mIdx})"${dis}>Pindah</button>` : '';
+      return `<li><span class="member-name">${escapeHtml(name)}</span>${move}<button onclick="groupRemoveMember(${gIdx},${mIdx})"${dis}>Buang</button></li>`;
+    }).join('');
+    return `<div class="group-card">
+      <div class="group-card-head"><h4>Kumpulan ${gIdx+1} <span class="member-count">(${members.length})</span></h4>
+      <button onclick="groupRemoveGroup(${gIdx})"${dis}>Padam Kumpulan</button></div>
+      <ul class="member-list">${rows || '<li class="empty-state">Tiada ahli</li>'}</ul>
+      <div class="member-add"><input id="group_add_${gIdx}" placeholder="Nama ahli baharu"${dis}><button onclick="groupAddMember(${gIdx})"${dis}>＋ Tambah Ahli</button></div>
+    </div>`;
+  }).join('');
+}
+function syncGroupManagerLock(){
+  const panel = document.getElementById('admin-panel-groups');
+  if(!panel || !panel.classList.contains('active')) return; // only act when the tab is open
+  const locked = !!(sessionInfo && sessionInfo.status==='active');
+  const lock = document.getElementById('groupManagerLock');
+  if(lock) lock.innerHTML = locked
+    ? '<div class="msg">🔒 Sesi sedang aktif — pengurusan kumpulan dikunci. Tekan Tamat sebelum mengubah kumpulan.</div>' : '';
+  panel.querySelectorAll('.group-setup input, .group-setup textarea, .group-setup button, .feature-actions button, #groupCards select, #groupCards button, #groupCards input')
+    .forEach(el=>{ el.disabled = locked; });
+}
+function groupAgih(){
+  const ng = parseInt(document.getElementById('group_num_groups').value,10);
+  const mp = parseInt(document.getElementById('group_members_per').value,10);
+  const msg = document.getElementById('groupAgihMsg');
+  if(!(ng>=1) || !(mp>=1)){
+    if(msg) msg.innerHTML='<div class="msg err">Masukkan bilangan kumpulan dan ahli yang sah (≥ 1).</div>';
+    return;
+  }
+  const names = GroupRoster.normalizeNames(document.getElementById('group_names').value);
+  const res = GroupRoster.distributeNames(names, ng, mp);
+  groupDraft = res.groups;
+  renderGroupCards();
+  if(msg) msg.innerHTML = res.overflow.length
+    ? `<div class="msg">⚠️ ${res.overflow.length} nama berlebihan tidak diagihkan: ${res.overflow.map(escapeHtml).join(', ')}. Tambah kumpulan/ahli untuk memuatkannya.</div>`
+    : `<div class="msg ok">✅ ${names.length} nama diagihkan ke ${ng} kumpulan.</div>`;
+}
+function groupMoveMember(fromIdx, memberIdx){
+  const sel = document.getElementById(`group_move_${fromIdx}_${memberIdx}`);
+  if(!sel) return;
+  const toIdx = parseInt(sel.value,10);
+  if(isNaN(toIdx)) return;
+  groupDraft = GroupRoster.moveMember(groupDraft, fromIdx, memberIdx, toIdx);
+  renderGroupCards();
+}
+function groupRemoveMember(gIdx, mIdx){
+  groupDraft = GroupRoster.removeMember(groupDraft, gIdx, mIdx);
+  renderGroupCards();
+}
+function groupAddMember(gIdx){
+  const input = document.getElementById('group_add_'+gIdx);
+  if(!input) return;
+  groupDraft = GroupRoster.addMember(groupDraft, gIdx, input.value);
+  renderGroupCards();
+}
+function groupAddGroup(){
+  groupDraft = GroupRoster.addGroup(groupDraft);
+  renderGroupCards();
+}
+function groupRemoveGroup(gIdx){
+  if(groupDraft.length<=1){ alert('Mesti ada sekurang-kurangnya satu kumpulan.'); return; }
+  const count = (groupDraft[gIdx]||[]).length;
+  if(!confirm(`Padam Kumpulan ${gIdx+1}${count?` dan ${count} ahlinya`:''}?`)) return;
+  groupDraft = GroupRoster.removeGroup(groupDraft, gIdx);
+  renderGroupCards();
+}
+function buildGroupsFromDraft(draftMembers, existingGroups){
+  const out = {};
+  const usedPasswords = new Set();
+  draftMembers.forEach((members, idx)=>{
+    const id = idx+1;
+    const defaultStart = ((id-1)%6)+1;
+    const existing = existingGroups && existingGroups[id];
+    const existingPass = numericLoginPassword(existing && existing.loginPassword);
+    const loginPassword = existingPass && !usedPasswords.has(existingPass)
+      ? (usedPasswords.add(existingPass), existingPass)
+      : generateLoginPassword(usedPasswords);
+    const startStation = startStationForGroup(existing, defaultStart);
+    out[id] = { id, name:'Kumpulan '+id, startStation, order:rotationFor(startStation),
+                loginPassword, members: members.slice() };
+  });
+  return out;
+}
+function saveGroupManager(){
+  const msg = document.getElementById('groupSaveMsg');
+  if(sessionInfo && sessionInfo.status==='active'){
+    if(msg) msg.innerHTML='<div class="msg err">Tidak boleh simpan semasa sesi aktif. Tekan Tamat dahulu.</div>';
+    return;
+  }
+  if(!groupDraft.length){
+    if(msg) msg.innerHTML='<div class="msg err">Mesti ada sekurang-kurangnya satu kumpulan.</div>';
+    return;
+  }
+  const gr = buildGroupsFromDraft(groupDraft, groups);
+  const prog = {};
+  Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
+  Promise.all([
+    db.ref(PATH+'/config/groups').set(gr),
+    db.ref(PATH+'/progress').set(prog),
+    db.ref(PATH+'/session').set({status:'setup'})
+  ]).then(()=>{
+    groups = gr;
+    sessionInfo = {status:'setup'};
+    renderGroupLoginOptions();
+    if(msg) msg.innerHTML=`<div class="msg ok">✅ ${Object.keys(gr).length} kumpulan disimpan. Progress direset.</div>`;
+  }).catch(err=>{
+    if(msg) msg.innerHTML=`<div class="msg err">❌ Gagal menyimpan kumpulan: ${escapeHtml(err && err.message ? err.message : err)}. Cuba lagi.</div>`;
+  });
+}
+function renderGroupLoginOptions(){
   const sel = document.getElementById('groupLoginSelect');
-  sel.innerHTML='';
-  for(let i=1;i<=NUM_GROUPS;i++) sel.innerHTML += `<option value="${i}">Kumpulan ${i}</option>`;
+  if(!sel) return;
+  const ids = Object.keys(groups||{}).sort((a,b)=>Number(a)-Number(b));
+  const list = ids.length ? ids : Array.from({length:NUM_GROUPS},(_,i)=>String(i+1));
+  sel.innerHTML = list.map(id=>`<option value="${id}">Kumpulan ${id}</option>`).join('');
+}
+
+function initApp(){
+  renderGroupLoginOptions();
   if(isTangramDemo()){ startTangramDemo(); return; }
   if(isSmartBoard()){ loadConfigCache().then(()=>{ watchSession(); showSmartBoard(); }); return; }
   loadConfigCache().then(()=>{ watchSession(); tryRestoreSession(); });
@@ -969,6 +1150,7 @@ function loadConfigCache(){
     const cfg = snap.val()||{};
     stations = cfg.stations || {};
     groups = cfg.groups || {};
+    renderGroupLoginOptions();
     buildStationsUI(stations);
   });
 }
@@ -1030,6 +1212,7 @@ function loginAsGroup(){
 // ---------- ADMIN NAVIGATION ----------
 const ADMIN_TAB_NOTES = {
   setup:'Langkah pertama: lengkapkan maklumat dan permainan untuk enam stesen.',
+  groups:'Urus kumpulan: tetapkan bilangan, agih nama murid, dan pindah/tambah/padam ahli.',
   passwords:'Langkah kedua: semak dan agihkan password login kepada semua kumpulan.',
   qr:'Langkah ketiga: jana QR, cetak, dan sorokkan di lokasi yang dinyatakan.',
   session:'Langkah terakhir: mula atau tamatkan Treasure Hunt dari sini.',
@@ -1049,6 +1232,7 @@ function selectAdminTab(tab){
   updateSetupSteps(ADMIN_STEP_MAP[allowed] || 0);
   if(allowed==='passwords') showLoginPasswords();
   if(allowed==='session') renderSessionControls();
+  if(allowed==='groups') renderGroupManager();
 }
 function updateSetupSteps(activeStep){
   document.querySelectorAll('.setup-step').forEach(step=>{
@@ -1076,6 +1260,7 @@ function watchSession(){
     sessionInfo = snap.val() || {status:'setup'};
     renderSessionControls();      // admin card (no-op when not on admin)
     syncStartStationControlLock();
+    syncGroupManagerLock();
     reactToSessionForGroup();     // group waiting/ended/enter
   });
 }
@@ -1305,14 +1490,17 @@ function collectGroups(){
     const loginPassword=existingPass && !usedPasswords.has(existingPass)
       ? (usedPasswords.add(existingPass),existingPass)
       : generateLoginPassword(usedPasswords);
-    out[i]={id:i, name:'Kumpulan '+i, startStation, order:rotationFor(startStation), loginPassword};
+    out[i]={id:i, name:'Kumpulan '+i, startStation, order:rotationFor(startStation), loginPassword, members:[]};
   }
   return out;
 }
 function pushConfig(){
   const st = collectStations();
   if(!validateStationPasswords(st) || !validateWorksheetStations(st)) return;
-  const gr = collectGroups();
+  // Preserve an existing roster (managed in the Kumpulan tab); only seed a
+  // default set on a brand-new database.
+  const hasGroups = groups && Object.keys(groups).length>0;
+  const gr = hasGroups ? groups : collectGroups();
   const prog={};
   Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
   db.ref(PATH+'/config/stations').set(st);
@@ -1320,10 +1508,11 @@ function pushConfig(){
   db.ref(PATH+'/session').set({status:'setup'}); // fresh config -> not started yet
   db.ref(PATH+'/progress').set(prog).then(()=>{
     stations=st; groups=gr;
+    renderGroupLoginOptions();
     let listHtml = '<h4>Password Login Kumpulan (beri kepada setiap kumpulan)</h4><table><tr><th>Kumpulan</th><th>Password</th><th>Mula di Stesen</th></tr>';
     Object.values(gr).forEach(g=>{ listHtml += `<tr><td>${g.name}</td><td><b>${g.loginPassword}</b></td><td>${g.startStation}</td></tr>`; });
     listHtml += '</table>';
-    document.getElementById('pushStatus').innerHTML='<div class="msg ok">✅ Config di-push. 14 kumpulan sedia.</div>'+listHtml;
+    document.getElementById('pushStatus').innerHTML='<div class="msg ok">✅ Config di-push. '+Object.keys(gr).length+' kumpulan sedia.</div>'+listHtml;
   });
 }
 function showLoginPasswords(message=''){
