@@ -11,6 +11,7 @@
 <script src="tangram/engine.js"></script>
 <script src="tangram/shapes.js"></script>
 <script src="tangram/ui.js"></script>
+<script src="run/tracker.js"></script>
 <style>
   :root{--navy:#12385b;--gold:#ffc63d;--cream:#fff1c8;--green:#178363;--red:#c8493f;}
   *{box-sizing:border-box;}
@@ -231,6 +232,8 @@
   .worksheet-question-row label{margin:0 0 5px;color:var(--navy);}.worksheet-question-row > div{display:flex;gap:8px;align-items:center;}.worksheet-question-row input{margin:0;}
   .worksheet-question-row .worksheet-remove,.worksheet-add{margin:0;white-space:nowrap;}.worksheet-question-row .worksheet-remove{background:var(--red);}
   .worksheet-add{font-size:13px;padding:9px 12px;}
+  .run-editor{display:none;margin-top:10px;}
+  .run-editor input{max-width:160px;}
   .password-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px;}.password-actions button{margin:0;}
   .password-edit{display:flex;gap:8px;align-items:center;}.password-edit input{width:128px;min-width:0;margin:0;font-variant-numeric:tabular-nums;font-weight:800;letter-spacing:.08em;}.password-edit button{margin:0;padding:8px 10px;font-size:12px;white-space:nowrap;}
   .password-note{margin:0 0 12px;color:#75582b;font-size:13px;font-weight:700;}
@@ -575,7 +578,8 @@ const GAME_TYPES = [
   {id:'puzzle_susun', name:'Puzzle Cantum Nombor'},
   {id:'lembaran_kerja', name:'Lembaran Kerja'},
   {id:'sudoku', name:'Sudoku Challenge (3 Stage)'},
-  {id:'tangram', name:'Tangram Challenge'}
+  {id:'tangram', name:'Tangram Challenge'},
+  {id:'jejak_lari', name:'Jejak Lari GPS'}
 ];
 const NUM_GROUPS = 14;
 const ADMIN_PIN = '1234';
@@ -1187,11 +1191,15 @@ function removeWorksheetQuestion(i,index){
   renderWorksheetEditor(i,questions.length?questions:[{answer:''}]);
 }
 function toggleWorksheetEditor(i){
-  const isWorksheet=document.getElementById('st_gametype_'+i).value==='lembaran_kerja';
+  const gameType=document.getElementById('st_gametype_'+i).value;
+  const isWorksheet=gameType==='lembaran_kerja';
+  const isRun=gameType==='jejak_lari';
   const editor=document.getElementById('worksheet_editor_'+i);
+  const runEditor=document.getElementById('run_editor_'+i);
   const rawField=document.getElementById('game_data_field_'+i);
   if(editor) editor.style.display=isWorksheet?'block':'none';
-  if(rawField) rawField.style.display=isWorksheet?'none':'block';
+  if(runEditor) runEditor.style.display=isRun?'block':'none';
+  if(rawField) rawField.style.display=(isWorksheet||isRun)?'none':'block';
 }
 function buildStationsUI(existing){
   const area = document.getElementById('stationsArea');
@@ -1209,11 +1217,23 @@ function buildStationsUI(existing){
       <label>Jenis Game</label><select id="st_gametype_${i}" onchange="toggleWorksheetEditor(${i})">${opts}</select>
       <div id="game_data_field_${i}"><label>Data Game (JSON)</label><input id="st_gamedata_${i}" value='${(s.gameDataRaw||"{}").replace(/'/g,"&apos;")}'></div>
       <div class="worksheet-editor" id="worksheet_editor_${i}"></div>
+      <div class="run-editor" id="run_editor_${i}">
+        <label>Jarak Sasaran (km)</label>
+        <input id="st_targetkm_${i}" type="number" min="0.1" step="0.1" value="${RunTracker.parseTargetKm(s.gameDataRaw)}">
+      </div>
       <button class="secondary" onclick="testStation(${i})">▶️ Uji Cara Main Stesen Ini</button>
     </div>`;
     renderWorksheetEditor(i,worksheetQuestionsFromRaw(s.gameDataRaw));
     toggleWorksheetEditor(i);
   }
+}
+function stationGameDataRaw(i, gameType){
+  if(gameType==='lembaran_kerja') return JSON.stringify({questions:getWorksheetQuestionsFromEditor(i)});
+  if(gameType==='jejak_lari'){
+    const km=Number(document.getElementById('st_targetkm_'+i).value);
+    return JSON.stringify({targetKm:(isFinite(km)&&km>0)?km:3});
+  }
+  return document.getElementById('st_gamedata_'+i).value;
 }
 function collectStations(){
   const out={};
@@ -1225,9 +1245,7 @@ function collectStations(){
       password:document.getElementById('st_pass_'+i).value.trim(),
       timeLimitMin:10,
       gameType,
-      gameDataRaw:gameType==='lembaran_kerja'
-        ? JSON.stringify({questions:getWorksheetQuestionsFromEditor(i)})
-        : document.getElementById('st_gamedata_'+i).value};
+      gameDataRaw:stationGameDataRaw(i, gameType)};
   }
   return out;
 }
@@ -1521,9 +1539,7 @@ function testStation(i){
     password:document.getElementById('st_pass_'+i).value,
     timeLimitMin:10,
     gameType,
-    gameDataRaw:gameType==='lembaran_kerja'
-      ? JSON.stringify({questions:getWorksheetQuestionsFromEditor(i)})
-      : document.getElementById('st_gamedata_'+i).value
+    gameDataRaw:stationGameDataRaw(i, gameType)
   };
   if(!isValidStationPassword(st.password)){
     alert('Password stesen mesti tepat 5 huruf atau digit sebelum diuji.');
@@ -1535,6 +1551,7 @@ function testStation(i){
 }
 function endTest(){
   if(timerInterval) clearInterval(timerInterval);
+  if(window._runWatchId!=null && navigator.geolocation){ navigator.geolocation.clearWatch(window._runWatchId); window._runWatchId=null; }
   window._testMode = false;
   document.getElementById('timer').style.display='none';
   show('view-admin');
@@ -1565,6 +1582,7 @@ function startGame(stId, testSt){
   // Tangram runs its own flow: instructions -> Mula -> timer -> 2 shapes, and
   // draws its own test banner, so don't start the timer / banner here for it.
   if(st.gameType==='tangram') return;
+  if(st.gameType==='jejak_lari') return;
   document.getElementById('timer').style.display='block';
   timerInterval = setInterval(tick,1000);
   if(window._testMode){
@@ -1589,6 +1607,7 @@ function tick(){
     // on timeout — otherwise a student who can't solve is stranded here.
     if(gameState && gameState.type==='tangram' && window._tgTimeout){ window._tgTimeout(); }
     if(gameState && gameState.type==='sudoku' && window._sudokuTimeout){ window._sudokuTimeout(); }
+    if(gameState && gameState.type==='jejak_lari' && window._runTimeout){ window._runTimeout(); }
   }
 }
 function renderGame(st){
@@ -1658,6 +1677,10 @@ function renderGame(st){
   }
   else if(st.gameType==='tangram'){
     startTangram(st);
+    return;
+  }
+  else if(st.gameType==='jejak_lari'){
+    startRun(st);
     return;
   }
   else {
@@ -1855,6 +1878,94 @@ function checkSudokuStage(){
 function nextSudokuStage(){
   gameState.sudoku.stageIndex++;
   showSudokuStage();
+}
+// ---------- RUN TRACKER (jejak_lari): live GPS distance ----------
+function startRun(st){
+  const targetKm = RunTracker.parseTargetKm(st.gameDataRaw);
+  gameState = { type:'jejak_lari', targetKm, distanceM:0, lastPt:null,
+                totalSec: timeLeftSec, started:false, total:1, correct:0 };
+  window._runWatchId = null;
+  window._runTimeout = null;
+  const card = document.getElementById('gameCard');
+  const testBanner = window._testMode
+    ? '<div class="msg" style="background:#fdf3d8;margin-top:0;">🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">← Kembali ke Admin</button></div>'
+    : '';
+  card.innerHTML = `${testBanner}<h2>🏃 ${st.name}</h2>
+    <div class="clue">Lari sejauh <b>${targetKm} km</b> sebelum masa tamat. GPS akan mengesan jarak larian anda.</div>
+    <p style="color:#65513a;font-size:14px;">Markah: baki masa + <b>25 markah</b> setiap 1 km yang dilari.</p>
+    <button class="big" onclick="beginRun()">▶️ Mula Lari</button>
+    <div id="runMsg"></div>`;
+}
+function beginRun(){
+  const msg = document.getElementById('runMsg');
+  if(!navigator.geolocation){
+    if(msg) msg.innerHTML='<div class="msg err">GPS tidak disokong pada peranti ini.</div>';
+    return;
+  }
+  if(window._runWatchId!=null && navigator.geolocation){ navigator.geolocation.clearWatch(window._runWatchId); window._runWatchId=null; }
+  if(msg) msg.innerHTML='<div class="msg">📡 Mendapatkan isyarat GPS…</div>';
+  window._runWatchId = navigator.geolocation.watchPosition(
+    onRunPosition, onRunError, { enableHighAccuracy:true, maximumAge:1000, timeout:15000 });
+}
+function onRunPosition(pos){
+  const pt = { lat:pos.coords.latitude, lng:pos.coords.longitude, acc:pos.coords.accuracy };
+  const carried = { targetKm: gameState.targetKm, totalSec: gameState.totalSec,
+                    type:'jejak_lari', total:1, correct:0 };
+  if(!gameState.started){
+    gameState = Object.assign(RunTracker.accumulate(gameState, pt), carried, { started:true });
+    window._startedAt = Date.now();
+    renderRunLive();
+    document.getElementById('timer').style.display='block';
+    timerInterval = setInterval(tick,1000);
+    window._runTimeout = ()=>finishRun(false);
+    return;
+  }
+  gameState = Object.assign(RunTracker.accumulate(gameState, pt), carried, { started:true });
+  updateRunLive();
+  if(gameState.distanceM >= gameState.targetKm*1000) finishRun(true);
+}
+function onRunError(err){
+  const msg = document.getElementById('runMsg');
+  if(!msg) return;
+  const why = err && err.code===1 ? 'kebenaran GPS ditolak' : 'isyarat GPS tidak diperoleh';
+  msg.innerHTML = `<div class="msg err">Tidak dapat mula (${why}). Benarkan akses lokasi, kemudian <button class="linkbtn" onclick="beginRun()">cuba lagi</button>.</div>`;
+}
+function renderRunLive(){
+  const card = document.getElementById('gameCard');
+  const testBanner = window._testMode
+    ? '<div class="msg" style="background:#fdf3d8;margin-top:0;">🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">← Kembali ke Admin</button></div>'
+    : '';
+  card.innerHTML = `${testBanner}<h2>🏃 Larian Anda</h2>
+    <div style="font-size:34px;font-weight:900;color:var(--navy);text-align:center;margin:10px 0;">
+      <span id="runKm">0.00</span> / ${gameState.targetKm.toFixed(2)} km</div>
+    <div style="height:18px;border:2px solid var(--gold);border-radius:10px;overflow:hidden;background:#fff8df;">
+      <div id="runBar" style="height:100%;width:0%;background:var(--green);transition:width .3s;"></div></div>
+    <p style="color:#888;font-size:13px;text-align:center;margin-top:10px;">📡 GPS aktif — teruskan berlari!</p>
+    <div id="runMsg"></div>`;
+}
+function updateRunLive(){
+  const km = gameState.distanceM/1000;
+  const kmEl = document.getElementById('runKm');
+  const bar = document.getElementById('runBar');
+  if(kmEl) kmEl.textContent = km.toFixed(2);
+  if(bar) bar.style.width = Math.min(100, km/gameState.targetKm*100) + '%';
+}
+function finishRun(reachedTarget){
+  if(window._gameOver) return;   // guard against double-finish (target hit + timeout race)
+  window._gameOver = true;
+  if(window._runWatchId!=null && navigator.geolocation){
+    navigator.geolocation.clearWatch(window._runWatchId); window._runWatchId=null;
+  }
+  clearInterval(timerInterval);
+  const onTime = reachedTarget && !timeUp;
+  const timeTakenSec = Math.round((Date.now()-window._startedAt)/1000);
+  const score = RunTracker.runScore({
+    reachedTarget, timeUp,
+    timeLeftSec: Math.max(0, timeLeftSec),
+    totalSec: gameState.totalSec,
+    distanceM: gameState.distanceM });
+  if(window._testMode){ showTestResult(onTime, score, timeTakenSec); return; }
+  submitCompletion(onTime, score, timeTakenSec);
 }
 function finishSudoku(onTime){
   if(window._gameOver) return;
@@ -2094,7 +2205,7 @@ function showResult(onTime, score, done){
   else { nextHtml=`<button class="big" onclick="showClueScreen()">Pilih Pulau Seterusnya</button>`; }
   document.getElementById('resultCard').innerHTML=`<div class="finalbox">
     <div style="font-size:50px;">🔑</div>
-    <h2>${onTime?'Tepat Masa!':'Masa Tamat — Markah Ditolak'}</h2>
+    <h2>${onTime?'Tepat Masa!':(gameState.type==='jejak_lari'?'Masa Tamat — Bonus Jarak Disimpan':'Masa Tamat — Markah Ditolak')}</h2>
     <p>Markah stesen ini: <b>${score}</b></p>
     ${nextHtml}
   </div>`;
