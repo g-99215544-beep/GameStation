@@ -90,3 +90,34 @@ test('deleting a group removes it and re-keys', async ({ page }) => {
   await expect(page.locator('#groupCards .group-card').nth(0)).toContainText('Kumpulan 1');
   await expect(page.locator('#groupCards .group-card').nth(0)).toContainText('Abu');
 });
+
+test('Simpan writes members to config/groups and resets progress', async ({ page }) => {
+  await seedPage(page, baseSeed());
+  await openGroupTab(page);
+  await page.evaluate(() => saveGroupManager());
+  const saved = await page.evaluate(() =>
+    db.ref('gamestation2026/config/groups').once('value').then(s => s.val()));
+  expect(saved['1'].members).toEqual(['Ali', 'Siti']);
+  expect(saved['1'].loginPassword).toBe('1001');       // preserved by index
+  expect(saved['2'].members).toEqual(['Abu']);
+  const prog = await page.evaluate(() =>
+    db.ref('gamestation2026/progress').once('value').then(s => s.val()));
+  expect(prog['1']).toMatchObject({ currentIndex: 0, status: 'idle', totalScore: 0 });
+});
+
+test('pushConfig preserves an existing roster (does not regenerate groups)', async ({ page }) => {
+  await seedPage(page, baseSeed());
+  await page.goto(pathToFileURL(path.join(__dirname, '..', 'index.html')).href);
+  await page.evaluate(async () => {
+    await loadConfigCache();
+    sessionInfo = { status: 'setup' };
+    show('view-admin');
+    selectAdminTab('setup');
+    pushConfig();
+    await new Promise(r => setTimeout(r, 0));
+  });
+  const saved = await page.evaluate(() =>
+    db.ref('gamestation2026/config/groups').once('value').then(s => s.val()));
+  expect(Object.keys(saved)).toEqual(['1', '2']);          // still 2 groups, not 14
+  expect(saved['1'].members).toEqual(['Ali', 'Siti']);     // roster preserved
+});

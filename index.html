@@ -1044,6 +1044,47 @@ function groupRemoveGroup(gIdx){
   groupDraft = GroupRoster.removeGroup(groupDraft, gIdx);
   renderGroupCards();
 }
+function buildGroupsFromDraft(draftMembers, existingGroups){
+  const out = {};
+  const usedPasswords = new Set();
+  draftMembers.forEach((members, idx)=>{
+    const id = idx+1;
+    const defaultStart = ((id-1)%6)+1;
+    const existing = existingGroups && existingGroups[id];
+    const existingPass = numericLoginPassword(existing && existing.loginPassword);
+    const loginPassword = existingPass && !usedPasswords.has(existingPass)
+      ? (usedPasswords.add(existingPass), existingPass)
+      : generateLoginPassword(usedPasswords);
+    const startStation = startStationForGroup(existing, defaultStart);
+    out[id] = { id, name:'Kumpulan '+id, startStation, order:rotationFor(startStation),
+                loginPassword, members: members.slice() };
+  });
+  return out;
+}
+function saveGroupManager(){
+  const msg = document.getElementById('groupSaveMsg');
+  if(sessionInfo && sessionInfo.status==='active'){
+    if(msg) msg.innerHTML='<div class="msg err">Tidak boleh simpan semasa sesi aktif. Tekan Tamat dahulu.</div>';
+    return;
+  }
+  if(!groupDraft.length){
+    if(msg) msg.innerHTML='<div class="msg err">Mesti ada sekurang-kurangnya satu kumpulan.</div>';
+    return;
+  }
+  const gr = buildGroupsFromDraft(groupDraft, groups);
+  const prog = {};
+  Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
+  Promise.all([
+    db.ref(PATH+'/config/groups').set(gr),
+    db.ref(PATH+'/progress').set(prog),
+    db.ref(PATH+'/session').set({status:'setup'})
+  ]).then(()=>{
+    groups = gr;
+    sessionInfo = {status:'setup'};
+    renderGroupLoginOptions();
+    if(msg) msg.innerHTML=`<div class="msg ok">✅ ${Object.keys(gr).length} kumpulan disimpan. Progress direset.</div>`;
+  });
+}
 function renderGroupLoginOptions(){
   const sel = document.getElementById('groupLoginSelect');
   if(!sel) return;
@@ -1447,14 +1488,17 @@ function collectGroups(){
     const loginPassword=existingPass && !usedPasswords.has(existingPass)
       ? (usedPasswords.add(existingPass),existingPass)
       : generateLoginPassword(usedPasswords);
-    out[i]={id:i, name:'Kumpulan '+i, startStation, order:rotationFor(startStation), loginPassword};
+    out[i]={id:i, name:'Kumpulan '+i, startStation, order:rotationFor(startStation), loginPassword, members:[]};
   }
   return out;
 }
 function pushConfig(){
   const st = collectStations();
   if(!validateStationPasswords(st) || !validateWorksheetStations(st)) return;
-  const gr = collectGroups();
+  // Preserve an existing roster (managed in the Kumpulan tab); only seed a
+  // default set on a brand-new database.
+  const hasGroups = groups && Object.keys(groups).length>0;
+  const gr = hasGroups ? groups : collectGroups();
   const prog={};
   Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
   db.ref(PATH+'/config/stations').set(st);
@@ -1462,10 +1506,11 @@ function pushConfig(){
   db.ref(PATH+'/session').set({status:'setup'}); // fresh config -> not started yet
   db.ref(PATH+'/progress').set(prog).then(()=>{
     stations=st; groups=gr;
+    renderGroupLoginOptions();
     let listHtml = '<h4>Password Login Kumpulan (beri kepada setiap kumpulan)</h4><table><tr><th>Kumpulan</th><th>Password</th><th>Mula di Stesen</th></tr>';
     Object.values(gr).forEach(g=>{ listHtml += `<tr><td>${g.name}</td><td><b>${g.loginPassword}</b></td><td>${g.startStation}</td></tr>`; });
     listHtml += '</table>';
-    document.getElementById('pushStatus').innerHTML='<div class="msg ok">✅ Config di-push. 14 kumpulan sedia.</div>'+listHtml;
+    document.getElementById('pushStatus').innerHTML='<div class="msg ok">✅ Config di-push. '+Object.keys(gr).length+' kumpulan sedia.</div>'+listHtml;
   });
 }
 function showLoginPasswords(message=''){
