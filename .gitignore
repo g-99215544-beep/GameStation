@@ -1,2 +1,7 @@
 .playwright-mcp/
 .superpowers/
+node_modules/
+package.json
+package-lock.json
+test-results/
+playwright-report/
