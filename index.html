@@ -2205,7 +2205,7 @@ function showResult(onTime, score, done){
   else { nextHtml=`<button class="big" onclick="showClueScreen()">Pilih Pulau Seterusnya</button>`; }
   document.getElementById('resultCard').innerHTML=`<div class="finalbox">
     <div style="font-size:50px;">🔑</div>
-    <h2>${onTime?'Tepat Masa!':'Masa Tamat — Markah Ditolak'}</h2>
+    <h2>${onTime?'Tepat Masa!':(gameState.type==='jejak_lari'?'Masa Tamat — Bonus Jarak Disimpan':'Masa Tamat — Markah Ditolak')}</h2>
     <p>Markah stesen ini: <b>${score}</b></p>
     ${nextHtml}
   </div>`;
