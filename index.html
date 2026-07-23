@@ -14,6 +14,7 @@
 <script src="run/tracker.js"></script>
 <script src="groups/roster.js"></script>
 <script src="stations/layout.js"></script>
+<script src="sifir/engine.js"></script>
 <style>
   :root{--navy:#12385b;--gold:#ffc63d;--cream:#fff1c8;--green:#178363;--red:#c8493f;}
   *{box-sizing:border-box;}
@@ -626,6 +627,7 @@ const GAME_TYPES = [
   {id:'puzzle_susun', name:'Puzzle Cantum Nombor'},
   {id:'lembaran_kerja', name:'Lembaran Kerja'},
   {id:'sudoku', name:'Sudoku Challenge (3 Stage)'},
+  {id:'sifir', name:'Sifir Challenge'},
   {id:'tangram', name:'Tangram Challenge'},
   {id:'jejak_lari', name:'Jejak Lari GPS'}
 ];
@@ -643,6 +645,7 @@ const FIREBASE_CONFIG = {
 const PATH = 'gamestation2026';
 let db, stations, groups, currentGroupId, progress={}, timerInterval, timeLeftSec, timeUp=false, gameState={}, html5QrCode;
 let groupDraft = [];
+let sifirQInterval = null;
 let stationCount = 3;
 function currentStationCount(){ return StationLayout.clampStationCount(Object.keys(stations||{}).length); }
 // Session lifecycle so the app is reusable across events: admin presses Mula to
@@ -1805,6 +1808,8 @@ function testStation(i){
 }
 function endTest(){
   if(timerInterval) clearInterval(timerInterval);
+  if(sifirQInterval) clearInterval(sifirQInterval);
+  sifirQInterval=null;
   if(window._runWatchId!=null && navigator.geolocation){ navigator.geolocation.clearWatch(window._runWatchId); window._runWatchId=null; }
   window._testMode = false;
   document.getElementById('timer').style.display='none';
@@ -1824,11 +1829,14 @@ function showTestResult(onTime, score, timeTakenSec){
 
 // ---------- GAME ----------
 function startGame(stId, testSt){
+  if(sifirQInterval) clearInterval(sifirQInterval);
+  sifirQInterval=null;
   show('view-game');
   const st = testSt || stations[stId];
   timeUp=false;
   window._gameOver=false;
   window._sudokuTimeout=null;
+  window._sifirTimeout=null;
   timeLeftSec = (st.timeLimitMin||10)*60;
   window._startedAt = Date.now();
   window._curStId = stId;
@@ -1851,9 +1859,12 @@ function startGame(stId, testSt){
 }
 function tick(){
   timeLeftSec--;
-  const m=Math.floor(timeLeftSec/60), s=timeLeftSec%60;
+  const displaySeconds=Math.max(0,timeLeftSec);
+  const m=Math.floor(displaySeconds/60), s=displaySeconds%60;
   const t=document.getElementById('timer');
   t.innerText=`${m}:${String(s).padStart(2,'0')}`;
+  const sifirTimer=document.getElementById('sifirTopTimer');
+  if(sifirTimer) sifirTimer.innerText=`${m}:${String(s).padStart(2,'0')}`;
   if(timeLeftSec<=30) t.classList.add('warn');
   if(timeLeftSec<=0){
     clearInterval(timerInterval); timeUp=true; t.innerText='HABIS';
@@ -1861,6 +1872,7 @@ function tick(){
     // on timeout — otherwise a student who can't solve is stranded here.
     if(gameState && gameState.type==='tangram' && window._tgTimeout){ window._tgTimeout(); }
     if(gameState && gameState.type==='sudoku' && window._sudokuTimeout){ window._sudokuTimeout(); }
+    if(gameState && gameState.type==='sifir' && window._sifirTimeout){ window._sifirTimeout(); }
     if(gameState && gameState.type==='jejak_lari' && window._runTimeout){ window._runTimeout(); }
   }
 }
@@ -1927,6 +1939,10 @@ function renderGame(st){
   }
   else if(st.gameType==='sudoku'){
     startSudoku(st);
+    return;
+  }
+  else if(st.gameType==='sifir'){
+    startSifir(st);
     return;
   }
   else if(st.gameType==='tangram'){
@@ -2002,6 +2018,97 @@ function checkGrid(){
   }));
   gameState.correct = correct===total?1:0; gameState.total=1;
   finishGame();
+}
+
+// Sifir Challenge: 15 multiplication questions must be cleared consecutively.
+// A wrong answer (or four-second timeout) creates a new set and restarts at Q1.
+function startSifir(st){
+  const totalSec=(st.timeLimitMin||10)*60;
+  gameState={
+    type:'sifir', total:SifirEngine.SIFIR_TARGET, correct:0,
+    sifir:{stationName:st.name, totalSec, questions:SifirEngine.generateQuestions(), qIndex:0, restartToken:0}
+  };
+  window._sifirTimeout=()=>finishSifir(0);
+  renderSifirQuestion();
+}
+function sifirClockText(seconds){
+  const safe=Math.max(0,Number(seconds)||0);
+  return `${Math.floor(safe/60)}:${String(safe%60).padStart(2,'0')}`;
+}
+function renderSifirQuestion(){
+  if(window._gameOver) return;
+  if(sifirQInterval) clearInterval(sifirQInterval);
+  const sifir=gameState.sifir;
+  const question=sifir.questions[sifir.qIndex];
+  const card=document.getElementById('gameCard');
+  card.innerHTML=`<div class="sifir-game" style="max-width:600px;margin:auto;text-align:center;">
+    <h2>${sifir.stationName}</h2>
+    <div id="sifirTopTimer" style="font-size:42px;font-weight:900;color:var(--red);margin:8px 0;">${sifirClockText(timeLeftSec)}</div>
+    <p style="margin:0 0 8px;color:#65513a;">Masa stesen berbaki</p>
+    <div style="font-size:20px;font-weight:800;margin:20px 0 6px;">Soalan ${sifir.qIndex+1}/${SifirEngine.SIFIR_TARGET}</div>
+    <div id="sifirQCountdown" style="font-size:18px;font-weight:800;color:var(--navy);margin-bottom:16px;">⏱️ 4 saat</div>
+    <div id="sifirPrompt" style="font-size:52px;font-weight:900;margin:10px 0 22px;">${question.a} × ${question.b}</div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+      ${question.choices.map(choice=>`<button class="big sifir-choice" style="margin:0;min-height:62px;" onclick="answerSifir(${choice})">${choice}</button>`).join('')}
+    </div>
+    <div id="sifirMsg" aria-live="polite"></div>
+  </div>`;
+  let remaining=SifirEngine.PER_QUESTION_SEC;
+  sifirQInterval=setInterval(()=>{
+    remaining--;
+    const countdown=document.getElementById('sifirQCountdown');
+    if(countdown) countdown.textContent=`⏱️ ${Math.max(0,remaining)} saat`;
+    if(remaining<=0){
+      clearInterval(sifirQInterval); sifirQInterval=null;
+      restartSifir('Masa 4 saat tamat. Set baharu bermula semula dari Soalan 1.');
+    }
+  },1000);
+}
+function answerSifir(choice){
+  if(window._gameOver) return;
+  if(sifirQInterval) clearInterval(sifirQInterval);
+  sifirQInterval=null;
+  const sifir=gameState.sifir;
+  const question=sifir.questions[sifir.qIndex];
+  if(Number(choice)===Number(question.answer)){
+    sifir.qIndex++;
+    gameState.correct=sifir.qIndex;
+    if(sifir.qIndex>=SifirEngine.SIFIR_TARGET){
+      finishSifir(SifirEngine.scoreFromTime(timeLeftSec,sifir.totalSec));
+      return;
+    }
+    renderSifirQuestion();
+    return;
+  }
+  restartSifir('Jawapan belum tepat. Set baharu bermula semula dari Soalan 1.');
+}
+function restartSifir(message){
+  if(window._gameOver) return;
+  if(sifirQInterval) clearInterval(sifirQInterval);
+  sifirQInterval=null;
+  const sifir=gameState.sifir;
+  const token=++sifir.restartToken;
+  const card=document.getElementById('gameCard');
+  card.innerHTML=`<div class="finalbox"><div style="font-size:48px;">↻</div><h2>Cuba Semula</h2><p>${message}</p></div>`;
+  setTimeout(()=>{
+    if(window._gameOver || !gameState.sifir || gameState.sifir.restartToken!==token) return;
+    gameState.sifir.questions=SifirEngine.generateQuestions();
+    gameState.sifir.qIndex=0;
+    gameState.correct=0;
+    renderSifirQuestion();
+  },350);
+}
+function finishSifir(score){
+  if(window._gameOver) return;
+  window._gameOver=true;
+  if(sifirQInterval) clearInterval(sifirQInterval);
+  sifirQInterval=null;
+  window._sifirTimeout=null;
+  clearInterval(timerInterval);
+  const onTime=!timeUp;
+  const timeTakenSec=Math.round((Date.now()-window._startedAt)/1000);
+  if(window._testMode){ showTestResult(onTime,score,timeTakenSec); return; }
+  submitCompletion(onTime,score,timeTakenSec);
 }
 
 // Sudoku uses fixed, verified puzzles so every group receives the same
