@@ -2046,7 +2046,10 @@ function renderSifirQuestion(){
     <div id="sifirTopTimer" style="font-size:42px;font-weight:900;color:var(--red);margin:8px 0;">${sifirClockText(timeLeftSec)}</div>
     <p style="margin:0 0 8px;color:#65513a;">Masa stesen berbaki</p>
     <div style="font-size:20px;font-weight:800;margin:20px 0 6px;">Soalan ${sifir.qIndex+1}/${SifirEngine.SIFIR_TARGET}</div>
-    <div id="sifirQCountdown" style="font-size:18px;font-weight:800;color:var(--navy);margin-bottom:16px;">⏱️ 4 saat</div>
+    <div id="sifirQCountdown" style="font-size:18px;font-weight:800;color:var(--navy);margin-bottom:8px;">⏱️ 4 saat</div>
+    <div id="sifirQTimer" role="progressbar" aria-label="Masa menjawab soalan" aria-valuemin="0" aria-valuemax="4" aria-valuenow="4" style="height:16px;max-width:360px;margin:0 auto 18px;border:2px solid var(--navy);border-radius:999px;overflow:hidden;background:#fff8df;box-shadow:inset 0 1px 2px #0002;">
+      <div id="sifirQBar" style="height:100%;width:100%;background:var(--green);transition:width .2s linear,background .2s linear;"></div>
+    </div>
     <div id="sifirPrompt" style="font-size:52px;font-weight:900;margin:10px 0 22px;">${question.a} × ${question.b}</div>
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
       ${question.choices.map(choice=>`<button class="big sifir-choice" style="margin:0;min-height:62px;" onclick="answerSifir(${choice})">${choice}</button>`).join('')}
@@ -2058,6 +2061,14 @@ function renderSifirQuestion(){
     remaining--;
     const countdown=document.getElementById('sifirQCountdown');
     if(countdown) countdown.textContent=`⏱️ ${Math.max(0,remaining)} saat`;
+    const timer=document.getElementById('sifirQTimer');
+    const bar=document.getElementById('sifirQBar');
+    const percent=Math.max(0,remaining)/SifirEngine.PER_QUESTION_SEC*100;
+    if(timer) timer.setAttribute('aria-valuenow',String(Math.max(0,remaining)));
+    if(bar){
+      bar.style.width=`${percent}%`;
+      bar.style.background=remaining<=1 ? 'var(--red)' : remaining<=2 ? 'var(--gold)' : 'var(--green)';
+    }
     if(remaining<=0){
       clearInterval(sifirQInterval); sifirQInterval=null;
       restartSifir('Masa 4 saat tamat. Set baharu bermula semula dari Soalan 1.');

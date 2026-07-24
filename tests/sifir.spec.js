@@ -44,6 +44,8 @@ test('Sifir Challenge resets after a wrong answer and completes after 15 correct
 
   await expect(page.locator('.sifir-choice')).toHaveCount(4);
   await expect(page.locator('#gameCard')).toContainText('Soalan 1/15');
+  await expect(page.locator('#sifirQTimer')).toHaveAttribute('aria-valuenow', '4');
+  await expect(page.locator('#sifirQBar')).toBeVisible();
   const firstAnswer = await answerForPrompt(page);
   const wrong = await page.locator('.sifir-choice').evaluateAll((buttons, answer) =>
     Number(buttons.map(button => button.textContent.trim()).find(value => Number(value) !== answer)), firstAnswer);
