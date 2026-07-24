@@ -658,6 +658,7 @@ let stationCount = 3;
 function currentStationCount(){ return StationLayout.clampStationCount(Object.keys(stations||{}).length); }
 let browserOnline = navigator.onLine !== false;
 let firebaseConnected = true;
+let firebaseConnectionEstablished = false;
 let syncingOfflineWrites = false;
 let connectivityWatching = false;
 function readLocalJson(key){
@@ -667,7 +668,10 @@ function writeLocalJson(key, value){
   try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
 }
 function removeLocalValue(key){ try { localStorage.removeItem(key); } catch (_) {} }
-function isOffline(){ return !browserOnline || !firebaseConnected; }
+// Firebase reports `.info/connected === false` briefly while its first socket
+// is still opening. Until it has connected at least once, rely on the browser
+// network signal so a first-ever visitor can download and cache the config.
+function isOffline(){ return !browserOnline || (firebaseConnectionEstablished && !firebaseConnected); }
 function updateConnectivityBadge(){
   const badge=document.getElementById('connectivityBadge');
   if(!badge) return;
@@ -720,7 +724,10 @@ function initConnectivity(){
   window.addEventListener('online',()=>{ browserOnline=true; updateConnectivityBadge(); flushPendingWrites(); });
   db.ref('.info/connected').on('value',snap=>{
     const value=snap.val();
-    if(typeof value==='boolean') firebaseConnected=value;
+    if(typeof value==='boolean'){
+      firebaseConnected=value;
+      if(value) firebaseConnectionEstablished=true;
+    }
     updateConnectivityBadge();
     if(!isOffline()) flushPendingWrites();
   });
@@ -1195,8 +1202,16 @@ function initApp(){
   initConnectivity();
   renderGroupLoginOptions();
   if(isTangramDemo()){ startTangramDemo(); return; }
-  if(isSmartBoard()){ loadConfigCache().then(()=>{ watchSession(); showSmartBoard(); }); return; }
-  loadConfigCache().then(()=>{ watchSession(); tryRestoreSession(); });
+  if(isSmartBoard()){
+    loadConfigCache().then(()=>{ watchSession(); showSmartBoard(); }).catch(error=>console.warn(error.message));
+    return;
+  }
+  loadConfigCache().then(()=>{ watchSession(); tryRestoreSession(); }).catch(error=>{
+    console.warn(error.message);
+    show('view-login');
+    const msg=document.getElementById('groupLoginMsg');
+    if(msg) msg.innerHTML='<div class="msg err">Sambungan tiada dan config belum pernah dimuat turun pada peranti ini. Sambung internet sekali, kemudian cuba lagi.</div>';
+  });
 }
 
 // Launch the tangram station directly in demo mode (test mode = no Firebase writes).

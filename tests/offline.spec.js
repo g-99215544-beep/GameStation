@@ -36,6 +36,12 @@ async function seedPage(page) {
 test('progress persists offline across reload and flushes when back online', async ({ page }) => {
   await seedPage(page);
   await page.goto(pathToFileURL(path.join(__dirname, '..', 'index.html')).href);
+  expect(await page.evaluate(() => {
+    browserOnline = true;
+    firebaseConnected = false;
+    firebaseConnectionEstablished = false;
+    return isOffline();
+  })).toBe(false);
   await page.evaluate(async () => {
     await loadConfigCache();
     currentGroupId = '1';
