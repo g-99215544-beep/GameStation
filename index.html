@@ -17,6 +17,12 @@
 <script src="sifir/engine.js"></script>
 <style>
   :root{--navy:#12385b;--gold:#ffc63d;--cream:#fff1c8;--green:#178363;--red:#c8493f;}
+  @keyframes sifir-question-countdown{
+    0%{transform:scaleX(1);background:var(--green);}
+    50%{background:var(--green);}
+    75%{background:var(--gold);}
+    100%{transform:scaleX(0);background:var(--red);}
+  }
   *{box-sizing:border-box;}
   body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--cream);margin:0;padding:0;color:var(--navy);min-height:100vh;}
   .view{display:none;}
@@ -2048,7 +2054,7 @@ function renderSifirQuestion(){
     <div style="font-size:20px;font-weight:800;margin:20px 0 6px;">Soalan ${sifir.qIndex+1}/${SifirEngine.SIFIR_TARGET}</div>
     <div id="sifirQCountdown" style="font-size:18px;font-weight:800;color:var(--navy);margin-bottom:8px;">⏱️ 4 saat</div>
     <div id="sifirQTimer" role="progressbar" aria-label="Masa menjawab soalan" aria-valuemin="0" aria-valuemax="4" aria-valuenow="4" style="height:16px;max-width:360px;margin:0 auto 18px;border:2px solid var(--navy);border-radius:999px;overflow:hidden;background:#fff8df;box-shadow:inset 0 1px 2px #0002;">
-      <div id="sifirQBar" style="height:100%;width:100%;background:var(--green);transition:width .2s linear,background .2s linear;"></div>
+      <div id="sifirQBar" style="height:100%;width:100%;transform-origin:left center;animation:sifir-question-countdown ${SifirEngine.PER_QUESTION_SEC}s linear forwards;"></div>
     </div>
     <div id="sifirPrompt" style="font-size:52px;font-weight:900;margin:10px 0 22px;">${question.a} × ${question.b}</div>
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
@@ -2062,13 +2068,7 @@ function renderSifirQuestion(){
     const countdown=document.getElementById('sifirQCountdown');
     if(countdown) countdown.textContent=`⏱️ ${Math.max(0,remaining)} saat`;
     const timer=document.getElementById('sifirQTimer');
-    const bar=document.getElementById('sifirQBar');
-    const percent=Math.max(0,remaining)/SifirEngine.PER_QUESTION_SEC*100;
     if(timer) timer.setAttribute('aria-valuenow',String(Math.max(0,remaining)));
-    if(bar){
-      bar.style.width=`${percent}%`;
-      bar.style.background=remaining<=1 ? 'var(--red)' : remaining<=2 ? 'var(--gold)' : 'var(--green)';
-    }
     if(remaining<=0){
       clearInterval(sifirQInterval); sifirQInterval=null;
       restartSifir('Masa 4 saat tamat. Set baharu bermula semula dari Soalan 1.');
