@@ -16,6 +16,7 @@
 <script src="stations/layout.js"></script>
 <script src="sifir/engine.js"></script>
 <script src="offline/store.js"></script>
+<script src="hunts/registry.js"></script>
 <style>
   :root{--navy:#12385b;--gold:#ffc63d;--cream:#fff1c8;--green:#178363;--red:#c8493f;}
   @keyframes sifir-question-countdown{
@@ -401,8 +402,12 @@
         </div>
         <button class="linkbtn" onclick="logout()">&#8592; Log keluar</button>
       </div>
-      <div class="admin-nav">
-        <label for="adminTabSelect">Menu admin</label>
+      <div class="feature-actions" id="adminTopTabs">
+        <button class="secondary" id="adminTopHunts" onclick="selectAdminTopTab('hunts')">Senarai Treasure Hunt</button>
+        <button id="adminTopSetup" onclick="beginNewHunt()">＋ Setup Treasure Hunt Baru</button>
+      </div>
+      <div class="admin-nav" hidden>
+        <label for="adminTabSelect">Langkah setup</label>
         <select id="adminTabSelect" onchange="selectAdminTab(this.value)">
           <option value="groups">Langkah 1: Pengurusan Ahli &amp; Kumpulan</option>
           <option value="setup">Langkah 2: Pengurusan Stesen</option>
@@ -415,9 +420,18 @@
       </div>
       <p class="admin-tab-note" id="adminTabNote"></p>
 
+      <section class="card" id="admin-hunt-list">
+        <h3>Senarai Treasure Hunt</h3>
+        <p class="admin-panel-intro">Pilih hunt untuk mula/tamat, edit persediaan, lihat dashboard atau buka peti harta karun.</p>
+        <div id="huntList"></div>
+      </section>
+
       <section class="admin-panel active" id="admin-panel-groups">
         <div class="card">
-          <h3>Kumpulan &amp; Ahli</h3>
+          <h3>Setup Treasure Hunt</h3>
+          <label for="huntName">Nama Treasure Hunt</label>
+          <input id="huntName" placeholder="Contoh: Tahun 5" autocomplete="off">
+          <h4>Kumpulan &amp; Ahli</h4>
           <p class="admin-panel-intro">Tetapkan bilangan kumpulan dan ahli, kemudian tampal senarai nama untuk mengagihkan murid. Anda boleh pindah, tambah, atau padam ahli dan kumpulan.</p>
           <div id="groupManagerLock"></div>
           <div class="group-setup">
@@ -449,7 +463,6 @@
             <div class="setup-step" data-step="2"><span class="step-number">2</span>Stesen</div>
             <div class="setup-step" data-step="3"><span class="step-number">3</span>Password</div>
             <div class="setup-step" data-step="4"><span class="step-number">4</span>QR</div>
-            <div class="setup-step" data-step="5"><span class="step-number">5</span>Mula Hunt</div>
           </div>
           <h3>Pengurusan Stesen (<span id="stationCountLabel">3</span>)</h3>
           <p class="admin-panel-intro">Tetapkan bilangan stesen (3–6) dan lengkapkan setiap stesen. Tekan ＋ Stesen / − Stesen untuk melaraskan bilangan.</p>
@@ -460,7 +473,7 @@
           </div>
           <div id="stationsArea"></div>
           <div class="feature-actions">
-            <button class="secondary" onclick="pushConfig()">Simpan Setup &amp; Sedia Password</button>
+            <button class="secondary" onclick="pushConfig()">Simpan Treasure Hunt</button>
             <button onclick="testStation(1)">Uji Stesen 1</button>
           </div>
           <div id="pushStatus"></div>
@@ -495,7 +508,7 @@
           <div id="qrOutput" class="qr-grid"></div>
           <div class="step-actions">
             <button onclick="goToAdminStep('passwords')">&#8592; Kembali</button>
-            <button class="step-next" onclick="goToAdminStep('session')">Seterusnya: Mula Hunt &#8594;</button>
+            <button class="step-next" onclick="pushConfig()">Simpan Treasure Hunt</button>
           </div>
         </div>
       </section>
@@ -650,8 +663,22 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "810640165554",
   appId: "1:810640165554:web:b3ad2dc6f1583ec2a657ab"
 };
-const PATH = 'gamestation2026';
+const ROOT_PATH = 'gamestation2026';
+let currentHuntId = null;
+let activeHuntId = null;
+let hunts = {};
+let currentHuntCreatedAt = null;
+let isHuntDraft = false;
 let db, stations, groups, currentGroupId, progress={}, timerInterval, timeLeftSec, timeUp=false, gameState={}, html5QrCode;
+let activeHuntWatcherRef=null, watchedSessionRef=null, watchedSessionPath=null, watchedDashboardRef=null;
+function huntPath(sub=''){
+  // The empty-context fallback preserves direct test-station usage. Normal app
+  // flows always set currentHuntId from the list or activeHuntId first.
+  const base=currentHuntId ? `${ROOT_PATH}/hunts/${currentHuntId}` : ROOT_PATH;
+  return sub ? `${base}/${sub}` : base;
+}
+function huntRef(sub=''){ return db.ref(huntPath(sub)); }
+function rootRef(sub=''){ return db.ref(sub ? `${ROOT_PATH}/${sub}` : ROOT_PATH); }
 let groupDraft = [];
 let sifirQInterval = null;
 let stationCount = 3;
@@ -680,7 +707,7 @@ function updateConnectivityBadge(){
   if(isOffline()) badge.textContent='📴 Luar Talian';
 }
 function cacheConfig(){
-  writeLocalJson(OfflineStore.CONFIG_CACHE_KEY,{stations:stations||{},groups:groups||{},stationCount,ts:Date.now()});
+  writeLocalJson(OfflineStore.CONFIG_CACHE_KEY,{huntId:currentHuntId,stations:stations||{},groups:groups||{},stationCount,ts:Date.now()});
 }
 function applyConfigCache(cfg){
   stations=(cfg&&cfg.stations)||{};
@@ -696,7 +723,8 @@ function firebaseOnceWithTimeout(ref, timeoutMs=5000){
     ref.once('value').then(value=>{ clearTimeout(timer); resolve(value); },error=>{ clearTimeout(timer); reject(error); });
   });
 }
-function clearCachedProgress(gid){ if(gid) removeLocalValue(OfflineStore.progressKey(gid)); }
+function clearCachedProgress(gid){ if(gid) removeLocalValue(progressCacheKey(gid)); }
+function progressCacheKey(gid){ return currentHuntId ? OfflineStore.progressKey(`${currentHuntId}_${gid}`) : OfflineStore.progressKey(gid); }
 function persistSessionCache(next){
   const previous=cachedSession();
   const freshActive=next && next.status==='active' && Number(next.startedAt||0)>Number(previous&&previous.startedAt||0);
@@ -1177,10 +1205,15 @@ function saveGroupManager(){
   const gr = buildGroupsFromDraft(groupDraft, groups);
   const prog = {};
   Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
+  if(isHuntDraft){
+    groups=gr; renderGroupLoginOptions();
+    if(msg) msg.innerHTML='<div class="msg ok">Kumpulan disimpan dalam draf. Tekan Simpan Treasure Hunt pada akhir setup.</div>';
+    return;
+  }
   Promise.all([
-    db.ref(PATH+'/config/groups').set(gr),
-    db.ref(PATH+'/progress').set(prog),
-    db.ref(PATH+'/session').set({status:'setup'})
+    huntRef('config/groups').set(gr),
+    huntRef('progress').set(prog),
+    huntRef('session').set({status:'setup'})
   ]).then(()=>{
     groups = gr;
     sessionInfo = {status:'setup'};
@@ -1202,15 +1235,62 @@ function initApp(){
   initConnectivity();
   renderGroupLoginOptions();
   if(isTangramDemo()){ startTangramDemo(); return; }
-  if(isSmartBoard()){
-    loadConfigCache().then(()=>{ watchSession(); showSmartBoard(); }).catch(error=>console.warn(error.message));
+  watchHunts();
+  const saved=readLocalJson('gs_session');
+  if(saved && saved.role==='admin'){
+    tryRestoreSession();
     return;
   }
-  loadConfigCache().then(()=>{ watchSession(); tryRestoreSession(); }).catch(error=>{
-    console.warn(error.message);
-    show('view-login');
-    const msg=document.getElementById('groupLoginMsg');
-    if(msg) msg.innerHTML='<div class="msg err">Sambungan tiada dan config belum pernah dimuat turun pada peranti ini. Sambung internet sekali, kemudian cuba lagi.</div>';
+  if(!isSmartBoard()) show('view-login');
+  watchActiveHunt();
+}
+
+function showNoActiveHunt(){
+  if(isSmartBoard()) document.getElementById('topTitle').innerText='Peti Harta Karun';
+  document.getElementById('timer').style.display='none';
+  if(isSmartBoard()){
+    show('view-session');
+    const card=document.getElementById('sessionMsgCard');
+    if(card) card.innerHTML='<div style="font-size:64px;">⌛</div><h2>Belum Ada Treasure Hunt Aktif</h2><p>Guru belum memulakan Treasure Hunt. Halaman ini akan bersedia secara automatik apabila sesi dimulakan.</p>';
+    return;
+  }
+  show('view-login');
+  const msg=document.getElementById('groupLoginMsg');
+  if(msg) msg.innerHTML='<div class="msg">Belum ada Treasure Hunt aktif. Tunggu guru tekan Mula.</div>';
+}
+function watchActiveHunt(){
+  if(activeHuntWatcherRef) return;
+  activeHuntWatcherRef=rootRef('activeHuntId');
+  activeHuntWatcherRef.on('value',snap=>{
+    const id=snap.val()||null;
+    activeHuntId=id;
+    const saved=readLocalJson('gs_session');
+    if(saved && saved.role==='admin') return;
+    if(!id){
+      if(saved && saved.role==='group' && !saved.huntId){
+        loadConfigCache().then(()=>{ watchSession(); tryRestoreSession(); }).catch(showNoActiveHunt);
+        return;
+      }
+      showNoActiveHunt();
+      return;
+    }
+    if(String(currentHuntId)===String(id) && stations && Object.keys(stations).length){
+      if(isSmartBoard()) showSmartBoard();
+      else if(saved && saved.role==='group') tryRestoreSession();
+      else show('view-login');
+      return;
+    }
+    currentHuntId=id;
+    currentHuntCreatedAt=(hunts[id]||{}).createdAt||null;
+    loadConfigCache().then(()=>{
+      watchSession();
+      if(isSmartBoard()) showSmartBoard();
+      else if(saved && saved.role==='group') tryRestoreSession();
+      else show('view-login');
+    }).catch(error=>{
+      console.warn(error.message);
+      showNoActiveHunt();
+    });
   });
 }
 
@@ -1224,7 +1304,7 @@ function startTangramDemo(){
 const SESSION_DURATION_MS = 12*60*60*1000; // 12 hours
 
 function saveSession(role, gid){
-  localStorage.setItem('gs_session', JSON.stringify({role, groupId:gid||null, ts:Date.now()}));
+  localStorage.setItem('gs_session', JSON.stringify({role, groupId:gid||null, huntId:currentHuntId||null, ts:Date.now()}));
 }
 function clearSession(){
   localStorage.removeItem('gs_session');
@@ -1243,9 +1323,7 @@ function tryRestoreSession(){
   if(session.role==='admin'){
     show('view-admin');
     document.getElementById('topTitle').innerText='⚙️ Admin Panel';
-    watchDashboard();
-    renderSessionControls();
-    selectAdminTab('setup');
+    selectAdminTopTab('hunts');
   } else if(session.role==='group' && session.groupId && groups[session.groupId]){
     currentGroupId = session.groupId;
     document.getElementById('topTitle').innerText='Kumpulan '+currentGroupId;
@@ -1254,7 +1332,7 @@ function tryRestoreSession(){
       sessionInfo=cached||{status:'setup'};
       enterGroupBySession();
     } else {
-      db.ref(PATH+'/session').once('value').then(s=>{
+      huntRef('session').once('value').then(s=>{
         sessionInfo=s.val()||{status:'setup'}; persistSessionCache(sessionInfo); enterGroupBySession();
       }).catch(()=>{ sessionInfo=cached||{status:'setup'}; enterGroupBySession(); });
     }
@@ -1267,7 +1345,7 @@ function tryRestoreSession(){
 function loadConfigCache(){
   const loadLocal=()=>{
     const cached=readLocalJson(OfflineStore.CONFIG_CACHE_KEY);
-    if(!cached) throw new Error('Config belum disimpan pada peranti ini. Sambung internet sekali untuk log masuk.');
+    if(!cached || (currentHuntId && cached.huntId && String(cached.huntId)!==String(currentHuntId))) throw new Error('Config belum disimpan pada peranti ini. Sambung internet sekali untuk log masuk.');
     applyConfigCache(cached);
   };
   // Use the already-saved copy immediately when it exists offline. If this is
@@ -1277,7 +1355,7 @@ function loadConfigCache(){
     loadLocal();
     return Promise.resolve();
   }
-  return firebaseOnceWithTimeout(db.ref(PATH+'/config')).then(snap=>{
+  return firebaseOnceWithTimeout(huntRef('config')).then(snap=>{
     applyConfigCache(snap.val()||{});
     cacheConfig();
   }).catch(()=>{ loadLocal(); });
@@ -1310,9 +1388,8 @@ function loginAsAdmin(){
     saveSession('admin');
     show('view-admin');
     document.getElementById('topTitle').innerText='⚙️ Admin Panel';
-    watchDashboard();
-    renderSessionControls();
-    selectAdminTab('groups');
+    watchHunts();
+    selectAdminTopTab('hunts');
   } else {
     document.getElementById('adminLoginMsg').innerHTML='<div class="msg err">PIN salah</div>';
   }
@@ -1340,7 +1417,7 @@ function loginAsGroup(){
     sessionInfo=cached||{status:'setup'};
     enterGroupBySession();
   } else {
-    db.ref(PATH+'/session').once('value').then(s=>{
+    huntRef('session').once('value').then(s=>{
       sessionInfo=s.val()||{status:'setup'}; persistSessionCache(sessionInfo); enterGroupBySession();
     }).catch(()=>{ sessionInfo=cached||{status:'setup'}; enterGroupBySession(); });
   }
@@ -1356,6 +1433,99 @@ const ADMIN_TAB_NOTES = {
   dashboard:'Pantau status, stesen semasa, kunci, dan markah semua kumpulan.'
 };
 const ADMIN_STEP_MAP = {groups:1,setup:2,passwords:3,qr:4,session:5};
+let adminTopTab='hunts';
+function selectAdminTopTab(tab){
+  adminTopTab=tab;
+  const list=document.getElementById('admin-hunt-list');
+  const setupPanels=['groups','setup','passwords','qr'];
+  const huntsButton=document.getElementById('adminTopHunts');
+  const setupButton=document.getElementById('adminTopSetup');
+  if(huntsButton) huntsButton.classList.toggle('secondary',tab==='hunts');
+  if(setupButton) setupButton.classList.toggle('secondary',tab==='setup');
+  if(list) list.hidden=tab!=='hunts';
+  if(tab==='hunts'){
+    document.querySelectorAll('.admin-panel').forEach(panel=>panel.classList.remove('active'));
+    renderHuntList();
+    return;
+  }
+  setupPanels.forEach(name=>document.getElementById('admin-panel-'+name)?.classList.remove('active'));
+  selectAdminTab('groups');
+}
+function watchHunts(){
+  rootRef('hunts').on('value',snap=>{
+    hunts=snap.val()||{};
+    activeHuntId=HuntRegistry.activeHuntId(hunts);
+    renderHuntList();
+  });
+}
+function renderHuntList(){
+  const holder=document.getElementById('huntList');
+  if(!holder) return;
+  const list=HuntRegistry.sortedHunts(hunts).filter(hunt=>hunt.name);
+  if(!list.length){
+    holder.innerHTML='<div class="empty-state">Belum ada Treasure Hunt. Tekan “Setup Treasure Hunt Baru” untuk mula.</div>';
+    return;
+  }
+  holder.innerHTML=list.map(hunt=>{
+    const label=HuntRegistry.statusLabel(hunt);
+    const active=label==='Aktif';
+    return `<div class="group-card"><div class="group-card-head"><h4>${escapeHtml(hunt.name)} <span class="badge ${active?'done':'idle'}">${label}</span></h4></div>
+      <div class="feature-actions">
+        <button class="secondary" onclick="toggleHuntSession('${hunt.id}')">${active?'Tamat':'Mula'} Hunt</button>
+        <button onclick="editHunt('${hunt.id}')">Edit</button>
+        <button onclick="openHuntDashboard('${hunt.id}')">Live Dashboard</button>
+        <button onclick="openHuntTreasure('${hunt.id}')">Peti Harta Karun</button>
+        <button onclick="deleteHunt('${hunt.id}')">Padam</button>
+      </div></div>`;
+  }).join('');
+}
+function beginNewHunt(){
+  currentHuntId=null; currentHuntCreatedAt=null; isHuntDraft=true; stations={}; groups={}; stationCount=3; groupDraft=[]; sessionInfo={status:'setup'};
+  const name=document.getElementById('huntName'); if(name) name.value='';
+  buildStationsUI(stations); renderGroupManager();
+  selectAdminTopTab('setup');
+}
+function editHunt(id){
+  const hunt=hunts[id]; if(!hunt) return;
+  currentHuntId=id; currentHuntCreatedAt=hunt.createdAt||null;
+  isHuntDraft=false;
+  loadConfigCache().then(()=>{
+    const name=document.getElementById('huntName'); if(name) name.value=hunt.name||'';
+    selectAdminTopTab('setup'); selectAdminTab('groups'); watchSession();
+  });
+}
+function openHuntDashboard(id){
+  const hunt=hunts[id]; if(!hunt) return;
+  currentHuntId=id; currentHuntCreatedAt=hunt.createdAt||null;
+  isHuntDraft=false;
+  loadConfigCache().then(()=>{ selectAdminTopTab('setup'); selectAdminTab('dashboard'); watchDashboard(); });
+}
+function openHuntTreasure(id){
+  const hunt=hunts[id]; if(!hunt) return;
+  currentHuntId=id; currentHuntCreatedAt=hunt.createdAt||null;
+  isHuntDraft=false;
+  loadConfigCache().then(()=>showSmartBoard());
+}
+function toggleHuntSession(id){
+  const hunt=hunts[id]; if(!hunt) return;
+  if(hunt.session && hunt.session.status==='active'){
+    currentHuntId=id;
+    Promise.all([huntRef('session').update({status:'ended',endedAt:Date.now()}),rootRef('activeHuntId').set(null)]).catch(error=>alert('Tidak dapat tamatkan hunt: '+error.message));
+    return;
+  }
+  if(!HuntRegistry.canStart(hunts,id) || (activeHuntId && String(activeHuntId)!==String(id))){
+    alert('Treasure Hunt lain masih aktif. Tamatkan hunt tersebut dahulu.'); return;
+  }
+  currentHuntId=id;
+  Promise.all([huntRef('session').set({status:'active',startedAt:Date.now()}),rootRef('activeHuntId').set(id)]).catch(error=>alert('Tidak dapat mulakan hunt: '+error.message));
+}
+function deleteHunt(id){
+  if(String(activeHuntId)===String(id) || (hunts[id]&&hunts[id].session&&hunts[id].session.status==='active')){
+    alert('Treasure Hunt aktif tidak boleh dipadam. Tamatkan dahulu.'); return;
+  }
+  if(!confirm(`Padam Treasure Hunt “${hunts[id]&&hunts[id].name||id}”?`)) return;
+  rootRef('hunts/'+id).remove();
+}
 function selectAdminTab(tab){
   if(!document.getElementById('adminTabSelect')) return;
   const allowed = Object.prototype.hasOwnProperty.call(ADMIN_TAB_NOTES, tab) ? tab : 'setup';
@@ -1381,7 +1551,7 @@ function goToAdminStep(tab){ selectAdminTab(tab); }
 function logout(){
   if(timerInterval) clearInterval(timerInterval);
   if(html5QrCode){ html5QrCode.stop().catch(()=>{}); }
-  db.ref(PATH).off('value');
+  huntRef().off('value');
   document.body.classList.remove('board-mode');
   currentGroupId = null;
   clearSession();
@@ -1392,7 +1562,12 @@ function logout(){
 
 // ---------- SESSION LIFECYCLE (reusable across events) ----------
 function watchSession(){
-  db.ref(PATH+'/session').on('value', snap=>{
+  const path=huntPath('session');
+  if(watchedSessionPath===path) return;
+  if(watchedSessionRef) watchedSessionRef.off('value');
+  watchedSessionPath=path;
+  watchedSessionRef=huntRef('session');
+  watchedSessionRef.on('value', snap=>{
     sessionInfo = snap.val() || {status:'setup'};
     persistSessionCache(sessionInfo);
     renderSessionControls();      // admin card (no-op when not on admin)
@@ -1422,18 +1597,20 @@ function renderSessionControls(){
   if(nw)    nw.style.display    = (st==='ended')  ? 'inline-block' : 'none';
 }
 function startSession(){
-  db.ref(PATH+'/session').set({status:'active', startedAt:Date.now()});
+  if(!currentHuntId){ alert('Pilih Treasure Hunt daripada senarai dahulu.'); return; }
+  if(!HuntRegistry.canStart(hunts,currentHuntId)){ alert('Treasure Hunt lain masih aktif.'); return; }
+  Promise.all([huntRef('session').set({status:'active', startedAt:Date.now()}),rootRef('activeHuntId').set(currentHuntId)]);
 }
 function endSession(){
   if(!confirm('Tamatkan sesi sekarang? Kumpulan tidak boleh main lagi.')) return;
-  db.ref(PATH+'/session').update({status:'ended', endedAt:Date.now()});
+  Promise.all([huntRef('session').update({status:'ended', endedAt:Date.now()}),rootRef('activeHuntId').set(null)]);
 }
 function newSession(){
   if(!confirm('Mula sesi BARU dengan murid baru?\n\nSemua progress & peti harta akan direset. Stesen & password login kekal.')) return;
   const prog={};
   Object.keys(groups||{}).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
-  db.ref(PATH+'/progress').set(prog);
-  db.ref(PATH+'/session').set({status:'setup'});
+  huntRef('progress').set(prog);
+  huntRef('session').set({status:'setup'});
 }
 // Group side: route to game / waiting / ended based on live session status.
 function enterGroupBySession(){
@@ -1461,7 +1638,7 @@ function showSessionMsg(kind){
       <button class="linkbtn" onclick="logout()">← Log keluar</button>`;
   } else {
     card.innerHTML = `<div style="font-size:64px;">🏁</div><h2>Sesi Tamat</h2><p>Terima kasih, Kumpulan ${currentGroupId}!</p><div id="sessFinal" style="font-size:34px;font-weight:800;color:var(--gold);margin:8px 0;">…</div><button class="linkbtn" onclick="logout()">← Log keluar</button>`;
-    db.ref(PATH+'/progress/'+currentGroupId).once('value').then(s=>{
+    huntRef('progress/'+currentGroupId).once('value').then(s=>{
       const p=s.val()||{}; const sc = (p.finalScore!=null ? p.finalScore : (p.totalScore||0));
       const el=document.getElementById('sessFinal'); if(el) el.innerText = sc + ' markah';
     });
@@ -1678,6 +1855,12 @@ function reindexGroupsForCount(existingGroups, count){
 function pushConfig(){
   const st = collectStations();
   if(!validateStationPasswords(st) || !validateWorksheetStations(st)) return;
+  const name=String(document.getElementById('huntName')?.value||'').trim();
+  if((isHuntDraft || currentHuntId) && !name){
+    document.getElementById('pushStatus').innerHTML='<div class="msg err">Masukkan nama Treasure Hunt terlebih dahulu.</div>';
+    selectAdminTopTab('setup'); selectAdminTab('groups');
+    return;
+  }
   if(sessionInfo && sessionInfo.status==='active'){
     document.getElementById('pushStatus').innerHTML='<div class="msg err">Tidak boleh simpan semasa sesi aktif. Tekan Tamat dahulu.</div>';
     return;
@@ -1690,16 +1873,29 @@ function pushConfig(){
   const gr=reindexGroupsForCount(baseGroups, N);
   const prog={};
   Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
-  db.ref(PATH+'/config/stations').set(st);
-  db.ref(PATH+'/config/groups').set(gr);
-  db.ref(PATH+'/session').set({status:'setup'}); // fresh config -> not started yet
-  db.ref(PATH+'/progress').set(prog).then(()=>{
-    stations=st; groups=gr; stationCount=N;
+  if(isHuntDraft && !currentHuntId) currentHuntId=rootRef('hunts').push().key;
+  const now=Date.now();
+  const createdAt=currentHuntCreatedAt||now;
+  const metadata=currentHuntId ? huntRef().update({name,createdAt,updatedAt:now}) : Promise.resolve();
+  Promise.all([
+    metadata,
+    huntRef('config/stations').set(st),
+    huntRef('config/groups').set(gr),
+    huntRef('session').set({status:'setup'}),
+    huntRef('progress').set(prog)
+  ]).then(()=>{
+    currentHuntCreatedAt=createdAt;
+    isHuntDraft=false;
+    stations=st; groups=gr; stationCount=N; sessionInfo={status:'setup'};
+    cacheConfig();
     renderGroupLoginOptions();
     let listHtml = '<h4>Password Login Kumpulan (beri kepada setiap kumpulan)</h4><table><tr><th>Kumpulan</th><th>Password</th><th>Mula di Stesen</th></tr>';
     Object.values(gr).forEach(g=>{ listHtml += `<tr><td>${g.name}</td><td><b>${g.loginPassword}</b></td><td>${g.startStation}</td></tr>`; });
     listHtml += '</table>';
     document.getElementById('pushStatus').innerHTML='<div class="msg ok">✅ Config di-push. '+Object.keys(gr).length+' kumpulan sedia.</div>'+listHtml;
+    if(currentHuntId) window.setTimeout(()=>selectAdminTopTab('hunts'),400);
+  }).catch(error=>{
+    document.getElementById('pushStatus').innerHTML='<div class="msg err">Gagal menyimpan Treasure Hunt: '+escapeHtml(error.message)+'</div>';
   });
 }
 function showLoginPasswords(message=''){
@@ -1779,7 +1975,12 @@ function saveLoginPasswords(){
     const startStation=startStationLocked ? currentStart : edited[gid].startStation;
     updated[gid]={...groups[gid],loginPassword:edited[gid].loginPassword,startStation,order:rotationFor(startStation)};
   });
-  db.ref(PATH+'/config/groups').set(updated).then(()=>{
+  if(isHuntDraft){
+    groups=updated;
+    showLoginPasswords('Tetapan kumpulan disimpan dalam draf. Simpan Treasure Hunt pada langkah terakhir.');
+    return;
+  }
+  huntRef('config/groups').set(updated).then(()=>{
     groups=updated;
     showLoginPasswords('Tetapan kumpulan berjaya disimpan.');
   }).catch(error=>alert('Tidak dapat simpan password: '+error.message));
@@ -1822,7 +2023,9 @@ function printQRCodes(){
   window.print();
 }
 function watchDashboard(){
-  db.ref(PATH+'/progress').on('value', snap=>{
+  if(watchedDashboardRef) watchedDashboardRef.off('value');
+  watchedDashboardRef=huntRef('progress');
+  watchedDashboardRef.on('value', snap=>{
     const prog = snap.val()||{};
     const rows = document.getElementById('dashRows');
     rows.innerHTML='';
@@ -1838,22 +2041,22 @@ function watchDashboard(){
 
 // ---------- GROUP FLOW ----------
 function loadGroupProgress(){
-  const cached=readLocalJson(OfflineStore.progressKey(currentGroupId));
+  const cached=readLocalJson(progressCacheKey(currentGroupId));
   const useProgress=p=>{
     const safe=p || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
     progress=safe;
-    writeLocalJson(OfflineStore.progressKey(currentGroupId),safe);
+    writeLocalJson(progressCacheKey(currentGroupId),safe);
     if(safe.status==='won' || StationLayout.isJourneyDone(safe.currentIndex||0, currentStationCount())){ showGoToBoard(); return; }
     showClueScreen();
   };
   // A local journey is authoritative: it may contain stations not yet synced.
   if(cached){ useProgress(cached); return; }
   if(isOffline()) { useProgress(null); return; }
-  db.ref(PATH+'/progress/'+currentGroupId).once('value').then(snap=>{
+  huntRef('progress/'+currentGroupId).once('value').then(snap=>{
     const p = snap.val() || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
     progress = p;
     if(p.status==='won' || StationLayout.isJourneyDone(p.currentIndex||0, currentStationCount())){ showGoToBoard(); return; }
-    writeLocalJson(OfflineStore.progressKey(currentGroupId),p);
+    writeLocalJson(progressCacheKey(currentGroupId),p);
     showClueScreen();
   }).catch(()=>useProgress(null));
 }
@@ -2684,8 +2887,8 @@ function submitCompletion(onTime, score, timeTakenSec){
     stId, score, onTime, timeTakenSec, stationCount:currentStationCount(), now:Date.now()
   });
   progress=next;
-  const path=PATH+'/progress/'+currentGroupId;
-  writeLocalJson(OfflineStore.progressKey(currentGroupId),next);
+  const path=huntPath('progress/'+currentGroupId);
+  writeLocalJson(progressCacheKey(currentGroupId),next);
   const done=StationLayout.isJourneyDone(next.currentIndex, currentStationCount());
   // Complete the station immediately. Firebase is only a sync target, never a
   // dependency for the student journey once the group has logged in.
@@ -2715,7 +2918,7 @@ function showGoToBoard(){
   show('view-chest');
   document.getElementById('timer').style.display='none';
   const card = document.getElementById('chestCard');
-  db.ref(PATH+'/progress/'+currentGroupId).on('value', snap=>{
+  huntRef('progress/'+currentGroupId).on('value', snap=>{
     const p = snap.val()||{};
     if(p.status==='won'){
       card.innerHTML = `
@@ -2741,8 +2944,8 @@ function showSmartBoard(){
   document.body.classList.add('board-mode');
   document.getElementById('topTitle').innerText='🏴‍☠️ Peti Harta Karun';
   document.getElementById('timer').style.display='none';
-  db.ref(PATH).off('value');           // avoid stacking listeners on re-entry
-  db.ref(PATH).on('value', snap=>{
+  huntRef().off('value');           // avoid stacking listeners on re-entry
+  huntRef().on('value', snap=>{
     const data = snap.val()||{};
     const grps = (data.config && data.config.groups) || groups || {};
     renderSmartBoard(grps, data.progress||{});
@@ -2751,7 +2954,7 @@ function showSmartBoard(){
 // Leave the board: detach the live listener and return to admin (or login). The
 // board is fully live — re-opening it re-subscribes and shows current progress.
 function leaveSmartBoard(){
-  db.ref(PATH).off('value');
+  huntRef().off('value');
   document.body.classList.remove('board-mode');
   let role=null; try{ role=(JSON.parse(localStorage.getItem('gs_session'))||{}).role; }catch(e){}
   if(role==='admin'){ show('view-admin'); document.getElementById('topTitle').innerText='⚙️ Admin Panel'; }
@@ -2846,7 +3049,7 @@ function showChestWinCelebration(gid,finalScore,done){
 }
 function openChestOnBoard(gid){
   if(animatingGids.has(gid)) return;
-  db.ref(PATH+'/progress/'+gid).once('value').then(snap=>{
+  huntRef('progress/'+gid).once('value').then(snap=>{
     const p = snap.val()||{};
     if(p.status==='won') return; // already opened
     if(!StationLayout.isJourneyDone(p.currentIndex||0, currentStationCount())){
@@ -2856,12 +3059,12 @@ function openChestOnBoard(gid){
     animatingGids.add(gid);
     const card = document.getElementById('chest-card-'+gid);
     playChestOpen(card, (removeOverlay)=>{
-      db.ref(PATH+'/progress').once('value').then(all=>{
+      huntRef('progress').once('value').then(all=>{
         const prog = all.val()||{};
         const order = Object.values(prog).filter(x=>x&&x.status==='won').length + 1;
         const bonus = CHEST_BONUS[Math.min(order-1, CHEST_BONUS.length-1)];
         const finalScore = (p.totalScore||0) + bonus;
-        db.ref(PATH+'/progress/'+gid).update({status:'won', finishOrder:order, finishBonus:bonus, finalScore, openedAt:Date.now()})
+        huntRef('progress/'+gid).update({status:'won', finishOrder:order, finishBonus:bonus, finalScore, openedAt:Date.now()})
           .then(()=>{
             showChestWinCelebration(gid,finalScore,()=>{
               removeOverlay();

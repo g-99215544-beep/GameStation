@@ -18,9 +18,15 @@ test('student islands use journey positions while physical stations stay rotated
   }));
   const seed = {
     gamestation2026: {
-      config: { groups, stations },
-      session: { status: 'active' },
-      progress: {}
+      activeHuntId: 'tahun5',
+      hunts: {
+        tahun5: {
+          name: 'Tahun 5', createdAt: 1,
+          config: { groups, stations },
+          session: { status: 'active' },
+          progress: {}
+        }
+      }
     }
   };
 
