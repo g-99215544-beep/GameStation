@@ -1270,8 +1270,12 @@ function loadConfigCache(){
     if(!cached) throw new Error('Config belum disimpan pada peranti ini. Sambung internet sekali untuk log masuk.');
     applyConfigCache(cached);
   };
-  if(isOffline()){
-    try { loadLocal(); return Promise.resolve(); } catch (error) { return Promise.reject(error); }
+  // Use the already-saved copy immediately when it exists offline. If this is
+  // a first visit with no cache, still try Firebase once: `.info/connected`
+  // and `navigator.onLine` can both be briefly stale while a page is opening.
+  if(isOffline() && readLocalJson(OfflineStore.CONFIG_CACHE_KEY)){
+    loadLocal();
+    return Promise.resolve();
   }
   return firebaseOnceWithTimeout(db.ref(PATH+'/config')).then(snap=>{
     applyConfigCache(snap.val()||{});
@@ -2881,7 +2885,7 @@ window.onload=()=>{
   document.addEventListener('pointerdown', unlockJourneyShipAudio, {once:true, passive:true});
   playDailyIntro();
   if('serviceWorker' in navigator && location.protocol!=='file:'){
-    navigator.serviceWorker.register('sw.js').catch(()=>{});
+    navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).catch(()=>{});
   }
   connectFirebase();
 };

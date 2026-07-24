@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gs-shell-v2';
+const CACHE_NAME = 'gs-shell-v3';
 const LOCAL_ASSETS = [
   './', 'index.html',
   'tangram/engine.js', 'tangram/shapes.js', 'tangram/ui.js',
@@ -38,12 +38,21 @@ self.addEventListener('fetch', event => {
   // Realtime Database uses WebSockets; never intercept its network traffic.
   if (url.hostname.includes('firebaseio.com')) return;
   event.respondWith((async () => {
+    // Always refresh the HTML shell when online. This prevents an older
+    // cache-first index.html from keeping a broken bootstrap indefinitely.
+    if (event.request.mode === 'navigate') {
+      try {
+        const response = await fetch(event.request);
+        const cache = await caches.open(CACHE_NAME);
+        cache.put('index.html', response.clone());
+        return response;
+      } catch (_) {
+        return caches.match('index.html');
+      }
+    }
     const cached = await caches.match(event.request, { ignoreSearch: true });
     if (cached) return cached;
     try { return await fetch(event.request); }
-    catch (error) {
-      if (event.request.mode === 'navigate') return caches.match('index.html');
-      throw error;
-    }
+    catch (error) { throw error; }
   })());
 });
