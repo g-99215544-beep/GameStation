@@ -15,6 +15,7 @@
 <script src="groups/roster.js"></script>
 <script src="stations/layout.js"></script>
 <script src="sifir/engine.js"></script>
+<script src="offline/store.js"></script>
 <style>
   :root{--navy:#12385b;--gold:#ffc63d;--cream:#fff1c8;--green:#178363;--red:#c8493f;}
   @keyframes sifir-question-countdown{
@@ -341,6 +342,7 @@
   <h1 id="topTitle">🎯 Game Station</h1>
   <div class="topbar-actions">
     <button class="icon-btn" id="adminAccessBtn" type="button" onclick="showAdminLogin()" aria-label="Login admin" title="Login admin">&#9881;</button>
+    <span id="connectivityBadge" hidden style="font-size:12px;font-weight:800;padding:5px 8px;border-radius:999px;background:#6b4c18;color:#fff8df;">📴 Luar Talian</span>
     <div id="timer" style="display:none;">--:--</div>
   </div>
 </div>
@@ -654,6 +656,77 @@ let groupDraft = [];
 let sifirQInterval = null;
 let stationCount = 3;
 function currentStationCount(){ return StationLayout.clampStationCount(Object.keys(stations||{}).length); }
+let browserOnline = navigator.onLine !== false;
+let firebaseConnected = true;
+let syncingOfflineWrites = false;
+let connectivityWatching = false;
+function readLocalJson(key){
+  try { const value=localStorage.getItem(key); return value ? JSON.parse(value) : null; } catch (_) { return null; }
+}
+function writeLocalJson(key, value){
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
+}
+function removeLocalValue(key){ try { localStorage.removeItem(key); } catch (_) {} }
+function isOffline(){ return !browserOnline || !firebaseConnected; }
+function updateConnectivityBadge(){
+  const badge=document.getElementById('connectivityBadge');
+  if(!badge) return;
+  if(syncingOfflineWrites){ badge.hidden=false; badge.textContent='🔄 Menyelaras…'; return; }
+  badge.hidden=!isOffline();
+  if(isOffline()) badge.textContent='📴 Luar Talian';
+}
+function cacheConfig(){
+  writeLocalJson(OfflineStore.CONFIG_CACHE_KEY,{stations:stations||{},groups:groups||{},stationCount,ts:Date.now()});
+}
+function applyConfigCache(cfg){
+  stations=(cfg&&cfg.stations)||{};
+  groups=(cfg&&cfg.groups)||{};
+  stationCount=StationLayout.clampStationCount((cfg&&cfg.stationCount) || Object.keys(stations).length);
+  renderGroupLoginOptions();
+  buildStationsUI(stations);
+}
+function cachedSession(){ return readLocalJson(OfflineStore.SESSION_CACHE_KEY); }
+function firebaseOnceWithTimeout(ref, timeoutMs=5000){
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('Sambungan mengambil masa terlalu lama.')),timeoutMs);
+    ref.once('value').then(value=>{ clearTimeout(timer); resolve(value); },error=>{ clearTimeout(timer); reject(error); });
+  });
+}
+function clearCachedProgress(gid){ if(gid) removeLocalValue(OfflineStore.progressKey(gid)); }
+function persistSessionCache(next){
+  const previous=cachedSession();
+  const freshActive=next && next.status==='active' && Number(next.startedAt||0)>Number(previous&&previous.startedAt||0);
+  if(currentGroupId && (freshActive || !next || next.status==='setup' || next.status==='ended')) clearCachedProgress(currentGroupId);
+  writeLocalJson(OfflineStore.SESSION_CACHE_KEY,{...(next||{status:'setup'}),ts:Date.now()});
+}
+function queuePendingWrite(path, data){
+  const queue=OfflineStore.enqueueWrite(readLocalJson(OfflineStore.PENDING_KEY)||[],{path,data,ts:Date.now()});
+  writeLocalJson(OfflineStore.PENDING_KEY,queue);
+  updateConnectivityBadge();
+}
+function flushPendingWrites(){
+  const queue=readLocalJson(OfflineStore.PENDING_KEY)||[];
+  if(!db || isOffline() || syncingOfflineWrites || !queue.length) return Promise.resolve();
+  syncingOfflineWrites=true; updateConnectivityBadge();
+  return Promise.all(queue.map(item=>db.ref(item.path).set(item.data)))
+    .then(()=>removeLocalValue(OfflineStore.PENDING_KEY))
+    .catch(()=>{})
+    .finally(()=>{ syncingOfflineWrites=false; updateConnectivityBadge(); });
+}
+function initConnectivity(){
+  if(connectivityWatching) return;
+  connectivityWatching=true;
+  window.addEventListener('offline',()=>{ browserOnline=false; updateConnectivityBadge(); });
+  window.addEventListener('online',()=>{ browserOnline=true; updateConnectivityBadge(); flushPendingWrites(); });
+  db.ref('.info/connected').on('value',snap=>{
+    const value=snap.val();
+    if(typeof value==='boolean') firebaseConnected=value;
+    updateConnectivityBadge();
+    if(!isOffline()) flushPendingWrites();
+  });
+  updateConnectivityBadge();
+  flushPendingWrites();
+}
 // Session lifecycle so the app is reusable across events: admin presses Mula to
 // start, Tamat to end. status: 'setup' (not started) | 'active' | 'ended'.
 let sessionInfo = {status:'setup'};
@@ -1119,6 +1192,7 @@ function renderGroupLoginOptions(){
 }
 
 function initApp(){
+  initConnectivity();
   renderGroupLoginOptions();
   if(isTangramDemo()){ startTangramDemo(); return; }
   if(isSmartBoard()){ loadConfigCache().then(()=>{ watchSession(); showSmartBoard(); }); return; }
@@ -1160,8 +1234,15 @@ function tryRestoreSession(){
   } else if(session.role==='group' && session.groupId && groups[session.groupId]){
     currentGroupId = session.groupId;
     document.getElementById('topTitle').innerText='Kumpulan '+currentGroupId;
-    // enter the game only if the session is active; otherwise show wait/ended
-    db.ref(PATH+'/session').once('value').then(s=>{ sessionInfo=s.val()||{status:'setup'}; enterGroupBySession(); });
+    const cached=cachedSession();
+    if(isOffline()){
+      sessionInfo=cached||{status:'setup'};
+      enterGroupBySession();
+    } else {
+      db.ref(PATH+'/session').once('value').then(s=>{
+        sessionInfo=s.val()||{status:'setup'}; persistSessionCache(sessionInfo); enterGroupBySession();
+      }).catch(()=>{ sessionInfo=cached||{status:'setup'}; enterGroupBySession(); });
+    }
   } else {
     clearSession();
     show('view-login');
@@ -1169,14 +1250,18 @@ function tryRestoreSession(){
 }
 
 function loadConfigCache(){
-  return db.ref(PATH+'/config').once('value').then(snap=>{
-    const cfg = snap.val()||{};
-    stations = cfg.stations || {};
-    groups = cfg.groups || {};
-    stationCount = StationLayout.clampStationCount(Object.keys(stations).length);
-    renderGroupLoginOptions();
-    buildStationsUI(stations);
-  });
+  const loadLocal=()=>{
+    const cached=readLocalJson(OfflineStore.CONFIG_CACHE_KEY);
+    if(!cached) throw new Error('Config belum disimpan pada peranti ini. Sambung internet sekali untuk log masuk.');
+    applyConfigCache(cached);
+  };
+  if(isOffline()){
+    try { loadLocal(); return Promise.resolve(); } catch (error) { return Promise.reject(error); }
+  }
+  return firebaseOnceWithTimeout(db.ref(PATH+'/config')).then(snap=>{
+    applyConfigCache(snap.val()||{});
+    cacheConfig();
+  }).catch(()=>{ loadLocal(); });
 }
 
 // ---------- LOGIN ----------
@@ -1230,8 +1315,16 @@ function loginAsGroup(){
   currentGroupId = gid;
   saveSession('group', gid);
   document.getElementById('topTitle').innerText='Kumpulan '+currentGroupId;
-  // gate on session: only enter the game when the session is active
-  db.ref(PATH+'/session').once('value').then(s=>{ sessionInfo=s.val()||{status:'setup'}; enterGroupBySession(); });
+  // gate on session: an already-cached active session also permits offline play.
+  const cached=cachedSession();
+  if(isOffline()){
+    sessionInfo=cached||{status:'setup'};
+    enterGroupBySession();
+  } else {
+    db.ref(PATH+'/session').once('value').then(s=>{
+      sessionInfo=s.val()||{status:'setup'}; persistSessionCache(sessionInfo); enterGroupBySession();
+    }).catch(()=>{ sessionInfo=cached||{status:'setup'}; enterGroupBySession(); });
+  }
 }
 // ---------- ADMIN NAVIGATION ----------
 const ADMIN_TAB_NOTES = {
@@ -1282,6 +1375,7 @@ function logout(){
 function watchSession(){
   db.ref(PATH+'/session').on('value', snap=>{
     sessionInfo = snap.val() || {status:'setup'};
+    persistSessionCache(sessionInfo);
     renderSessionControls();      // admin card (no-op when not on admin)
     syncStartStationControlLock();
     syncGroupManagerLock();
@@ -1725,12 +1819,24 @@ function watchDashboard(){
 
 // ---------- GROUP FLOW ----------
 function loadGroupProgress(){
+  const cached=readLocalJson(OfflineStore.progressKey(currentGroupId));
+  const useProgress=p=>{
+    const safe=p || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
+    progress=safe;
+    writeLocalJson(OfflineStore.progressKey(currentGroupId),safe);
+    if(safe.status==='won' || StationLayout.isJourneyDone(safe.currentIndex||0, currentStationCount())){ showGoToBoard(); return; }
+    showClueScreen();
+  };
+  // A local journey is authoritative: it may contain stations not yet synced.
+  if(cached){ useProgress(cached); return; }
+  if(isOffline()) { useProgress(null); return; }
   db.ref(PATH+'/progress/'+currentGroupId).once('value').then(snap=>{
     const p = snap.val() || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
     progress = p;
     if(p.status==='won' || StationLayout.isJourneyDone(p.currentIndex||0, currentStationCount())){ showGoToBoard(); return; }
+    writeLocalJson(OfflineStore.progressKey(currentGroupId),p);
     showClueScreen();
-  });
+  }).catch(()=>useProgress(null));
 }
 function showClueScreen(){
   showJourneyMap();
@@ -2555,18 +2661,18 @@ function finishGame(forceOk){
 }
 function submitCompletion(onTime, score, timeTakenSec){
   const stId = window._curStId;
-  const progRef = db.ref(PATH+'/progress/'+currentGroupId);
-  progRef.once('value').then(snap=>{
-    const p = snap.val();
-    const newIndex = p.currentIndex+1;
-    const keys = p.keys||[]; keys.push(stId);
-    const completedStations = p.completedStations||{};
-    completedStations[stId]={score, onTime, timeTakenSec, ts:Date.now()};
-    const totalScore=(p.totalScore||0)+score;
-    const done = StationLayout.isJourneyDone(newIndex, currentStationCount());
-    progRef.update({currentIndex:newIndex, keys, completedStations, totalScore, status:done?'ready_chest':'idle'})
-      .then(()=>{ progress={...p,currentIndex:newIndex,keys,completedStations,totalScore}; showResult(onTime,score,done); });
+  const next=OfflineStore.advanceProgress(progress,{
+    stId, score, onTime, timeTakenSec, stationCount:currentStationCount(), now:Date.now()
   });
+  progress=next;
+  const path=PATH+'/progress/'+currentGroupId;
+  writeLocalJson(OfflineStore.progressKey(currentGroupId),next);
+  const done=StationLayout.isJourneyDone(next.currentIndex, currentStationCount());
+  // Complete the station immediately. Firebase is only a sync target, never a
+  // dependency for the student journey once the group has logged in.
+  if(isOffline()) queuePendingWrite(path,next);
+  else db.ref(path).update(next).catch(()=>queuePendingWrite(path,next));
+  showResult(onTime,score,done);
 }
 function showResult(onTime, score, done){
   show('view-result');
@@ -2759,6 +2865,9 @@ function flashBoardMsg(msg){
 window.onload=()=>{
   document.addEventListener('pointerdown', unlockJourneyShipAudio, {once:true, passive:true});
   playDailyIntro();
+  if('serviceWorker' in navigator && location.protocol!=='file:'){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
   connectFirebase();
 };
 </script>
