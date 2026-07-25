@@ -81,3 +81,34 @@ test('crossword timeout keeps partial credit and applies the late penalty', asyn
   await expect(page.locator('#resultCard')).toContainText('Masa tamat');
   await expect(page.locator('#resultCard')).toContainText('Markah: 30');
 });
+
+test('crossword numpad stays fully visible in a phone viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openCrossword(page);
+  await page.locator('.cw-cell.blank').first().click();
+
+  const pad = page.locator('#cwPad');
+  await expect(pad).toBeVisible();
+  await expect(page.locator('.crossword-game')).toHaveClass(/cw-pad-open/);
+  const layout = await pad.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return {
+      position: getComputedStyle(element).position,
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight
+    };
+  });
+  expect(layout.position).toBe('fixed');
+  expect(layout.left).toBeGreaterThanOrEqual(0);
+  expect(layout.top).toBeGreaterThanOrEqual(0);
+  expect(layout.right).toBeLessThanOrEqual(layout.viewportWidth);
+  expect(layout.bottom).toBeLessThanOrEqual(layout.viewportHeight);
+
+  await page.getByRole('button', { name: 'Selesai' }).click();
+  await expect(pad).toBeHidden();
+  await expect(page.locator('.crossword-game')).not.toHaveClass(/cw-pad-open/);
+});
