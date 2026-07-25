@@ -15,6 +15,7 @@
 <script src="groups/roster.js"></script>
 <script src="stations/layout.js"></script>
 <script src="sifir/engine.js"></script>
+<script src="crossword/engine.js"></script>
 <script src="offline/store.js"></script>
 <script src="hunts/registry.js"></script>
 <style>
@@ -108,6 +109,22 @@
   .sudoku-cell.error{border-color:var(--red)!important;background:#fbe4e2;}
   .sudoku-board.size-9 .sudoku-cell{font-size:16px!important;}
   @media (max-width:420px){.sudoku-board.size-9 .sudoku-cell{font-size:14px!important;padding:2px!important;}}
+  .crossword-game{max-width:600px;margin:auto;}
+  .cw-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0 8px;}
+  .cw-toolbar p{margin:0;color:#666;font-size:14px;}
+  .cw-zoom{display:flex;gap:6px;flex:0 0 auto;}
+  .cw-zoom button{width:42px;height:38px;margin:0;padding:0;font-size:20px;}
+  .crossword-viewport{width:100%;max-height:min(58vh,520px);overflow:auto;overscroll-behavior:contain;padding:12px;background:#dce9ed;border:3px solid var(--navy);border-radius:8px;touch-action:pan-x pan-y;}
+  .crossword-board{--cw-cell:44px;display:grid;grid-template-columns:repeat(11,var(--cw-cell));grid-template-rows:repeat(11,var(--cw-cell));gap:3px;width:max-content;min-width:max-content;padding:5px;background:#0d4268;border-radius:5px;}
+  .cw-cell{display:flex;align-items:center;justify-content:center;width:var(--cw-cell);height:var(--cw-cell);border:2px solid #8b5427;background:#fff9df;color:#17324d;font-size:calc(var(--cw-cell) * .43);font-weight:900;line-height:1;user-select:none;}
+  .cw-cell.given{background:#ffe784;color:#713c13;}
+  .cw-cell.blank{cursor:pointer;touch-action:manipulation;}
+  .cw-cell.blank:focus-visible,.cw-cell.selected{outline:4px solid #20a9e0;outline-offset:-4px;background:#d7f3ff;}
+  .cw-gap{width:var(--cw-cell);height:var(--cw-cell);}
+  .cw-pad{position:sticky;bottom:0;z-index:5;display:grid;grid-template-columns:repeat(3,minmax(58px,1fr));gap:7px;width:min(100%,330px);margin:14px auto 0;padding:10px;border:3px solid #704018;border-radius:7px;background:#fff0b5;box-shadow:0 -3px 12px #063a6655;}
+  .cw-pad[hidden]{display:none;}
+  .cw-pad button{min-height:48px;margin:0;padding:6px;font-size:20px;}
+  .cw-pad .cw-pad-close{grid-column:1/-1;font-size:15px;}
   .finalbox{text-align:center;padding:20px;}
   .chest{font-size:80px;margin:20px 0;cursor:pointer;transition:transform .2s;}
   .chest:hover{transform:scale(1.1);}
@@ -301,6 +318,10 @@
   .participant-mode .sudoku-board{background:#0d4268;border:4px solid #704018;border-radius:5px;box-shadow:4px 4px 0 #063a66;}
   .participant-mode .sudoku-cell{border-color:#8b5427!important;border-radius:0!important;background:#fff9df;color:#17324d;}.participant-mode .sudoku-cell.given{background:#ffe784;color:#713c13;}.participant-mode .sudoku-cell.error{background:#ffd4cd!important;border-color:#c8493f!important;}
   .participant-mode .sudoku-progress span{border:3px solid #704018;border-radius:4px;background:#d6e8df;color:#50746f;}.participant-mode .sudoku-progress span.active{background:#ffcb42;color:#58310d;}.participant-mode .sudoku-progress span.done{background:#178363;color:#fff;}
+  .participant-mode .crossword-viewport{border-color:#704018;border-radius:5px;background:#8fc7d4;box-shadow:4px 4px 0 #063a66;}
+  .participant-mode .crossword-board{box-shadow:inset 0 0 0 2px #4ea5cd;}
+  .participant-mode .cw-cell.blank:focus-visible,.participant-mode .cw-cell.selected{outline-color:#0e8fc8;background:#d7f3ff;}
+  .participant-mode .cw-pad{border-radius:5px;background:linear-gradient(135deg,#fff3b4,#e6b954);}
   .participant-mode .finalbox{padding:24px 10px;}.participant-mode .finalbox h2{color:#12385b;}.participant-mode #timer{border:2px solid #ffcb42;background:#092844;box-shadow:2px 2px 0 #061e38;color:#fff0ad;border-radius:4px;}
   @media (max-width:720px){
     .topbar{padding:12px 16px;}
@@ -641,14 +662,9 @@
 
 <script>
 const GAME_TYPES = [
-  {id:'quiz', name:'Quiz Pantas'},
-  {id:'susun_nombor', name:'Susun Nombor'},
-  {id:'padan', name:'Padan Jawapan'},
-  {id:'pilihan', name:'Pilihan Bergambar'},
-  {id:'grid_nombor', name:'Grid Nombor'},
-  {id:'puzzle_susun', name:'Puzzle Cantum Nombor'},
   {id:'lembaran_kerja', name:'Lembaran Kerja'},
   {id:'sudoku', name:'Sudoku Challenge (3 Stage)'},
+  {id:'crossword', name:'Crossword Puzzle'},
   {id:'sifir', name:'Sifir Challenge'},
   {id:'tangram', name:'Tangram Challenge'},
   {id:'jejak_lari', name:'Jejak Lari GPS'}
@@ -2173,6 +2189,7 @@ function startGame(stId, testSt){
   timeUp=false;
   window._gameOver=false;
   window._sudokuTimeout=null;
+  window._crosswordTimeout=null;
   window._sifirTimeout=null;
   timeLeftSec = (st.timeLimitMin||10)*60;
   window._startedAt = Date.now();
@@ -2209,6 +2226,7 @@ function tick(){
     // on timeout — otherwise a student who can't solve is stranded here.
     if(gameState && gameState.type==='tangram' && window._tgTimeout){ window._tgTimeout(); }
     if(gameState && gameState.type==='sudoku' && window._sudokuTimeout){ window._sudokuTimeout(); }
+    if(gameState && gameState.type==='crossword' && window._crosswordTimeout){ window._crosswordTimeout(); }
     if(gameState && gameState.type==='sifir' && window._sifirTimeout){ window._sifirTimeout(); }
     if(gameState && gameState.type==='jejak_lari' && window._runTimeout){ window._runTimeout(); }
   }
@@ -2276,6 +2294,10 @@ function renderGame(st){
   }
   else if(st.gameType==='sudoku'){
     startSudoku(st);
+    return;
+  }
+  else if(st.gameType==='crossword'){
+    startCrossword(st);
     return;
   }
   else if(st.gameType==='sifir'){
@@ -2581,6 +2603,147 @@ function checkSudokuStage(){
 function nextSudokuStage(){
   gameState.sudoku.stageIndex++;
   showSudokuStage();
+}
+
+// ---------- MATH CROSSWORD: one built-in across-and-down puzzle ----------
+function startCrossword(st){
+  const grid=CrosswordEngine.PUZZLE.grid;
+  const entries=CrosswordEngine.blanks(grid);
+  gameState.type='crossword';
+  gameState.total=entries.length;
+  gameState.correct=0;
+  gameState.crossword={station:st,grid,entries,answers:{},selected:null,zoom:44};
+  window._crosswordTimeout=()=>finishCrossword(false);
+  renderCrossword();
+}
+function renderCrossword(){
+  const crossword=gameState.crossword;
+  const puzzle=CrosswordEngine.PUZZLE;
+  let cells='';
+  crossword.grid.forEach((row,r)=>row.forEach((cell,c)=>{
+    if(!cell){
+      cells+='<div class="cw-gap" aria-hidden="true"></div>';
+      return;
+    }
+    if(Object.prototype.hasOwnProperty.call(cell,'a')){
+      const key=`${r},${c}`;
+      const value=crossword.answers[key]||'';
+      const selected=crossword.selected && crossword.selected.r===r && crossword.selected.c===c;
+      cells+=`<div id="cw_${r}_${c}" class="cw-cell blank${selected?' selected':''}" role="button" tabindex="0" aria-label="Kotak kosong baris ${r+1}, lajur ${c+1}${value?`, nilai ${value}`:''}" onclick="selectCwCell(${r},${c})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCwCell(${r},${c});}">${value}</div>`;
+    } else {
+      cells+=`<div class="cw-cell given">${escapeHtml(cell.v)}</div>`;
+    }
+  }));
+  document.getElementById('gameCard').innerHTML=`<div class="crossword-game">
+    <h2>${escapeHtml(crossword.station.name)}</h2>
+    <p>Lengkapkan semua persamaan melintang dan menegak. Tekan kotak kosong untuk memasukkan satu digit.</p>
+    <div class="cw-toolbar">
+      <p>Leret untuk melihat seluruh papan.</p>
+      <div class="cw-zoom" aria-label="Zum papan">
+        <button type="button" onclick="cwZoom(-4)" aria-label="Zum keluar">&#128269;&minus;</button>
+        <button type="button" onclick="cwZoom(4)" aria-label="Zum masuk">&#128269;+</button>
+      </div>
+    </div>
+    <div class="crossword-viewport">
+      <div id="crosswordBoard" class="crossword-board" style="--cw-cell:${crossword.zoom}px;grid-template-columns:repeat(${puzzle.cols},var(--cw-cell));grid-template-rows:repeat(${puzzle.rows},var(--cw-cell));">${cells}</div>
+    </div>
+    <div id="crosswordMsg" aria-live="polite"></div>
+    <button class="big" type="button" onclick="checkCrossword()">Semak</button>
+    <div id="cwPad" class="cw-pad" hidden>
+      ${[1,2,3,4,5,6,7,8,9].map(digit=>`<button type="button" onclick="cwInput(${digit})">${digit}</button>`).join('')}
+      <button type="button" onclick="cwBackspace()" aria-label="Padam">&#9003;</button>
+      <button type="button" onclick="cwInput(0)">0</button>
+      <button type="button" onclick="cwNext()" aria-label="Kotak kosong seterusnya">&rarr;</button>
+      <button class="cw-pad-close" type="button" onclick="hideCwPad()">Selesai</button>
+    </div>
+  </div>`;
+}
+function cwZoom(change){
+  const crossword=gameState.crossword;
+  if(!crossword) return;
+  crossword.zoom=Math.max(30,Math.min(64,crossword.zoom+change));
+  const board=document.getElementById('crosswordBoard');
+  if(board) board.style.setProperty('--cw-cell',`${crossword.zoom}px`);
+}
+function selectCwCell(r,c){
+  const crossword=gameState.crossword;
+  if(!crossword || !crossword.grid[r] || !crossword.grid[r][c] || !Object.prototype.hasOwnProperty.call(crossword.grid[r][c],'a')) return;
+  const old=document.querySelector('.cw-cell.selected');
+  if(old) old.classList.remove('selected');
+  crossword.selected={r,c};
+  const cell=document.getElementById(`cw_${r}_${c}`);
+  if(cell){ cell.classList.add('selected'); cell.focus({preventScroll:true}); }
+  const pad=document.getElementById('cwPad');
+  if(pad) pad.hidden=false;
+}
+function cwInput(digit){
+  const crossword=gameState.crossword;
+  if(!crossword || !crossword.selected || !Number.isInteger(digit) || digit<0 || digit>9) return;
+  const key=`${crossword.selected.r},${crossword.selected.c}`;
+  crossword.answers[key]=String(digit);
+  const cell=document.getElementById(`cw_${crossword.selected.r}_${crossword.selected.c}`);
+  if(cell){
+    cell.textContent=String(digit);
+    cell.setAttribute('aria-label',`Kotak kosong baris ${crossword.selected.r+1}, lajur ${crossword.selected.c+1}, nilai ${digit}`);
+  }
+  cwNext();
+}
+function cwBackspace(){
+  const crossword=gameState.crossword;
+  if(!crossword || !crossword.selected) return;
+  const key=`${crossword.selected.r},${crossword.selected.c}`;
+  delete crossword.answers[key];
+  const cell=document.getElementById(`cw_${crossword.selected.r}_${crossword.selected.c}`);
+  if(cell){
+    cell.textContent='';
+    cell.setAttribute('aria-label',`Kotak kosong baris ${crossword.selected.r+1}, lajur ${crossword.selected.c+1}`);
+  }
+}
+function nextEmptyCwEntry(){
+  const crossword=gameState.crossword;
+  if(!crossword || !crossword.entries.length) return null;
+  const selectedIndex=crossword.selected
+    ? crossword.entries.findIndex(entry=>entry.r===crossword.selected.r && entry.c===crossword.selected.c)
+    : -1;
+  for(let offset=1;offset<=crossword.entries.length;offset++){
+    const entry=crossword.entries[(selectedIndex+offset+crossword.entries.length)%crossword.entries.length];
+    if(!Object.prototype.hasOwnProperty.call(crossword.answers,`${entry.r},${entry.c}`)) return entry;
+  }
+  return null;
+}
+function cwNext(){
+  const next=nextEmptyCwEntry();
+  if(next) selectCwCell(next.r,next.c);
+}
+function hideCwPad(){
+  const pad=document.getElementById('cwPad');
+  if(pad) pad.hidden=true;
+}
+function checkCrossword(){
+  const crossword=gameState.crossword;
+  if(!crossword || window._gameOver) return;
+  const result=CrosswordEngine.grade(crossword.grid,crossword.answers);
+  gameState.correct=result.correct;
+  if(result.solved){
+    finishCrossword(!timeUp);
+    return;
+  }
+  const msg=document.getElementById('crosswordMsg');
+  if(msg) msg.innerHTML=`<div class="msg err">${result.empty} kotak belum diisi dan ${result.wrong} jawapan perlu disemak.</div>`;
+}
+function finishCrossword(onTime){
+  if(window._gameOver) return;
+  window._gameOver=true;
+  window._crosswordTimeout=null;
+  clearInterval(timerInterval);
+  const crossword=gameState.crossword;
+  const result=CrosswordEngine.grade(crossword.grid,crossword.answers);
+  gameState.correct=result.correct;
+  const timeTakenSec=Math.round((Date.now()-window._startedAt)/1000);
+  let score=Math.round((result.correct/result.total)*100);
+  if(!onTime) score=Math.max(0,score-20);
+  if(window._testMode){ showTestResult(onTime,score,timeTakenSec); return; }
+  submitCompletion(onTime,score,timeTakenSec);
 }
 // ---------- RUN TRACKER (jejak_lari): live GPS distance ----------
 function startRun(st){
