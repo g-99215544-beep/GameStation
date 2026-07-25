@@ -125,6 +125,12 @@
   .cw-pad[hidden]{display:none;}
   .cw-pad button{min-height:48px;margin:0;padding:6px;font-size:20px;}
   .cw-pad .cw-pad-close{grid-column:1/-1;font-size:15px;}
+  @media (max-width:720px){
+    .crossword-game.cw-pad-open{padding-bottom:220px;}
+    .cw-pad{position:fixed;left:50%;right:auto;bottom:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:200;grid-template-columns:repeat(4,minmax(48px,1fr));gap:5px;width:min(calc(100vw - 16px),420px);max-height:calc(100vh - 16px);max-height:calc(100dvh - 16px);margin:0;padding:8px;overflow:auto;transform:translateX(-50%);box-shadow:0 -5px 18px #063a6688;}
+    .cw-pad button{min-height:44px;padding:4px;font-size:18px;}
+    .cw-pad .cw-pad-close{min-height:38px;}
+  }
   .finalbox{text-align:center;padding:20px;}
   .chest{font-size:80px;margin:20px 0;cursor:pointer;transition:transform .2s;}
   .chest:hover{transform:scale(1.1);}
@@ -2675,6 +2681,16 @@ function selectCwCell(r,c){
   if(cell){ cell.classList.add('selected'); cell.focus({preventScroll:true}); }
   const pad=document.getElementById('cwPad');
   if(pad) pad.hidden=false;
+  const game=document.querySelector('.crossword-game');
+  if(game) game.classList.add('cw-pad-open');
+  const viewport=document.querySelector('.crossword-viewport');
+  if(viewport && cell){
+    viewport.scrollTo({
+      left:cell.offsetLeft-(viewport.clientWidth-cell.offsetWidth)/2,
+      top:cell.offsetTop-(viewport.clientHeight-cell.offsetHeight)/2,
+      behavior:'smooth'
+    });
+  }
 }
 function cwInput(digit){
   const crossword=gameState.crossword;
@@ -2718,6 +2734,8 @@ function cwNext(){
 function hideCwPad(){
   const pad=document.getElementById('cwPad');
   if(pad) pad.hidden=true;
+  const game=document.querySelector('.crossword-game');
+  if(game) game.classList.remove('cw-pad-open');
 }
 function checkCrossword(){
   const crossword=gameState.crossword;
