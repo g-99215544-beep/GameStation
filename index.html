@@ -205,6 +205,7 @@
   .admin-head p{margin:6px 0 0;color:#777;}
   .admin-head .linkbtn{margin-top:4px;white-space:nowrap;}
   .admin-nav{display:flex;align-items:center;gap:14px;padding:14px 16px;background:#fff;border:1px solid #eee;border-radius:12px;box-shadow:0 4px 14px rgba(0,0,0,.06);margin-bottom:16px;}
+  .admin-nav[hidden]{display:none;}
   .admin-nav label{margin:0;white-space:nowrap;color:var(--navy);}
   .admin-nav select{max-width:360px;margin:0;border-color:#c9ced9;font-weight:700;}
   .admin-tab-note{margin:0 0 16px;color:#777;font-size:14px;}
@@ -1436,6 +1437,8 @@ const ADMIN_STEP_MAP = {groups:1,setup:2,passwords:3,qr:4,session:5};
 let adminTopTab='hunts';
 function selectAdminTopTab(tab){
   adminTopTab=tab;
+  const nav=document.querySelector('.admin-nav');
+  if(nav) nav.hidden = tab!=='setup';
   const list=document.getElementById('admin-hunt-list');
   const setupPanels=['groups','setup','passwords','qr'];
   const huntsButton=document.getElementById('adminTopHunts');
@@ -1699,7 +1702,7 @@ function toggleWorksheetEditor(i){
   const rawField=document.getElementById('game_data_field_'+i);
   if(editor) editor.style.display=isWorksheet?'block':'none';
   if(runEditor) runEditor.style.display=isRun?'block':'none';
-  if(rawField) rawField.style.display=(isWorksheet||isRun)?'none':'block';
+  if(rawField) rawField.style.display='none';
 }
 function updateStationButtons(){
   const label=document.getElementById('stationCountLabel');
@@ -2556,7 +2559,7 @@ function checkSudokuStage(){
     const value=Number(input.value);
     input.classList.remove('error');
     if(!value){ empty++; return; }
-    if(value!==stage.solution[r][c]){ wrong++; input.classList.add('error'); }
+    if(value!==stage.solution[r][c]){ wrong++; }
   }));
   const msg=document.getElementById('sudokuMsg');
   if(empty || wrong){
