@@ -29,10 +29,11 @@ Decisions locked during brainstorming:
   skill the station exists to teach, rather than tapping the grid directly.
 - **Strict alternating turns.** Student fires, then the computer fires, one
   shot each per turn.
-- **Hunting AI.** The computer fires randomly until it hits, then works
-  through the cells adjacent to that hit until the ship sinks, then returns
-  to random fire. This makes the computer a real threat, so losing means
-  something.
+- **Purely random AI.** The computer picks a random cell it has not fired at
+  yet — no targeting, no follow-up on a hit, no pattern of any kind. (An
+  earlier draft of this spec called for a hunting AI that chased adjacent
+  cells after a hit; the teacher replaced it with plain random fire, which
+  is both simpler and gentler on the students.)
 - **Loss resets the round, keeping the student's layout.** New computer
   fleet, both boards cleared, the student's ship placement preserved, same
   station timer. Re-placing 5 ships after every loss would burn the
@@ -67,20 +68,12 @@ student. New pure functions:
   `occupiedCells`, which is a flat array of `{x, y}` objects (the same shape
   as a ship's `cells`, so callers pass
   `playerFleet.flatMap(s => s.cells)` directly).
-- **`nextComputerShot(shotLog, huntState)`** → `{x, y, huntState}`. The AI,
-  kept pure by threading its memory through the caller the same way
-  `shotLog` already is:
-  - `huntState` is plain JSON-able data: `{queue: [{x,y}, ...]}` — cells
-    queued for follow-up fire.
-  - When `queue` is non-empty, take the next un-fired cell from it.
-  - Otherwise pick a random cell not present in `shotLog`.
-  - The **caller** pushes the 4 orthogonally-adjacent cells onto `queue`
-    after a `'hit'` result, and clears `queue` on `'sunk'`. Keeping the
-    queue updates in the caller (rather than having `nextComputerShot`
-    inspect fleets) is what keeps this function trivially testable — it
-    never needs to know where any ship is.
-  - Returns `null` when every cell has been fired at (defensive; the round
-    always ends before this in practice).
+- **`nextComputerShot(shotLog, rng)`** → `{x, y}`, or `null` when every cell
+  has been fired at (defensive; the round always ends before this in
+  practice). Picks uniformly at random among the cells absent from
+  `shotLog`, so it never wastes a turn repeating a shot. It holds no memory
+  between turns and never inspects a fleet — the whole AI is this one
+  stateless choice.
 
 ### Game state
 
@@ -96,7 +89,6 @@ student. New pure functions:
   enemyFleet,         // computer's ships (generateFleet)
   playerShotLog,      // student's shots at the enemy board
   enemyShotLog,       // computer's shots at the student's board
-  huntState,          // computer AI memory
   pendingX, pendingY, activeField,   // numpad entry (unchanged)
   busy,               // true while animating — locks input
   round               // increments each time a loss resets the round
@@ -127,8 +119,8 @@ win check → computer fires → animation → result applied → loss check.
 
 **Loss** — when `isFleetSunk(playerFleet, enemyShotLog)`, show "Semua kapal
 anda musnah! Pusingan baharu bermula.", then reset: new `enemyFleet`, empty
-both shot logs, clear `huntState`, `round++`. `playerFleet` is untouched.
-The station timer keeps running throughout.
+both shot logs, `round++`. `playerFleet` is untouched. The station timer
+keeps running throughout.
 
 **Win / timeout** — unchanged from the current implementation:
 `finishBattleship(onTime)` with
@@ -202,10 +194,11 @@ with the daily-intro video's existing handling.
   - `shipCells` for both orientations and several lengths.
   - `canPlace`: accepts a valid position; rejects off-grid in each
     direction; rejects overlap with an occupied cell.
-  - `nextComputerShot`: never returns a cell already in `shotLog`; drains
-    `huntState.queue` before firing randomly; a stress loop that plays the
-    AI against a generated fleet until every ship sinks, asserting it
-    terminates well within 121 shots and never repeats a cell.
+  - `nextComputerShot`: never returns a cell already in `shotLog` across a
+    full 121-shot sweep; returns `null` once the grid is exhausted; when
+    exactly one cell is left open the random pick is forced to that cell,
+    which makes the "only ever picks un-fired cells" contract testable
+    without depending on the RNG.
 - **`tests/battleship.spec.js`** (Playwright):
   - Placing all 5 ships through the real numpad/orientation UI moves the
     game into `playing` and reveals the enemy board.
@@ -213,9 +206,11 @@ with the daily-intro video's existing handling.
     unchanged.
   - A full turn: the student fires through the UI, the computer's reply
     lands on the student's board, and both boards update.
-  - Losing (driven by seeding `enemyShotLog` so the next computer shot
-    sinks the last player ship) resets the round: boards clear, the
-    student's fleet placement is preserved, the game is still playable.
+  - Losing resets the round: boards clear, the student's fleet placement is
+    preserved, the game is still playable. Driven deterministically by
+    seeding `enemyShotLog` with every cell except the last un-hit player
+    ship cell, so the computer's random pick has exactly one square left and
+    must take it.
   - Phone viewport (390×844): both boards, the fleet status, coordinate
     boxes and numpad are on screen with no page-level scroll, before and
     after firing.

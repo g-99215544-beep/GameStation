@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Turn the one-way Battleship station into a full two-way battle: the student places their own fleet, the computer fights back with a hunting AI, losing your fleet restarts the round, and every shot is animated with SVG (missile arc, hit burst, sea splash).
+**Goal:** Turn the one-way Battleship station into a full two-way battle: the student places their own fleet, the computer fires back at random, losing your fleet restarts the round, and every shot is animated with SVG (missile arc, hit burst, sea splash).
 
 **Architecture:** Pure logic stays in `battleship/engine.js` (testable under `node --test`); rendering, input, turn sequencing, and animation live inline in `index.html` beside the sibling games. The turn loop becomes async so animations can be awaited in sequence.
 
@@ -15,7 +15,7 @@
 - Ships are placed horizontally or vertically only, never overlapping, never off-grid — for both the student's fleet and the computer's.
 - Placement is by coordinate entry on the existing numpad (`<div>`-based, never `<input>`) plus a Melintang/Menegak toggle — never by tapping the grid.
 - Strict alternating turns: one student shot, then one computer shot.
-- Computer AI: random fire until a hit, then work through cells adjacent to that hit until the ship sinks, then back to random.
+- Computer AI is **purely random**: it picks uniformly among cells it has not fired at yet. No targeting, no follow-up after a hit, no pattern, no memory between turns.
 - Losing (all 5 student ships sunk) resets the round — new computer fleet, both boards cleared, **student's ship layout preserved**, same station timer, no score deduction.
 - Scoring is unchanged in shape: `round(enemyShipsSunk / 5 * 100)`, `-20` if the timer expires first, clamped at 0.
 - ~0.8 s of animation per shot (≈0.5 s missile flight, ≈0.3 s impact). Animation is skipped entirely when `prefers-reduced-motion: reduce` matches.
@@ -27,19 +27,18 @@
 
 ---
 
-### Task 1: Engine additions — placement helpers and computer AI
+### Task 1: Engine additions — placement helpers and random computer AI
 
 **Files:**
 - Modify: `battleship/engine.js`
 - Modify: `battleship/engine.test.js`
 
 **Interfaces:**
-- Consumes: existing `GRID_SIZE`, `FLEET_SPEC`, `cellsFor`, `inBounds` (module-internal).
+- Consumes: existing `GRID_SIZE`, `FLEET_SPEC`, `cellsFor`, `inBounds`, `overlaps` (module-internal).
 - Produces (used by Tasks 2–4):
   - `BattleshipEngine.shipCells(x, y, length, orientation)` → `[{x,y}, ...]`; `orientation` is `'h'` or `'v'`
   - `BattleshipEngine.canPlace(occupiedCells, x, y, length, orientation)` → `boolean`; `occupiedCells` is a flat array of `{x,y}`
-  - `BattleshipEngine.adjacentCells(x, y)` → the in-bounds orthogonal neighbours of a cell
-  - `BattleshipEngine.nextComputerShot(shotLog, huntState, rng)` → `{x, y, huntState}` or `null` when every cell has been fired at; `huntState` is `{queue: [{x,y}, ...]}`
+  - `BattleshipEngine.nextComputerShot(shotLog, rng)` → `{x, y}`, or `null` when every cell has been fired at. Stateless: no memory between turns, never inspects a fleet.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -63,62 +62,30 @@ test('canPlace accepts valid positions and rejects off-grid or overlapping ones'
   assert.strictEqual(E.canPlace(occupied, 2, 4, 3, 'h'), true);  // clear row above
 });
 
-test('adjacentCells returns in-bounds orthogonal neighbours only', () => {
-  assert.strictEqual(E.adjacentCells(5, 5).length, 4);
-  assert.strictEqual(E.adjacentCells(0, 0).length, 2);
-  assert.strictEqual(E.adjacentCells(10, 10).length, 2);
-  assert.ok(E.adjacentCells(0, 0).every(c => c.x >= 0 && c.y >= 0));
-});
-
-test('nextComputerShot drains its hunt queue before firing randomly', () => {
-  const shot = E.nextComputerShot({}, { queue: [{ x: 4, y: 7 }, { x: 5, y: 7 }] }, seeded(1));
-  assert.deepStrictEqual({ x: shot.x, y: shot.y }, { x: 4, y: 7 });
-  assert.deepStrictEqual(shot.huntState.queue, [{ x: 5, y: 7 }]);
-});
-
-test('nextComputerShot skips queued cells that were already fired at', () => {
-  const shotLog = { '4,7': 'miss' };
-  const shot = E.nextComputerShot(shotLog, { queue: [{ x: 4, y: 7 }, { x: 5, y: 7 }] }, seeded(1));
-  assert.deepStrictEqual({ x: shot.x, y: shot.y }, { x: 5, y: 7 });
-});
-
 test('nextComputerShot never repeats a cell and returns null once the grid is full', () => {
   let shotLog = {};
-  let huntState = { queue: [] };
   const seen = new Set();
   for (let i = 0; i < E.GRID_SIZE * E.GRID_SIZE; i++) {
-    const shot = E.nextComputerShot(shotLog, huntState, seeded(i + 1));
+    const shot = E.nextComputerShot(shotLog, seeded(i + 1));
     assert.ok(shot, `ran out of cells early at shot ${i}`);
     const key = `${shot.x},${shot.y}`;
     assert.ok(!seen.has(key), `repeated cell ${key}`);
     seen.add(key);
     shotLog = Object.assign({}, shotLog, { [key]: 'miss' });
-    huntState = shot.huntState;
   }
-  assert.strictEqual(E.nextComputerShot(shotLog, huntState, seeded(1)), null);
+  assert.strictEqual(E.nextComputerShot(shotLog, seeded(1)), null);
 });
 
-test('the hunting AI sinks a whole fleet well inside the grid size', () => {
-  for (let seed = 1; seed <= 50; seed++) {
-    const fleet = E.generateFleet(seeded(seed));
-    let shotLog = {};
-    let huntState = { queue: [] };
-    let shots = 0;
-    while (!E.isFleetSunk(fleet, shotLog) && shots < E.GRID_SIZE * E.GRID_SIZE) {
-      const shot = E.nextComputerShot(shotLog, huntState, seeded(seed * 1000 + shots));
-      assert.ok(shot, 'AI ran out of cells before sinking the fleet');
-      const res = E.fireAt(fleet, shotLog, shot.x, shot.y);
-      shotLog = res.shotLog;
-      huntState = shot.huntState;
-      if (res.result === 'hit') {
-        huntState = { queue: huntState.queue.concat(E.adjacentCells(shot.x, shot.y)) };
-      } else if (res.result === 'sunk') {
-        huntState = { queue: [] };
-      }
-      shots++;
+// Leaving exactly one cell open forces the random pick, so the "only ever
+// returns an un-fired cell" contract is checked without depending on the RNG.
+test('nextComputerShot only ever picks a cell absent from the shot log', () => {
+  const shotLog = {};
+  for (let x = 0; x < E.GRID_SIZE; x++) {
+    for (let y = 0; y < E.GRID_SIZE; y++) {
+      if (!(x === 3 && y === 4)) shotLog[`${x},${y}`] = 'miss';
     }
-    assert.ok(E.isFleetSunk(fleet, shotLog), `seed ${seed}: fleet not sunk in ${shots} shots`);
   }
+  assert.deepStrictEqual(E.nextComputerShot(shotLog, seeded(9)), { x: 3, y: 4 });
 });
 ```
 
@@ -149,31 +116,19 @@ Insert immediately **before** it:
     return !overlaps(cells, occupied);
   }
 
-  function adjacentCells(x, y) {
-    return [{ x: x + 1, y }, { x: x - 1, y }, { x, y: y + 1 }, { x, y: y - 1 }]
-      .filter(c => c.x >= 0 && c.x < GRID_SIZE && c.y >= 0 && c.y < GRID_SIZE);
-  }
-
-  // The computer's targeting. Kept pure by threading its memory (huntState)
-  // through the caller, exactly as shotLog already is — this function never
-  // needs to know where any ship is. The caller enqueues the neighbours of a
-  // hit and clears the queue on a sink.
-  function nextComputerShot(shotLog, huntState, rng) {
+  // The computer's whole AI: pick uniformly among cells it has not fired at
+  // yet. Deliberately has no targeting and no memory between turns — it never
+  // chases a hit, so a student is never punished for being unlucky early.
+  function nextComputerShot(shotLog, rng) {
     const random = rng || Math.random;
-    const fired = key => Object.prototype.hasOwnProperty.call(shotLog, key);
-    const queue = ((huntState && huntState.queue) || []).filter(c => !fired(`${c.x},${c.y}`));
-    if (queue.length) {
-      return { x: queue[0].x, y: queue[0].y, huntState: { queue: queue.slice(1) } };
-    }
     const open = [];
     for (let y = 0; y < GRID_SIZE; y++) {
       for (let x = 0; x < GRID_SIZE; x++) {
-        if (!fired(`${x},${y}`)) open.push({ x, y });
+        if (!Object.prototype.hasOwnProperty.call(shotLog, `${x},${y}`)) open.push({ x, y });
       }
     }
     if (!open.length) return null;
-    const pick = open[Math.floor(random() * open.length)];
-    return { x: pick.x, y: pick.y, huntState: { queue: [] } };
+    return open[Math.floor(random() * open.length)];
   }
 ```
 
@@ -188,20 +143,20 @@ to:
 ```js
   return {
     GRID_SIZE, FLEET_SPEC, generateFleet, fireAt, isFleetSunk, countSunk, isShipSunk,
-    shipCells, canPlace, adjacentCells, nextComputerShot
+    shipCells, canPlace, nextComputerShot
   };
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
 Run: `node --test battleship/engine.test.js`
-Expected: PASS — all tests (the 7 pre-existing plus the 7 new ones).
+Expected: PASS — all tests (the 7 pre-existing plus the 4 new ones).
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add battleship/engine.js battleship/engine.test.js
-git commit -m "Add Battleship placement helpers and hunting computer AI"
+git commit -m "Add Battleship placement helpers and random computer AI"
 ```
 
 ---
@@ -215,7 +170,7 @@ git commit -m "Add Battleship placement helpers and hunting computer AI"
 **Interfaces:**
 - Consumes: `BattleshipEngine.{GRID_SIZE, FLEET_SPEC, generateFleet, fireAt, isFleetSunk, countSunk, isShipSunk, shipCells, canPlace}` from Task 1; existing globals `gameState`, `timeUp`, `timerInterval`, `window._gameOver`, `window._startedAt`, `window._testMode`, `escapeHtml`, `showTestResult`, `submitCompletion`.
 - Produces (used by Tasks 3–4):
-  - `gameState.battleship` = `{station, phase, playerFleet, placingIndex, orientation, enemyFleet, playerShotLog, enemyShotLog, huntState, pendingX, pendingY, activeField, busy, round}`
+  - `gameState.battleship` = `{station, phase, playerFleet, placingIndex, orientation, enemyFleet, playerShotLog, enemyShotLog, pendingX, pendingY, activeField, busy, round}`
   - Functions: `startBattleship(st)`, `renderBattleship()`, `renderBsBoard(fleet, shotLog, opts)`, `renderBsFleetList()`, `setBsMsg(text)`, `clearBsCoords()`, `applyBsCell(prefix, x, y, result)`, `setBsOrientation(o)`, `placeBsShip()`, `resetBsPlacement()`, `selectBsField(field)`, `updateBsActionEnabled()`, `bsInput(digit)`, `bsBackspace()`, `hideBsPad()`, `fireBattleship()`, `finishBattleship(onTime)`
   - DOM ids: `#bsMsg`, `#bsFleetList`, `#bsBoxX`, `#bsBoxY`, `#bsActionBtn`, `#bsPad`, `#bsOrientH`, `#bsOrientV`, `#bsPlacePrompt`; enemy cells `#bs_{x}_{y}`, player cells `#bsp_{x}_{y}`
 
@@ -315,7 +270,7 @@ function startBattleship(st){
   gameState.battleship={
     station:st,phase:'placing',
     playerFleet:[],placingIndex:0,orientation:'h',
-    enemyFleet:[],playerShotLog:{},enemyShotLog:{},huntState:{queue:[]},
+    enemyFleet:[],playerShotLog:{},enemyShotLog:{},
     pendingX:'',pendingY:'',activeField:'x',busy:false,round:1
   };
   window._battleshipTimeout=()=>finishBattleship(false);
@@ -634,7 +589,7 @@ git commit -m "Add Battleship fleet placement phase and two-fleet state model"
 - Modify: `tests/battleship.spec.js`
 
 **Interfaces:**
-- Consumes: everything Task 2 produced, plus `BattleshipEngine.{nextComputerShot, adjacentCells}` from Task 1.
+- Consumes: everything Task 2 produced, plus `BattleshipEngine.nextComputerShot` from Task 1.
 - Produces (used by Task 4): `bsComputerTurn()` and `bsResetRound()`; `fireBattleship()` becomes `async` and sets `bs.busy` for the duration of a full turn.
 
 - [ ] **Step 1: Replace `fireBattleship` with the async turn loop**
@@ -675,16 +630,12 @@ async function fireBattleship(){
 }
 async function bsComputerTurn(){
   const bs=gameState.battleship;
-  const pick=BattleshipEngine.nextComputerShot(bs.enemyShotLog,bs.huntState);
+  const pick=BattleshipEngine.nextComputerShot(bs.enemyShotLog);
   if(!pick) return;
   const res=BattleshipEngine.fireAt(bs.playerFleet,bs.enemyShotLog,pick.x,pick.y);
   await bsAnimateShot('bsp',pick.x,pick.y,res.result);
   if(window._gameOver) return;
   bs.enemyShotLog=res.shotLog;
-  bs.huntState=pick.huntState;
-  // The caller owns the hunt queue: widen it around a hit, drop it on a sink.
-  if(res.result==='hit') bs.huntState={queue:bs.huntState.queue.concat(BattleshipEngine.adjacentCells(pick.x,pick.y))};
-  else if(res.result==='sunk') bs.huntState={queue:[]};
   applyBsCell('bsp',pick.x,pick.y,res.result);
   if(res.result==='sunk') setBsMsg(`Kapal anda ${res.shipName} musnah!`);
   else setBsMsg(res.result==='hit'?'Komputer kena kapal anda!':'Komputer tersasar.');
@@ -696,7 +647,6 @@ function bsResetRound(){
   bs.enemyFleet=BattleshipEngine.generateFleet();
   bs.playerShotLog={};
   bs.enemyShotLog={};
-  bs.huntState={queue:[]};
   bs.busy=false;
   gameState.correct=0;
   renderBattleship();
@@ -758,16 +708,22 @@ test('losing the whole fleet resets the round and keeps the placement', async ({
 
   const layoutBefore = await page.evaluate(() => JSON.stringify(gameState.battleship.playerFleet));
 
-  // Sink every player ship cell but one, then let the computer's next shot
-  // take the last one by queueing it as the sole hunt target.
+  // The AI picks uniformly among un-fired cells, so the only way to force its
+  // next shot is to leave exactly one cell open: sink every player ship cell
+  // but the last, then close off every other square on the board.
   await page.evaluate(() => {
     const bs = gameState.battleship;
     const cells = bs.playerFleet.flatMap(s => s.cells);
     const last = cells[cells.length - 1];
-    cells.slice(0, -1).forEach(c => {
-      bs.enemyShotLog = BattleshipEngine.fireAt(bs.playerFleet, bs.enemyShotLog, c.x, c.y).shotLog;
-    });
-    bs.huntState = { queue: [{ x: last.x, y: last.y }] };
+    const fire = (x, y) => {
+      bs.enemyShotLog = BattleshipEngine.fireAt(bs.playerFleet, bs.enemyShotLog, x, y).shotLog;
+    };
+    cells.slice(0, -1).forEach(c => fire(c.x, c.y));
+    for (let x = 0; x < BattleshipEngine.GRID_SIZE; x++) {
+      for (let y = 0; y < BattleshipEngine.GRID_SIZE; y++) {
+        if (x !== last.x || y !== last.y) fire(x, y);
+      }
+    }
   });
 
   await fireAt(page, 8, 8);
