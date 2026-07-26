@@ -16,6 +16,7 @@
 <script src="stations/layout.js"></script>
 <script src="sifir/engine.js"></script>
 <script src="crossword/engine.js"></script>
+<script src="battleship/engine.js"></script>
 <script src="offline/store.js"></script>
 <script src="hunts/registry.js"></script>
 <style>
@@ -340,6 +341,48 @@
   .participant-mode .crossword-board{box-shadow:inset 0 0 0 2px #4ea5cd;}
   .participant-mode .cw-cell.blank:focus-visible,.participant-mode .cw-cell.selected{outline-color:#0e8fc8;background:#d7f3ff;}
   .participant-mode .cw-pad{border-radius:5px;background:linear-gradient(135deg,#fff3b4,#e6b954);}
+  .battleship-game{max-width:600px;margin:auto;overflow-anchor:none;}
+  .battleship-game > p{color:#666;font-size:14px;margin:4px 0 12px;}
+  .bs-board-wrap{width:100%;max-height:min(58vh,480px);overflow:auto;padding:12px;background:#dce9ed;border:3px solid var(--navy);border-radius:8px;touch-action:pan-x pan-y;}
+  .bs-board{--bs-cell:34px;display:grid;grid-template-columns:repeat(12,var(--bs-cell));grid-template-rows:repeat(12,var(--bs-cell));gap:2px;width:max-content;padding:5px;background:#0d4268;border-radius:5px;}
+  .bs-row-label,.bs-col-label,.bs-corner{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:calc(var(--bs-cell) * .4);color:#fff;}
+  .bs-cell{display:flex;align-items:center;justify-content:center;background:#a8d8e8;border:1px solid #6fa8bf;color:#0d4268;font-weight:900;font-size:calc(var(--bs-cell) * .5);user-select:none;}
+  .bs-cell.hit{background:#c8493f;color:#fff;border-color:#8f342c;}
+  .bs-cell.miss{background:#eef6f9;color:#5b8ea3;border-color:#bcd7e0;}
+  #bsMsg{min-height:24px;font-weight:700;color:var(--navy);text-align:center;margin:8px 0;}
+  .bs-fleet-status{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:10px 0;}
+  .bs-fleet-item{padding:6px 12px;border-radius:20px;background:#fdf3d8;color:#12385b;font-weight:700;font-size:13px;}
+  .bs-fleet-item.sunk{background:#dff5e5;color:var(--green);text-decoration:line-through;}
+  .bs-coord-row{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:14px 0;}
+  .bs-coord-row span{font-size:24px;font-weight:800;color:var(--navy);}
+  .bs-coord-box{min-width:44px;height:44px;padding:0 8px;display:flex;align-items:center;justify-content:center;border:3px solid #8b5427;border-radius:6px;background:#fff9df;color:#17324d;font-weight:900;font-size:20px;cursor:pointer;touch-action:manipulation;}
+  .bs-coord-box.active{outline:4px solid #20a9e0;outline-offset:-4px;background:#d7f3ff;}
+  .bs-coord-row button.big{width:auto;margin:0;padding:10px 24px;}
+  .bs-pad{display:grid;grid-template-columns:repeat(3,minmax(58px,1fr));gap:7px;width:min(100%,330px);margin:14px auto 0;padding:10px;border:3px solid #704018;border-radius:7px;background:#fff0b5;box-shadow:0 -3px 12px #063a6655;}
+  .bs-pad[hidden]{display:none;}
+  .bs-pad button{min-height:48px;margin:0;padding:6px;font-size:20px;}
+  .bs-pad-close{grid-column:1/-1;font-size:15px;}
+  @media (max-width:720px){
+    body.battleship-mode{overflow:hidden;display:flex;flex-direction:column;height:100vh;height:100dvh;}
+    body.battleship-mode .topbar{flex:0 0 auto;}
+    body.battleship-mode .wrap{flex:1 1 auto;width:100%;min-height:0;min-width:0;margin:0;padding:8px;}
+    body.battleship-mode #view-game.active{height:100%;display:flex;flex-direction:column;min-height:0;}
+    body.battleship-mode #gameCard{flex:1 1 0;min-height:0;min-width:0;display:flex;flex-direction:column;padding:12px;}
+    body.battleship-mode .battleship-game{display:flex;flex-direction:column;height:100%;width:100%;min-height:0;min-width:0;max-width:none;margin:0;}
+    body.battleship-mode .battleship-game h2{margin:0 0 4px;font-size:17px;}
+    body.battleship-mode .battleship-game > p{font-size:12px;margin:0;}
+    body.battleship-mode .bs-board{--bs-cell:30px;}
+    body.battleship-mode .bs-board-wrap{flex:1 1 0;min-height:0;min-width:0;max-height:none;}
+    body.battleship-mode #bsMsg{min-height:0;}
+    body.battleship-mode .bs-coord-row{margin:8px 0;}
+    .bs-pad{grid-template-columns:repeat(4,minmax(48px,1fr));gap:5px;width:100%;max-width:420px;margin:8px auto 0;padding:8px;}
+    .bs-pad button{min-height:40px;padding:4px;font-size:18px;}
+    .bs-pad-close{min-height:36px;}
+  }
+  .participant-mode .bs-board-wrap{border-color:#704018;border-radius:5px;background:#8fc7d4;box-shadow:4px 4px 0 #063a66;}
+  .participant-mode .bs-board{box-shadow:inset 0 0 0 2px #4ea5cd;}
+  .participant-mode .bs-coord-box.active{outline-color:#0e8fc8;background:#d7f3ff;}
+  .participant-mode .bs-pad{border-radius:5px;background:linear-gradient(135deg,#fff3b4,#e6b954);}
   .participant-mode .finalbox{padding:24px 10px;}.participant-mode .finalbox h2{color:#12385b;}.participant-mode #timer{border:2px solid #ffcb42;background:#092844;box-shadow:2px 2px 0 #061e38;color:#fff0ad;border-radius:4px;}
   @media (max-width:720px){
     .topbar{padding:12px 16px;}
@@ -683,6 +726,7 @@ const GAME_TYPES = [
   {id:'lembaran_kerja', name:'Lembaran Kerja'},
   {id:'sudoku', name:'Sudoku Challenge (3 Stage)'},
   {id:'crossword', name:'Crossword Puzzle'},
+  {id:'battleship', name:'Battleship Koordinat'},
   {id:'sifir', name:'Sifir Challenge'},
   {id:'tangram', name:'Tangram Challenge'},
   {id:'jejak_lari', name:'Jejak Lari GPS'}
@@ -1080,6 +1124,7 @@ function show(id){
   document.getElementById(id).classList.add('active');
   document.body.classList.toggle('participant-mode', PARTICIPANT_VIEW_IDS.has(id));
   if(id!=='view-game' || gameState.type!=='crossword') document.body.classList.remove('crossword-mode');
+  if(id!=='view-game' || gameState.type!=='battleship') document.body.classList.remove('battleship-mode');
   if(id!=='view-clue') hideJourneyMap();
   const wrap = document.querySelector('.wrap');
   if(wrap) wrap.classList.toggle('admin-wrap', id==='view-admin');
@@ -2209,6 +2254,7 @@ function startGame(stId, testSt){
   window._gameOver=false;
   window._sudokuTimeout=null;
   window._crosswordTimeout=null;
+  window._battleshipTimeout=null;
   window._sifirTimeout=null;
   timeLeftSec = (st.timeLimitMin||10)*60;
   window._startedAt = Date.now();
@@ -2246,6 +2292,7 @@ function tick(){
     if(gameState && gameState.type==='tangram' && window._tgTimeout){ window._tgTimeout(); }
     if(gameState && gameState.type==='sudoku' && window._sudokuTimeout){ window._sudokuTimeout(); }
     if(gameState && gameState.type==='crossword' && window._crosswordTimeout){ window._crosswordTimeout(); }
+    if(gameState && gameState.type==='battleship' && window._battleshipTimeout){ window._battleshipTimeout(); }
     if(gameState && gameState.type==='sifir' && window._sifirTimeout){ window._sifirTimeout(); }
     if(gameState && gameState.type==='jejak_lari' && window._runTimeout){ window._runTimeout(); }
   }
@@ -2317,6 +2364,10 @@ function renderGame(st){
   }
   else if(st.gameType==='crossword'){
     startCrossword(st);
+    return;
+  }
+  else if(st.gameType==='battleship'){
+    startBattleship(st);
     return;
   }
   else if(st.gameType==='sifir'){
@@ -2777,6 +2828,160 @@ function finishCrossword(onTime){
   gameState.correct=result.correct;
   const timeTakenSec=Math.round((Date.now()-window._startedAt)/1000);
   let score=Math.round((result.correct/result.total)*100);
+  if(!onTime) score=Math.max(0,score-20);
+  if(window._testMode){ showTestResult(onTime,score,timeTakenSec); return; }
+  submitCompletion(onTime,score,timeTakenSec);
+}
+// ---------- BATTLESHIP: fire coordinates at a hidden computer fleet ----------
+function startBattleship(st){
+  const fleet=BattleshipEngine.generateFleet();
+  gameState.type='battleship';
+  gameState.total=5;
+  gameState.correct=0;
+  gameState.battleship={station:st,fleet,shotLog:{},pendingX:'',pendingY:'',activeField:'x'};
+  window._battleshipTimeout=()=>finishBattleship(false);
+  document.body.classList.add('battleship-mode');
+  renderBattleship();
+}
+function renderBsFleetList(){
+  const bs=gameState.battleship;
+  return bs.fleet.map(ship=>{
+    const sunk=BattleshipEngine.isShipSunk(ship,bs.shotLog);
+    return `<div class="bs-fleet-item${sunk?' sunk':''}">${escapeHtml(ship.name)} (${ship.length})</div>`;
+  }).join('');
+}
+function renderBattleship(){
+  const bs=gameState.battleship;
+  const size=BattleshipEngine.GRID_SIZE;
+  let cells='';
+  for(let y=size-1;y>=0;y--){
+    cells+=`<div class="bs-row-label">${y}</div>`;
+    for(let x=0;x<size;x++){
+      const key=`${x},${y}`;
+      const shot=bs.shotLog[key];
+      const cls=shot==='hit'?'hit':(shot==='miss'?'miss':'water');
+      const mark=shot==='hit'?'X':(shot==='miss'?'O':'');
+      const label=shot?`, ${shot==='hit'?'kena':'tidak kena'}`:'';
+      cells+=`<div id="bs_${x}_${y}" class="bs-cell ${cls}" aria-label="Petak (${x}, ${y})${label}">${mark}</div>`;
+    }
+  }
+  cells+='<div class="bs-corner" aria-hidden="true"></div>';
+  for(let x=0;x<size;x++){
+    cells+=`<div class="bs-col-label">${x}</div>`;
+  }
+  document.getElementById('gameCard').innerHTML=`<div class="battleship-game">
+    <h2>${escapeHtml(bs.station.name)}</h2>
+    <p>Tembak armada tersembunyi komputer. Masukkan koordinat (x, y) lalu tekan Tembak.</p>
+    <div class="bs-board-wrap">
+      <div class="bs-board">${cells}</div>
+    </div>
+    <div id="bsMsg" aria-live="polite"></div>
+    <div id="bsFleetList" class="bs-fleet-status">${renderBsFleetList()}</div>
+    <div class="bs-coord-row">
+      <span>(</span>
+      <div id="bsBoxX" class="bs-coord-box" role="button" tabindex="0" aria-label="Koordinat x" onclick="selectBsField('x')"></div>
+      <span>,</span>
+      <div id="bsBoxY" class="bs-coord-box" role="button" tabindex="0" aria-label="Koordinat y" onclick="selectBsField('y')"></div>
+      <span>)</span>
+      <button id="bsFireBtn" class="big" type="button" onclick="fireBattleship()" disabled>Tembak</button>
+    </div>
+    <div id="bsPad" class="bs-pad" hidden>
+      ${[1,2,3,4,5,6,7,8,9].map(digit=>`<button type="button" onclick="bsInput(${digit})">${digit}</button>`).join('')}
+      <button type="button" onclick="bsBackspace()" aria-label="Padam">&#9003;</button>
+      <button type="button" onclick="bsInput(0)">0</button>
+      <button class="bs-pad-close" type="button" onclick="hideBsPad()">Selesai</button>
+    </div>
+  </div>`;
+}
+function selectBsField(field){
+  const bs=gameState.battleship;
+  if(!bs || window._gameOver) return;
+  bs.activeField=field;
+  const boxX=document.getElementById('bsBoxX'), boxY=document.getElementById('bsBoxY');
+  if(boxX) boxX.classList.toggle('active', field==='x');
+  if(boxY) boxY.classList.toggle('active', field==='y');
+  const pad=document.getElementById('bsPad');
+  if(pad) pad.hidden=false;
+}
+function updateBsFireEnabled(){
+  const bs=gameState.battleship;
+  const btn=document.getElementById('bsFireBtn');
+  if(btn && bs) btn.disabled=!(bs.pendingX!=='' && bs.pendingY!=='');
+}
+function bsInput(digit){
+  const bs=gameState.battleship;
+  if(!bs || !Number.isInteger(digit) || digit<0 || digit>9) return;
+  const key=bs.activeField==='x'?'pendingX':'pendingY';
+  const current=bs[key];
+  bs[key]=(current==='1' && digit===0)?'10':String(digit);
+  const box=document.getElementById(bs.activeField==='x'?'bsBoxX':'bsBoxY');
+  if(box) box.textContent=bs[key];
+  updateBsFireEnabled();
+}
+function bsBackspace(){
+  const bs=gameState.battleship;
+  if(!bs) return;
+  const key=bs.activeField==='x'?'pendingX':'pendingY';
+  bs[key]=bs[key].slice(0,-1);
+  const box=document.getElementById(bs.activeField==='x'?'bsBoxX':'bsBoxY');
+  if(box) box.textContent=bs[key];
+  updateBsFireEnabled();
+}
+function hideBsPad(){
+  const pad=document.getElementById('bsPad');
+  if(pad) pad.hidden=true;
+}
+function fireBattleship(){
+  const bs=gameState.battleship;
+  if(!bs || window._gameOver) return;
+  if(bs.pendingX==='' || bs.pendingY==='') return;
+  const x=Number(bs.pendingX), y=Number(bs.pendingY);
+  const {shotLog,result,shipName}=BattleshipEngine.fireAt(bs.fleet,bs.shotLog,x,y);
+  bs.shotLog=shotLog;
+  gameState.correct=BattleshipEngine.countSunk(bs.fleet,bs.shotLog);
+
+  const msg=document.getElementById('bsMsg');
+  if(result==='already-shot'){
+    if(msg) msg.textContent='Sudah ditembak di sini.';
+  } else {
+    const cell=document.getElementById(`bs_${x}_${y}`);
+    if(cell){
+      cell.classList.remove('water');
+      cell.classList.add(result==='miss'?'miss':'hit');
+      cell.textContent=result==='miss'?'O':'X';
+      cell.setAttribute('aria-label',`Petak (${x}, ${y}), ${result==='miss'?'tidak kena':'kena'}`);
+    }
+    if(result==='sunk'){
+      if(msg) msg.textContent=`Kapal ${shipName} tenggelam!`;
+      const list=document.getElementById('bsFleetList');
+      if(list) list.innerHTML=renderBsFleetList();
+    } else if(result==='hit'){
+      if(msg) msg.textContent='Kena!';
+    } else {
+      if(msg) msg.textContent='Tidak kena.';
+    }
+  }
+
+  bs.pendingX=''; bs.pendingY='';
+  const boxX=document.getElementById('bsBoxX'); if(boxX) boxX.textContent='';
+  const boxY=document.getElementById('bsBoxY'); if(boxY) boxY.textContent='';
+  updateBsFireEnabled();
+  hideBsPad();
+
+  if(BattleshipEngine.isFleetSunk(bs.fleet,bs.shotLog)){
+    finishBattleship(!timeUp);
+  }
+}
+function finishBattleship(onTime){
+  if(window._gameOver) return;
+  window._gameOver=true;
+  window._battleshipTimeout=null;
+  clearInterval(timerInterval);
+  const bs=gameState.battleship;
+  const sunk=BattleshipEngine.countSunk(bs.fleet,bs.shotLog);
+  gameState.correct=sunk;
+  const timeTakenSec=Math.round((Date.now()-window._startedAt)/1000);
+  let score=Math.round((sunk/5)*100);
   if(!onTime) score=Math.max(0,score-20);
   if(window._testMode){ showTestResult(onTime,score,timeTakenSec); return; }
   submitCompletion(onTime,score,timeTakenSec);
