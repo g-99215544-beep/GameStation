@@ -349,7 +349,6 @@
   .bs-cell{display:flex;align-items:center;justify-content:center;background:#a8d8e8;border:1px solid #6fa8bf;color:#0d4268;font-weight:900;font-size:calc(var(--bs-cell) * .5);user-select:none;}
   .bs-cell.hit{background:#c8493f;color:#fff;border-color:#8f342c;}
   .bs-cell.miss{background:#eef6f9;color:#5b8ea3;border-color:#bcd7e0;}
-  .bs-cell.ship-revealed{background:#ffe784;border-color:#8b5427;}
   #bsMsg{min-height:24px;font-weight:700;color:var(--navy);text-align:center;margin:8px 0;}
   .bs-fleet-status{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:10px 0;}
   .bs-fleet-item{padding:6px 12px;border-radius:20px;background:#fdf3d8;color:#12385b;font-weight:700;font-size:13px;}
@@ -2932,15 +2931,6 @@ function hideBsPad(){
   const pad=document.getElementById('bsPad');
   if(pad) pad.hidden=true;
 }
-function revealBsFleet(){
-  const bs=gameState.battleship;
-  bs.fleet.forEach(ship=>ship.cells.forEach(c=>{
-    if(bs.shotLog[`${c.x},${c.y}`]!=='hit'){
-      const cell=document.getElementById(`bs_${c.x}_${c.y}`);
-      if(cell) cell.classList.add('ship-revealed');
-    }
-  }));
-}
 function fireBattleship(){
   const bs=gameState.battleship;
   if(!bs || window._gameOver) return;
@@ -2990,7 +2980,6 @@ function finishBattleship(onTime){
   const bs=gameState.battleship;
   const sunk=BattleshipEngine.countSunk(bs.fleet,bs.shotLog);
   gameState.correct=sunk;
-  revealBsFleet();
   const timeTakenSec=Math.round((Date.now()-window._startedAt)/1000);
   let score=Math.round((sunk/5)*100);
   if(!onTime) score=Math.max(0,score-20);
