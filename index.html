@@ -2846,7 +2846,7 @@ function startBattleship(st){
 function renderBsFleetList(){
   const bs=gameState.battleship;
   return bs.fleet.map(ship=>{
-    const sunk=ship.cells.every(c=>bs.shotLog[`${c.x},${c.y}`]==='hit');
+    const sunk=BattleshipEngine.isShipSunk(ship,bs.shotLog);
     return `<div class="bs-fleet-item${sunk?' sunk':''}">${escapeHtml(ship.name)} (${ship.length})</div>`;
   }).join('');
 }

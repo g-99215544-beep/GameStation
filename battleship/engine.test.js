@@ -84,3 +84,11 @@ test('isFleetSunk and countSunk track partial and full completion', () => {
   assert.strictEqual(E.countSunk(fleet, log), 2);
   assert.strictEqual(E.isFleetSunk(fleet, log), true);
 });
+
+test('isShipSunk is true only when every cell of that ship is hit', () => {
+  const ship = { name: 'B', length: 2, cells: [{ x: 1, y: 0 }, { x: 2, y: 0 }] };
+  let log = { '1,0': 'hit' };
+  assert.strictEqual(E.isShipSunk(ship, log), false);
+  log = { '1,0': 'hit', '2,0': 'hit' };
+  assert.strictEqual(E.isShipSunk(ship, log), true);
+});

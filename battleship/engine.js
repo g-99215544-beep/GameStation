@@ -68,6 +68,10 @@
     return FALLBACK_LAYOUT.map(ship => ({ name: ship.name, length: ship.length, cells: ship.cells.slice() }));
   }
 
+  function isShipSunk(ship, shotLog) {
+    return ship.cells.every(c => shotLog[`${c.x},${c.y}`] === 'hit');
+  }
+
   function fireAt(fleet, shotLog, x, y) {
     const key = `${x},${y}`;
     if (Object.prototype.hasOwnProperty.call(shotLog, key)) {
@@ -76,19 +80,19 @@
     const ship = fleet.find(s => s.cells.some(c => c.x === x && c.y === y));
     const nextLog = Object.assign({}, shotLog, { [key]: ship ? 'hit' : 'miss' });
     if (!ship) return { shotLog: nextLog, result: 'miss' };
-    const sunk = ship.cells.every(c => nextLog[`${c.x},${c.y}`] === 'hit');
+    const sunk = isShipSunk(ship, nextLog);
     return sunk
       ? { shotLog: nextLog, result: 'sunk', shipName: ship.name }
       : { shotLog: nextLog, result: 'hit' };
   }
 
   function isFleetSunk(fleet, shotLog) {
-    return fleet.every(ship => ship.cells.every(c => shotLog[`${c.x},${c.y}`] === 'hit'));
+    return fleet.every(ship => isShipSunk(ship, shotLog));
   }
 
   function countSunk(fleet, shotLog) {
-    return fleet.filter(ship => ship.cells.every(c => shotLog[`${c.x},${c.y}`] === 'hit')).length;
+    return fleet.filter(ship => isShipSunk(ship, shotLog)).length;
   }
 
-  return { GRID_SIZE, FLEET_SPEC, generateFleet, fireAt, isFleetSunk, countSunk };
+  return { GRID_SIZE, FLEET_SPEC, generateFleet, fireAt, isFleetSunk, countSunk, isShipSunk };
 });

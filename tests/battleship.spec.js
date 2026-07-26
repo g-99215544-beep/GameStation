@@ -61,7 +61,7 @@ test('battleship supports coordinate entry, hit/miss feedback, sinking, and a fu
   const firstCell = fleet[0].cells[0];
   await fireAt(page, firstCell.x, firstCell.y);
   await expect(page.locator(`#bs_${firstCell.x}_${firstCell.y}`)).toHaveClass(/hit/);
-  await expect(page.locator('#bsMsg')).not.toHaveText('');
+  await expect(page.locator('#bsMsg')).toHaveText('Kena!');
 
   const occupied = new Set();
   fleet.forEach(ship => ship.cells.forEach(c => occupied.add(`${c.x},${c.y}`)));
@@ -74,20 +74,32 @@ test('battleship supports coordinate entry, hit/miss feedback, sinking, and a fu
   await fireAt(page, missCell.x, missCell.y);
   await expect(page.locator(`#bs_${missCell.x}_${missCell.y}`)).toHaveClass(/miss/);
 
-  await page.evaluate(() => {
+  // Firing the same coordinate again must not re-mark the cell or claim a hit.
+  await fireAt(page, firstCell.x, firstCell.y);
+  await expect(page.locator('#bsMsg')).toHaveText('Sudah ditembak di sini.');
+  await expect(page.locator(`#bs_${firstCell.x}_${firstCell.y}`)).toHaveClass(/hit/);
+
+  // Sink the fleet's first ship (Lookout Cruiser, 2 cells) through the real UI,
+  // exercising the production 'sunk' branch and fleet-list re-render.
+  const secondCell = fleet[0].cells[1];
+  await fireAt(page, secondCell.x, secondCell.y);
+  await expect(page.locator('#bsMsg')).toContainText('tenggelam');
+  await expect(page.locator('.bs-fleet-item.sunk')).toHaveCount(1);
+
+  // Fire every remaining un-fired ship cell across the rest of the fleet
+  // through the real UI, so the production auto-finish wiring (the
+  // isFleetSunk check inside fireBattleship) is what ends the round.
+  let remaining = await page.evaluate(() => {
     const bs = gameState.battleship;
-    bs.fleet.forEach(ship => {
-      ship.cells.forEach(c => {
-        const key = `${c.x},${c.y}`;
-        if (!(key in bs.shotLog)) {
-          const res = BattleshipEngine.fireAt(bs.fleet, bs.shotLog, c.x, c.y);
-          bs.shotLog = res.shotLog;
-        }
-      });
-    });
-    gameState.correct = BattleshipEngine.countSunk(bs.fleet, bs.shotLog);
-    if (BattleshipEngine.isFleetSunk(bs.fleet, bs.shotLog)) finishBattleship(true);
+    const cells = [];
+    bs.fleet.forEach(ship => ship.cells.forEach(c => {
+      if (!(`${c.x},${c.y}` in bs.shotLog)) cells.push({ x: c.x, y: c.y });
+    }));
+    return cells;
   });
+  for (const cell of remaining) {
+    await fireAt(page, cell.x, cell.y);
+  }
 
   await expect(page.getByRole('heading', { name: 'Ujian Selesai' })).toBeVisible();
   await expect(page.locator('#resultCard')).toContainText('Markah: 100');
@@ -134,4 +146,26 @@ test('battleship board, fleet panel, and coordinate pad stay visible on a phone'
   expect(layout.padBottom).toBeLessThanOrEqual(layout.innerHeight);
   expect(layout.headingTop).toBeGreaterThanOrEqual(0);
   expect(layout.scrollHeight).toBeLessThanOrEqual(layout.innerHeight + 1);
+
+  // fireBattleship() calls hideBsPad() on every shot, so real play triggers a
+  // close/reopen reflow cycle (board grows to fill the freed space, then
+  // shrinks again when the pad reopens). Fire a real shot and reopen the pad
+  // to confirm that reflow doesn't break the layout on a small phone.
+  await fireAt(page, 0, 0);
+  await page.locator('#bsBoxX').click();
+  await expect(pad).toBeVisible();
+
+  const layoutAfter = await page.evaluate(() => {
+    const padRect = document.getElementById('bsPad').getBoundingClientRect();
+    const headingRect = document.querySelector('.battleship-game h2').getBoundingClientRect();
+    return {
+      padBottom: padRect.bottom,
+      headingTop: headingRect.top,
+      innerHeight: window.innerHeight,
+      scrollHeight: document.documentElement.scrollHeight
+    };
+  });
+  expect(layoutAfter.padBottom).toBeLessThanOrEqual(layoutAfter.innerHeight);
+  expect(layoutAfter.headingTop).toBeGreaterThanOrEqual(0);
+  expect(layoutAfter.scrollHeight).toBeLessThanOrEqual(layoutAfter.innerHeight + 1);
 });
