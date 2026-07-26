@@ -2972,6 +2972,7 @@ function resetBsPlacement(){
   const bs=gameState.battleship;
   if(!bs || bs.phase!=='placing') return;
   bs.playerFleet=[]; bs.placingIndex=0;
+  bs.pendingX=''; bs.pendingY='';
   renderBattleship();
   setBsMsg('Susunan dikosongkan. Mula semula.');
 }
@@ -2989,6 +2990,7 @@ function placeBsShip(){
   }
   bs.playerFleet.push({name:spec.name,length:spec.length,cells:BattleshipEngine.shipCells(x,y,spec.length,bs.orientation)});
   bs.placingIndex++;
+  bs.pendingX=''; bs.pendingY='';
   if(bs.placingIndex>=BattleshipEngine.FLEET_SPEC.length){
     bs.phase='playing';
     bs.enemyFleet=BattleshipEngine.generateFleet();

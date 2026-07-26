@@ -219,3 +219,22 @@ test('battleship requires placing all five ships before play begins', async ({ p
   await expect(page.locator('.bs-fleet-item')).toHaveCount(5);
   await expect(page.locator('.bs-board.mini')).toBeVisible();
 });
+
+test('a successful placement fully clears the coordinate boxes', async ({ page }) => {
+  await openBattleship(page);
+
+  await enterCoords(page, 0, 0);
+  await page.getByRole('button', { name: 'Letak' }).click();
+  await expect(page.locator('#bsPlacePrompt')).toContainText('Submarine');
+
+  // Both boxes must be empty and the button dead after a successful placement.
+  await expect(page.locator('#bsBoxX')).toHaveText('');
+  await expect(page.locator('#bsBoxY')).toHaveText('');
+  await expect(page.getByRole('button', { name: 'Letak' })).toBeDisabled();
+
+  // Entering only an x must NOT enable the button on a stale y.
+  await page.locator('#bsBoxX').click();
+  await page.locator('#bsPad button').filter({ hasText: /^3$/ }).click();
+  await expect(page.locator('#bsBoxY')).toHaveText('');
+  await expect(page.getByRole('button', { name: 'Letak' })).toBeDisabled();
+});
