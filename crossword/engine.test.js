@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const E = require('./engine.js');
 
-test('the shipped 11x11 puzzle has twenty blanks and a valid solution', () => {
+test('the fallback 11x11 board has twenty blanks and a valid solution', () => {
   assert.strictEqual(E.PUZZLE.cols, 11);
   assert.strictEqual(E.PUZZLE.rows, 11);
   assert.strictEqual(E.PUZZLE.grid.length, 11);
@@ -11,6 +11,46 @@ test('the shipped 11x11 puzzle has twenty blanks and a valid solution', () => {
   assert.strictEqual(entries.length, 20);
   assert.ok(entries.every(entry => Number.isInteger(entry.answer) && entry.answer >= 0 && entry.answer <= 9));
   assert.deepStrictEqual(E.verifySolution(E.PUZZLE.grid), { ok: true, failures: [] });
+});
+
+test('generatePuzzle produces a valid, solvable, nine-blank board every time', () => {
+  const OPERATORS = ['+', '-', 'x', '÷'];
+  for (let i = 0; i < 500; i++) {
+    const puzzle = E.generatePuzzle();
+    assert.strictEqual(puzzle.cols, 11);
+    assert.strictEqual(puzzle.rows, 11);
+    assert.deepStrictEqual(E.verifySolution(puzzle.grid), { ok: true, failures: [] });
+
+    const entries = E.blanks(puzzle.grid);
+    assert.strictEqual(entries.length, 9);
+    entries.forEach(entry => {
+      assert.ok(Number.isInteger(entry.answer) && entry.answer >= 0);
+      assert.ok(String(entry.answer).length <= 7);
+    });
+
+    const seenOps = new Set();
+    puzzle.grid.forEach(row => row.forEach(cell => {
+      if (cell && cell.v && OPERATORS.includes(cell.v)) seenOps.add(cell.v);
+    }));
+    OPERATORS.forEach(op => assert.ok(seenOps.has(op), `missing operator ${op} in a generated board`));
+  }
+});
+
+test('generatePuzzle never exceeds the 7-digit ceiling implied by the difficulty caps', () => {
+  // Operand caps are +/-: 6 digits, x: 5x2 digits, ÷: 4-digit dividend. The
+  // widest a *result* can get is a 6-digit+5-digit sum or a 5x2-digit
+  // product, both of which top out at 7 digits.
+  for (let i = 0; i < 200; i++) {
+    const puzzle = E.generatePuzzle();
+    const allNumbers = [];
+    puzzle.grid.forEach(row => row.forEach(cell => {
+      if (!cell) return;
+      if (Object.prototype.hasOwnProperty.call(cell, 'a')) allNumbers.push(cell.a);
+      else if (/^\d+$/.test(cell.v)) allNumbers.push(Number(cell.v));
+    }));
+    const maxDigits = Math.max(...allNumbers.map(n => String(n).length));
+    assert.ok(maxDigits <= 7, `unexpectedly large number (${maxDigits} digits) in a generated board`);
+  }
 });
 
 test('blanks returns each fillable cell once in row-major order', () => {

@@ -37,17 +37,22 @@ async function openCrossword(page) {
   });
 }
 
-test('crossword supports numpad entry, zoom, count-only feedback, and completion', async ({ page }) => {
+test('crossword supports multi-digit numpad entry, zoom, count-only feedback, and completion', async ({ page }) => {
   await openCrossword(page);
 
-  await expect(page.locator('.cw-cell.blank')).toHaveCount(20);
+  await expect(page.locator('.cw-cell.blank')).toHaveCount(9);
   await expect(page.locator('#cwPad')).toBeHidden();
+
+  const firstEntry = await page.evaluate(() => CrosswordEngine.blanks(gameState.crossword.grid)[0]);
   await page.locator('.cw-cell.blank').first().click();
   await expect(page.locator('#cwPad')).toBeVisible();
-  await page.locator('#cwPad button').filter({ hasText: /^9$/ }).click();
+  for (const digit of String(firstEntry.answer)) {
+    await page.locator('#cwPad button').filter({ hasText: new RegExp(`^${digit}$`) }).click();
+  }
+  await page.getByRole('button', { name: 'Kotak kosong seterusnya' }).click();
 
   await page.getByRole('button', { name: 'Semak', exact: true }).click();
-  await expect(page.locator('#crosswordMsg')).toHaveText('19 kotak belum diisi dan 1 jawapan perlu disemak.');
+  await expect(page.locator('#crosswordMsg')).toHaveText('8 kotak belum diisi dan 0 jawapan perlu disemak.');
   await expect(page.locator('.cw-cell.error')).toHaveCount(0);
 
   const initialCellSize = await page.locator('#crosswordBoard').evaluate(el => getComputedStyle(el).getPropertyValue('--cw-cell').trim());
@@ -58,9 +63,10 @@ test('crossword supports numpad entry, zoom, count-only feedback, and completion
   expect(await page.locator('.crossword-viewport').evaluate(el => el.scrollWidth > el.clientWidth)).toBe(true);
 
   await page.evaluate(() => {
-    CrosswordEngine.blanks(CrosswordEngine.PUZZLE.grid).forEach(entry => {
+    gameState.crossword.answers = {};
+    CrosswordEngine.blanks(gameState.crossword.grid).forEach(entry => {
       selectCwCell(entry.r, entry.c);
-      cwInput(entry.answer);
+      String(entry.answer).split('').forEach(d => cwInput(Number(d)));
     });
   });
   await page.getByRole('button', { name: 'Semak', exact: true }).click();
@@ -71,7 +77,7 @@ test('crossword supports numpad entry, zoom, count-only feedback, and completion
 test('crossword timeout keeps partial credit and applies the late penalty', async ({ page }) => {
   await openCrossword(page);
   await page.evaluate(() => {
-    CrosswordEngine.blanks(CrosswordEngine.PUZZLE.grid).slice(0, 10).forEach(entry => {
+    CrosswordEngine.blanks(gameState.crossword.grid).slice(0, 5).forEach(entry => {
       gameState.crossword.answers[`${entry.r},${entry.c}`] = String(entry.answer);
     });
     timeUp = true;
@@ -79,36 +85,41 @@ test('crossword timeout keeps partial credit and applies the late penalty', asyn
   });
   await expect(page.getByRole('heading', { name: 'Ujian Selesai' })).toBeVisible();
   await expect(page.locator('#resultCard')).toContainText('Masa tamat');
-  await expect(page.locator('#resultCard')).toContainText('Markah: 30');
+  // 5 of 9 correct -> round(5/9*100)=56, minus the 20-point late penalty.
+  await expect(page.locator('#resultCard')).toContainText('Markah: 36');
 });
 
-test('crossword numpad stays fully visible in a phone viewport', async ({ page }) => {
+test('crossword numpad and heading stay visible on a phone, and Semak does not scroll the page', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openCrossword(page);
   await page.locator('.cw-cell.blank').first().click();
 
   const pad = page.locator('#cwPad');
   await expect(pad).toBeVisible();
-  await expect(page.locator('.crossword-game')).toHaveClass(/cw-pad-open/);
-  const layout = await pad.evaluate(element => {
-    const rect = element.getBoundingClientRect();
+
+  const before = await page.evaluate(() => {
+    const padRect = document.getElementById('cwPad').getBoundingClientRect();
+    const headingRect = document.querySelector('.crossword-game h2').getBoundingClientRect();
     return {
-      position: getComputedStyle(element).position,
-      left: rect.left,
-      top: rect.top,
-      right: rect.right,
-      bottom: rect.bottom,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight
+      padBottom: padRect.bottom,
+      headingTop: headingRect.top,
+      innerHeight: window.innerHeight,
+      scrollHeight: document.documentElement.scrollHeight
     };
   });
-  expect(layout.position).toBe('fixed');
-  expect(layout.left).toBeGreaterThanOrEqual(0);
-  expect(layout.top).toBeGreaterThanOrEqual(0);
-  expect(layout.right).toBeLessThanOrEqual(layout.viewportWidth);
-  expect(layout.bottom).toBeLessThanOrEqual(layout.viewportHeight);
+  expect(before.padBottom).toBeLessThanOrEqual(before.innerHeight);
+  expect(before.headingTop).toBeGreaterThanOrEqual(0);
+  expect(before.scrollHeight).toBeLessThanOrEqual(before.innerHeight + 1);
+
+  await page.getByRole('button', { name: 'Semak', exact: true }).click();
+
+  const after = await page.evaluate(() => ({
+    scrollY: window.scrollY,
+    headingTop: document.querySelector('.crossword-game h2').getBoundingClientRect().top
+  }));
+  expect(after.scrollY).toBe(0);
+  expect(after.headingTop).toBeGreaterThanOrEqual(0);
 
   await page.getByRole('button', { name: 'Selesai' }).click();
   await expect(pad).toBeHidden();
-  await expect(page.locator('.crossword-game')).not.toHaveClass(/cw-pad-open/);
 });
