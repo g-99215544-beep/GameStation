@@ -92,3 +92,78 @@ test('isShipSunk is true only when every cell of that ship is hit', () => {
   log = { '1,0': 'hit', '2,0': 'hit' };
   assert.strictEqual(E.isShipSunk(ship, log), true);
 });
+
+test('shipCells lays cells out horizontally and vertically', () => {
+  assert.deepStrictEqual(E.shipCells(2, 5, 3, 'h'), [{ x: 2, y: 5 }, { x: 3, y: 5 }, { x: 4, y: 5 }]);
+  assert.deepStrictEqual(E.shipCells(2, 5, 3, 'v'), [{ x: 2, y: 5 }, { x: 2, y: 6 }, { x: 2, y: 7 }]);
+  assert.deepStrictEqual(E.shipCells(0, 0, 1, 'h'), [{ x: 0, y: 0 }]);
+});
+
+test('canPlace accepts valid positions and rejects off-grid or overlapping ones', () => {
+  assert.strictEqual(E.canPlace([], 0, 0, 5, 'h'), true);
+  assert.strictEqual(E.canPlace([], 6, 0, 5, 'h'), true);   // ends exactly at x=10
+  assert.strictEqual(E.canPlace([], 7, 0, 5, 'h'), false);  // runs off the right edge
+  assert.strictEqual(E.canPlace([], 0, 7, 5, 'v'), false);  // runs off the top edge
+  assert.strictEqual(E.canPlace([], 6, 0, 5, 'v'), true);
+  const occupied = [{ x: 3, y: 3 }, { x: 4, y: 3 }];
+  assert.strictEqual(E.canPlace(occupied, 2, 3, 3, 'h'), false); // crosses (3,3)
+  assert.strictEqual(E.canPlace(occupied, 2, 4, 3, 'h'), true);  // clear row above
+});
+
+test('adjacentCells returns in-bounds orthogonal neighbours only', () => {
+  assert.strictEqual(E.adjacentCells(5, 5).length, 4);
+  assert.strictEqual(E.adjacentCells(0, 0).length, 2);
+  assert.strictEqual(E.adjacentCells(10, 10).length, 2);
+  assert.ok(E.adjacentCells(0, 0).every(c => c.x >= 0 && c.y >= 0));
+});
+
+test('nextComputerShot drains its hunt queue before firing randomly', () => {
+  const shot = E.nextComputerShot({}, { queue: [{ x: 4, y: 7 }, { x: 5, y: 7 }] }, seeded(1));
+  assert.deepStrictEqual({ x: shot.x, y: shot.y }, { x: 4, y: 7 });
+  assert.deepStrictEqual(shot.huntState.queue, [{ x: 5, y: 7 }]);
+});
+
+test('nextComputerShot skips queued cells that were already fired at', () => {
+  const shotLog = { '4,7': 'miss' };
+  const shot = E.nextComputerShot(shotLog, { queue: [{ x: 4, y: 7 }, { x: 5, y: 7 }] }, seeded(1));
+  assert.deepStrictEqual({ x: shot.x, y: shot.y }, { x: 5, y: 7 });
+});
+
+test('nextComputerShot never repeats a cell and returns null once the grid is full', () => {
+  let shotLog = {};
+  let huntState = { queue: [] };
+  const seen = new Set();
+  for (let i = 0; i < E.GRID_SIZE * E.GRID_SIZE; i++) {
+    const shot = E.nextComputerShot(shotLog, huntState, seeded(i + 1));
+    assert.ok(shot, `ran out of cells early at shot ${i}`);
+    const key = `${shot.x},${shot.y}`;
+    assert.ok(!seen.has(key), `repeated cell ${key}`);
+    seen.add(key);
+    shotLog = Object.assign({}, shotLog, { [key]: 'miss' });
+    huntState = shot.huntState;
+  }
+  assert.strictEqual(E.nextComputerShot(shotLog, huntState, seeded(1)), null);
+});
+
+test('the hunting AI sinks a whole fleet well inside the grid size', () => {
+  for (let seed = 1; seed <= 50; seed++) {
+    const fleet = E.generateFleet(seeded(seed));
+    let shotLog = {};
+    let huntState = { queue: [] };
+    let shots = 0;
+    while (!E.isFleetSunk(fleet, shotLog) && shots < E.GRID_SIZE * E.GRID_SIZE) {
+      const shot = E.nextComputerShot(shotLog, huntState, seeded(seed * 1000 + shots));
+      assert.ok(shot, 'AI ran out of cells before sinking the fleet');
+      const res = E.fireAt(fleet, shotLog, shot.x, shot.y);
+      shotLog = res.shotLog;
+      huntState = shot.huntState;
+      if (res.result === 'hit') {
+        huntState = { queue: huntState.queue.concat(E.adjacentCells(shot.x, shot.y)) };
+      } else if (res.result === 'sunk') {
+        huntState = { queue: [] };
+      }
+      shots++;
+    }
+    assert.ok(E.isFleetSunk(fleet, shotLog), `seed ${seed}: fleet not sunk in ${shots} shots`);
+  }
+});

@@ -68,6 +68,44 @@
     return FALLBACK_LAYOUT.map(ship => ({ name: ship.name, length: ship.length, cells: ship.cells.slice() }));
   }
 
+  function shipCells(x, y, length, orientation) {
+    return cellsFor(x, y, length, orientation === 'h');
+  }
+
+  function canPlace(occupiedCells, x, y, length, orientation) {
+    const cells = shipCells(x, y, length, orientation);
+    if (!inBounds(cells)) return false;
+    const occupied = new Set(occupiedCells.map(c => `${c.x},${c.y}`));
+    return !overlaps(cells, occupied);
+  }
+
+  function adjacentCells(x, y) {
+    return [{ x: x + 1, y }, { x: x - 1, y }, { x, y: y + 1 }, { x, y: y - 1 }]
+      .filter(c => c.x >= 0 && c.x < GRID_SIZE && c.y >= 0 && c.y < GRID_SIZE);
+  }
+
+  // The computer's targeting. Kept pure by threading its memory (huntState)
+  // through the caller, exactly as shotLog already is — this function never
+  // needs to know where any ship is. The caller enqueues the neighbours of a
+  // hit and clears the queue on a sink.
+  function nextComputerShot(shotLog, huntState, rng) {
+    const random = rng || Math.random;
+    const fired = key => Object.prototype.hasOwnProperty.call(shotLog, key);
+    const queue = ((huntState && huntState.queue) || []).filter(c => !fired(`${c.x},${c.y}`));
+    if (queue.length) {
+      return { x: queue[0].x, y: queue[0].y, huntState: { queue: queue.slice(1) } };
+    }
+    const open = [];
+    for (let y = 0; y < GRID_SIZE; y++) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        if (!fired(`${x},${y}`)) open.push({ x, y });
+      }
+    }
+    if (!open.length) return null;
+    const pick = open[Math.floor(random() * open.length)];
+    return { x: pick.x, y: pick.y, huntState: { queue: [] } };
+  }
+
   function isShipSunk(ship, shotLog) {
     return ship.cells.every(c => shotLog[`${c.x},${c.y}`] === 'hit');
   }
@@ -94,5 +132,8 @@
     return fleet.filter(ship => isShipSunk(ship, shotLog)).length;
   }
 
-  return { GRID_SIZE, FLEET_SPEC, generateFleet, fireAt, isFleetSunk, countSunk, isShipSunk };
+  return {
+    GRID_SIZE, FLEET_SPEC, generateFleet, fireAt, isFleetSunk, countSunk, isShipSunk,
+    shipCells, canPlace, adjacentCells, nextComputerShot
+  };
 });
