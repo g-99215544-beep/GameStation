@@ -109,27 +109,39 @@
   .sudoku-cell.error{border-color:var(--red)!important;background:#fbe4e2;}
   .sudoku-board.size-9 .sudoku-cell{font-size:16px!important;}
   @media (max-width:420px){.sudoku-board.size-9 .sudoku-cell{font-size:14px!important;padding:2px!important;}}
-  .crossword-game{max-width:600px;margin:auto;}
+  .crossword-game{max-width:600px;margin:auto;overflow-anchor:none;}
   .cw-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0 8px;}
   .cw-toolbar p{margin:0;color:#666;font-size:14px;}
   .cw-zoom{display:flex;gap:6px;flex:0 0 auto;}
   .cw-zoom button{width:42px;height:38px;margin:0;padding:0;font-size:20px;}
-  .crossword-viewport{width:100%;max-height:min(58vh,520px);overflow:auto;overscroll-behavior:contain;padding:12px;background:#dce9ed;border:3px solid var(--navy);border-radius:8px;touch-action:pan-x pan-y;}
-  .crossword-board{--cw-cell:44px;display:grid;grid-template-columns:repeat(11,var(--cw-cell));grid-template-rows:repeat(11,var(--cw-cell));gap:3px;width:max-content;min-width:max-content;padding:5px;background:#0d4268;border-radius:5px;}
-  .cw-cell{display:flex;align-items:center;justify-content:center;width:var(--cw-cell);height:var(--cw-cell);border:2px solid #8b5427;background:#fff9df;color:#17324d;font-size:calc(var(--cw-cell) * .43);font-weight:900;line-height:1;user-select:none;}
+  .crossword-viewport{width:100%;max-height:min(58vh,520px);overflow:auto;padding:12px;background:#dce9ed;border:3px solid var(--navy);border-radius:8px;touch-action:pan-x pan-y;}
+  .crossword-board{--cw-cell:44px;display:grid;grid-template-columns:repeat(11,minmax(var(--cw-cell),max-content));grid-auto-rows:var(--cw-cell);gap:3px;width:max-content;min-width:max-content;padding:5px;background:#0d4268;border-radius:5px;}
+  .cw-cell{display:flex;align-items:center;justify-content:center;min-width:var(--cw-cell);height:var(--cw-cell);padding:0 5px;border:2px solid #8b5427;background:#fff9df;color:#17324d;font-size:calc(var(--cw-cell) * .43);font-weight:900;line-height:1;user-select:none;}
   .cw-cell.given{background:#ffe784;color:#713c13;}
   .cw-cell.blank{cursor:pointer;touch-action:manipulation;}
   .cw-cell.blank:focus-visible,.cw-cell.selected{outline:4px solid #20a9e0;outline-offset:-4px;background:#d7f3ff;}
   .cw-gap{width:var(--cw-cell);height:var(--cw-cell);}
-  .cw-pad{position:sticky;bottom:0;z-index:5;display:grid;grid-template-columns:repeat(3,minmax(58px,1fr));gap:7px;width:min(100%,330px);margin:14px auto 0;padding:10px;border:3px solid #704018;border-radius:7px;background:#fff0b5;box-shadow:0 -3px 12px #063a6655;}
+  #crosswordMsg{min-height:52px;}
+  .cw-pad{display:grid;grid-template-columns:repeat(3,minmax(58px,1fr));gap:7px;width:min(100%,330px);margin:14px auto 0;padding:10px;border:3px solid #704018;border-radius:7px;background:#fff0b5;box-shadow:0 -3px 12px #063a6655;}
   .cw-pad[hidden]{display:none;}
   .cw-pad button{min-height:48px;margin:0;padding:6px;font-size:20px;}
   .cw-pad .cw-pad-close{grid-column:1/-1;font-size:15px;}
   @media (max-width:720px){
-    .crossword-game.cw-pad-open{padding-bottom:220px;}
-    .cw-pad{position:fixed;left:50%;right:auto;bottom:8px;bottom:max(8px,env(safe-area-inset-bottom));z-index:200;grid-template-columns:repeat(4,minmax(48px,1fr));gap:5px;width:min(calc(100vw - 16px),420px);max-height:calc(100vh - 16px);max-height:calc(100dvh - 16px);margin:0;padding:8px;overflow:auto;transform:translateX(-50%);box-shadow:0 -5px 18px #063a6688;}
-    .cw-pad button{min-height:44px;padding:4px;font-size:18px;}
-    .cw-pad .cw-pad-close{min-height:38px;}
+    body.crossword-mode{overflow:hidden;display:flex;flex-direction:column;height:100vh;height:100dvh;}
+    body.crossword-mode .topbar{flex:0 0 auto;}
+    body.crossword-mode .wrap{flex:1 1 auto;width:100%;min-height:0;min-width:0;margin:0;padding:8px;}
+    body.crossword-mode #view-game.active{height:100%;display:flex;flex-direction:column;min-height:0;}
+    body.crossword-mode #gameCard{flex:1 1 0;min-height:0;min-width:0;display:flex;flex-direction:column;padding:12px;}
+    body.crossword-mode .crossword-game{display:flex;flex-direction:column;height:100%;width:100%;min-height:0;min-width:0;max-width:none;margin:0;}
+    body.crossword-mode .crossword-game h2{margin:0 0 4px;font-size:17px;}
+    body.crossword-mode .crossword-game > p{font-size:12px;margin:0;}
+    body.crossword-mode .cw-toolbar{margin:6px 0;}
+    body.crossword-mode .crossword-viewport{flex:1 1 0;min-height:0;min-width:0;max-height:none;}
+    body.crossword-mode #crosswordMsg{min-height:0;}
+    body.crossword-mode button.big{margin-top:6px;padding:10px;}
+    .cw-pad{grid-template-columns:repeat(4,minmax(48px,1fr));gap:5px;width:100%;max-width:420px;margin:8px auto 0;padding:8px;}
+    .cw-pad button{min-height:40px;padding:4px;font-size:18px;}
+    .cw-pad .cw-pad-close{min-height:36px;}
   }
   .finalbox{text-align:center;padding:20px;}
   .chest{font-size:80px;margin:20px 0;cursor:pointer;transition:transform .2s;}
@@ -1067,6 +1079,7 @@ function show(id){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   document.body.classList.toggle('participant-mode', PARTICIPANT_VIEW_IDS.has(id));
+  if(id!=='view-game' || gameState.type!=='crossword') document.body.classList.remove('crossword-mode');
   if(id!=='view-clue') hideJourneyMap();
   const wrap = document.querySelector('.wrap');
   if(wrap) wrap.classList.toggle('admin-wrap', id==='view-admin');
@@ -2611,20 +2624,22 @@ function nextSudokuStage(){
   showSudokuStage();
 }
 
-// ---------- MATH CROSSWORD: one built-in across-and-down puzzle ----------
+// ---------- MATH CROSSWORD: a fresh randomly-generated puzzle each round ----------
 function startCrossword(st){
-  const grid=CrosswordEngine.PUZZLE.grid;
+  const puzzle=CrosswordEngine.generatePuzzle();
+  const grid=puzzle.grid;
   const entries=CrosswordEngine.blanks(grid);
   gameState.type='crossword';
   gameState.total=entries.length;
   gameState.correct=0;
-  gameState.crossword={station:st,grid,entries,answers:{},selected:null,zoom:44};
+  gameState.crossword={station:st,puzzle,grid,entries,answers:{},selected:null,zoom:44};
   window._crosswordTimeout=()=>finishCrossword(false);
+  document.body.classList.add('crossword-mode');
   renderCrossword();
 }
 function renderCrossword(){
   const crossword=gameState.crossword;
-  const puzzle=CrosswordEngine.PUZZLE;
+  const puzzle=crossword.puzzle;
   let cells='';
   crossword.grid.forEach((row,r)=>row.forEach((cell,c)=>{
     if(!cell){
@@ -2637,12 +2652,13 @@ function renderCrossword(){
       const selected=crossword.selected && crossword.selected.r===r && crossword.selected.c===c;
       cells+=`<div id="cw_${r}_${c}" class="cw-cell blank${selected?' selected':''}" role="button" tabindex="0" aria-label="Kotak kosong baris ${r+1}, lajur ${c+1}${value?`, nilai ${value}`:''}" onclick="selectCwCell(${r},${c})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCwCell(${r},${c});}">${value}</div>`;
     } else {
-      cells+=`<div class="cw-cell given">${escapeHtml(cell.v)}</div>`;
+      const display=/^\d+$/.test(cell.v)?CrosswordEngine.formatNumber(cell.v):cell.v;
+      cells+=`<div class="cw-cell given">${escapeHtml(display)}</div>`;
     }
   }));
   document.getElementById('gameCard').innerHTML=`<div class="crossword-game">
     <h2>${escapeHtml(crossword.station.name)}</h2>
-    <p>Lengkapkan semua persamaan melintang dan menegak. Tekan kotak kosong untuk memasukkan satu digit.</p>
+    <p>Lengkapkan semua persamaan melintang dan menegak. Tekan kotak kosong, taip jawapan, lalu tekan &rarr; untuk kotak seterusnya.</p>
     <div class="cw-toolbar">
       <p>Leret untuk melihat seluruh papan.</p>
       <div class="cw-zoom" aria-label="Zum papan">
@@ -2651,7 +2667,7 @@ function renderCrossword(){
       </div>
     </div>
     <div class="crossword-viewport">
-      <div id="crosswordBoard" class="crossword-board" style="--cw-cell:${crossword.zoom}px;grid-template-columns:repeat(${puzzle.cols},var(--cw-cell));grid-template-rows:repeat(${puzzle.rows},var(--cw-cell));">${cells}</div>
+      <div id="crosswordBoard" class="crossword-board" style="--cw-cell:${crossword.zoom}px;grid-template-rows:repeat(${puzzle.rows},var(--cw-cell));">${cells}</div>
     </div>
     <div id="crosswordMsg" aria-live="polite"></div>
     <button class="big" type="button" onclick="checkCrossword()">Semak</button>
@@ -2681,8 +2697,6 @@ function selectCwCell(r,c){
   if(cell){ cell.classList.add('selected'); cell.focus({preventScroll:true}); }
   const pad=document.getElementById('cwPad');
   if(pad) pad.hidden=false;
-  const game=document.querySelector('.crossword-game');
-  if(game) game.classList.add('cw-pad-open');
   const viewport=document.querySelector('.crossword-viewport');
   if(viewport && cell){
     viewport.scrollTo({
@@ -2692,27 +2706,33 @@ function selectCwCell(r,c){
     });
   }
 }
+const CW_MAX_INPUT_DIGITS=7;
 function cwInput(digit){
   const crossword=gameState.crossword;
   if(!crossword || !crossword.selected || !Number.isInteger(digit) || digit<0 || digit>9) return;
   const key=`${crossword.selected.r},${crossword.selected.c}`;
-  crossword.answers[key]=String(digit);
+  const current=crossword.answers[key]||'';
+  if(current==='0' || current.length>=CW_MAX_INPUT_DIGITS) return;
+  if(current==='' && digit===0) return;
+  const next=current+String(digit);
+  crossword.answers[key]=next;
   const cell=document.getElementById(`cw_${crossword.selected.r}_${crossword.selected.c}`);
   if(cell){
-    cell.textContent=String(digit);
-    cell.setAttribute('aria-label',`Kotak kosong baris ${crossword.selected.r+1}, lajur ${crossword.selected.c+1}, nilai ${digit}`);
+    cell.textContent=CrosswordEngine.formatNumber(next);
+    cell.setAttribute('aria-label',`Kotak kosong baris ${crossword.selected.r+1}, lajur ${crossword.selected.c+1}, nilai ${next}`);
   }
-  cwNext();
 }
 function cwBackspace(){
   const crossword=gameState.crossword;
   if(!crossword || !crossword.selected) return;
   const key=`${crossword.selected.r},${crossword.selected.c}`;
-  delete crossword.answers[key];
+  const next=(crossword.answers[key]||'').slice(0,-1);
+  if(next) crossword.answers[key]=next;
+  else delete crossword.answers[key];
   const cell=document.getElementById(`cw_${crossword.selected.r}_${crossword.selected.c}`);
   if(cell){
-    cell.textContent='';
-    cell.setAttribute('aria-label',`Kotak kosong baris ${crossword.selected.r+1}, lajur ${crossword.selected.c+1}`);
+    cell.textContent=next?CrosswordEngine.formatNumber(next):'';
+    cell.setAttribute('aria-label',`Kotak kosong baris ${crossword.selected.r+1}, lajur ${crossword.selected.c+1}${next?`, nilai ${next}`:''}`);
   }
 }
 function nextEmptyCwEntry(){
@@ -2734,8 +2754,6 @@ function cwNext(){
 function hideCwPad(){
   const pad=document.getElementById('cwPad');
   if(pad) pad.hidden=true;
-  const game=document.querySelector('.crossword-game');
-  if(game) game.classList.remove('cw-pad-open');
 }
 function checkCrossword(){
   const crossword=gameState.crossword;
