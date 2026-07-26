@@ -590,9 +590,66 @@ git commit -m "Add Battleship fleet placement phase and two-fleet state model"
 
 **Interfaces:**
 - Consumes: everything Task 2 produced, plus `BattleshipEngine.nextComputerShot` from Task 1.
-- Produces (used by Task 4): `bsComputerTurn()` and `bsResetRound()`; `fireBattleship()` becomes `async` and sets `bs.busy` for the duration of a full turn.
+- Produces (used by Task 4): `bsComputerTurn()`, `bsResetRound()`, `setBsEnemyMsg(text)`, and the `#bsEnemyMsg` element; `fireBattleship()` becomes `async` and sets `bs.busy` for the duration of a full turn.
 
-- [ ] **Step 1: Replace `fireBattleship` with the async turn loop**
+- [ ] **Step 1: Give the computer its own message line**
+
+A two-way turn produces two results, but there is only one message element — the
+computer's reply would overwrite the student's own result before they could read
+it. Each board gets its own line, directly beneath it.
+
+In `index.html`, find:
+
+```css
+  #bsMsg{min-height:24px;font-weight:700;color:var(--navy);text-align:center;margin:8px 0;}
+```
+
+Replace with:
+
+```css
+  #bsMsg,#bsEnemyMsg{min-height:24px;font-weight:700;color:var(--navy);text-align:center;margin:8px 0;}
+  #bsEnemyMsg{color:#8f342c;}
+```
+
+Find:
+
+```css
+    body.battleship-mode #bsMsg{min-height:0;margin:4px 0;}
+```
+
+Replace with:
+
+```css
+    body.battleship-mode #bsMsg,body.battleship-mode #bsEnemyMsg{min-height:0;margin:4px 0;}
+```
+
+In `renderBattleship()`, find the mini-board block:
+
+```js
+    <div class="bs-mini-wrap">
+      <div class="bs-board plain mini">${renderBsBoard(bs.playerFleet,bs.enemyShotLog,{prefix:'bsp',showShips:true,showLabels:false})}</div>
+    </div>
+```
+
+Replace with:
+
+```js
+    <div class="bs-mini-wrap">
+      <div class="bs-board plain mini">${renderBsBoard(bs.playerFleet,bs.enemyShotLog,{prefix:'bsp',showShips:true,showLabels:false})}</div>
+    </div>
+    <div id="bsEnemyMsg" aria-live="polite"></div>
+```
+
+Then, immediately after the `setBsMsg` function, add:
+
+```js
+function setBsEnemyMsg(text){
+  const msg=document.getElementById('bsEnemyMsg');
+  if(msg) msg.textContent=text;
+}
+```
+
+- [ ] **Step 2: Replace `fireBattleship` with the async turn loop**
 
 In `index.html`, find the whole `function fireBattleship(){ ... }` body added in Task 2 and replace it with:
 
@@ -637,8 +694,9 @@ async function bsComputerTurn(){
   if(window._gameOver) return;
   bs.enemyShotLog=res.shotLog;
   applyBsCell('bsp',pick.x,pick.y,res.result);
-  if(res.result==='sunk') setBsMsg(`Kapal anda ${res.shipName} musnah!`);
-  else setBsMsg(res.result==='hit'?'Komputer kena kapal anda!':'Komputer tersasar.');
+  // The computer writes to its OWN line so the student's shot result stays readable.
+  if(res.result==='sunk') setBsEnemyMsg(`Kapal anda ${res.shipName} musnah!`);
+  else setBsEnemyMsg(res.result==='hit'?'Komputer kena kapal anda!':'Komputer tersasar.');
   if(BattleshipEngine.isFleetSunk(bs.playerFleet,bs.enemyShotLog)) bsResetRound();
 }
 function bsResetRound(){
@@ -654,7 +712,7 @@ function bsResetRound(){
 }
 ```
 
-- [ ] **Step 2: Add the animation stub**
+- [ ] **Step 3: Add the animation stub**
 
 `bsAnimateShot` is implemented for real in Task 4. Add this stub now so Task 3 is independently runnable — insert it immediately **before** `async function fireBattleship(){`:
 
@@ -664,7 +722,7 @@ async function bsAnimateShot(prefix,x,y,result){
 }
 ```
 
-- [ ] **Step 3: Update the test harness for async turns**
+- [ ] **Step 4: Update the test harness for async turns**
 
 In `tests/battleship.spec.js`, replace the `fireAt` helper with one that waits for the whole turn (player shot + computer reply) to finish:
 
@@ -676,7 +734,7 @@ async function fireAt(page, x, y) {
 }
 ```
 
-- [ ] **Step 4: Add tests for the computer's reply and the loss reset**
+- [ ] **Step 5: Add tests for the computer's reply and the loss reset**
 
 Append to `tests/battleship.spec.js`:
 
@@ -746,14 +804,19 @@ test('losing the whole fleet resets the round and keeps the placement', async ({
 });
 ```
 
-- [ ] **Step 5: Run the tests**
+- [ ] **Step 6: Run the tests**
 
 Run: `npx playwright test tests/battleship.spec.js --reporter=list`
-Expected: PASS — all 6 tests.
+Expected: PASS — all 7 tests (5 existing + 2 new).
+
+The pre-existing win-path test asserts exact `#bsMsg` text after the student's
+shot. Because the computer now writes to `#bsEnemyMsg` instead, those
+assertions keep passing unchanged — if they fail, the computer is still
+writing to the wrong element.
 
 The win-path test now fires many shots, each triggering a computer reply. That is expected and must keep passing: the student can still sink all 5 enemy ships before the computer sinks all 5 of theirs, because the test fires directly at known ship cells while the computer fires blind.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add index.html tests/battleship.spec.js

@@ -147,6 +147,11 @@ phone, and it already survived a review specifically for that.
   aimed at.
 - Enemy ship-name chips stay as they are. The student's side shows a
   compact sunk-count; the mini board itself carries the visual damage.
+- **Each board owns its own message line**, directly beneath it: the
+  student's shot result under the enemy board, the computer's reply under
+  the student's mini board. A single shared line would not work — a turn
+  produces two results, and the computer's reply would overwrite the
+  student's own result before they could read it.
 
 ### SVG animation
 
