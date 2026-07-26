@@ -352,6 +352,7 @@
   .bs-cell.ship{background:#5c6b7a;border-color:#3d4854;}
   .bs-cell.hit{background:#c8493f;color:#fff;border-color:#8f342c;}
   .bs-cell.miss{background:#eef6f9;color:#5b8ea3;border-color:#bcd7e0;}
+  .bs-fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:3;}
   .bs-mini-head{display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0 4px;font-weight:700;font-size:13px;color:var(--navy);}
   .bs-mini-wrap{position:relative;display:flex;justify-content:center;padding:6px;background:#dce9ed;border:2px solid var(--navy);border-radius:6px;}
   #bsMsg,#bsEnemyMsg{min-height:24px;font-weight:700;color:var(--navy);text-align:center;margin:8px 0;}
@@ -3044,8 +3045,91 @@ function hideBsPad(){
   const pad=document.getElementById('bsPad');
   if(pad) pad.hidden=true;
 }
+const BS_FLIGHT_MS=500, BS_IMPACT_MS=300;
+function bsReducedMotion(){
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+function bsSvg(tag,attrs){
+  const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  Object.keys(attrs||{}).forEach(k=>el.setAttribute(k,attrs[k]));
+  return el;
+}
+// A little cannon-boat drawn at the firing edge, so the missile visibly
+// launches from a ship rather than sliding in from nowhere.
+function bsLauncherShape(){
+  const g=bsSvg('g',{});
+  g.appendChild(bsSvg('path',{d:'M-16 6 L16 6 L11 15 L-11 15 Z',fill:'#7a4a1d',stroke:'#4a2c10','stroke-width':'2'}));
+  g.appendChild(bsSvg('rect',{x:'-2',y:'-12',width:'4',height:'18',fill:'#4a2c10'}));
+  g.appendChild(bsSvg('path',{d:'M2 -11 L14 -3 L2 1 Z',fill:'#fff3c4',stroke:'#4a2c10','stroke-width':'1.5'}));
+  return g;
+}
+function bsMissileShape(){
+  const g=bsSvg('g',{});
+  g.appendChild(bsSvg('path',{d:'M8 0 L-2 4 L-2 -4 Z',fill:'#ffcb42',stroke:'#8f342c','stroke-width':'1.5'}));
+  g.appendChild(bsSvg('rect',{x:'-8',y:'-2.5',width:'8',height:'5',rx:'1.5',fill:'#c8493f'}));
+  g.appendChild(bsSvg('path',{d:'M-8 -2.5 L-12 -6 L-11 -1 Z',fill:'#8f342c'}));
+  g.appendChild(bsSvg('path',{d:'M-8 2.5 L-12 6 L-11 1 Z',fill:'#8f342c'}));
+  return g;
+}
 async function bsAnimateShot(prefix,x,y,result){
-  return Promise.resolve();
+  if(bsReducedMotion()) return;
+  const cell=document.getElementById(`${prefix}_${x}_${y}`);
+  const board=cell && cell.closest('.bs-board-wrap,.bs-mini-wrap');
+  if(!cell || !board) return;
+  const boardBox=board.getBoundingClientRect(), cellBox=cell.getBoundingClientRect();
+  const tx=cellBox.left-boardBox.left+cellBox.width/2;
+  const ty=cellBox.top-boardBox.top+cellBox.height/2;
+  const lx=boardBox.width/2, ly=boardBox.height-6;
+
+  const svg=bsSvg('svg',{class:'bs-fx'});
+  const launcher=bsLauncherShape();
+  launcher.setAttribute('transform',`translate(${lx},${ly})`);
+  const missile=bsMissileShape();
+  svg.appendChild(launcher);
+  svg.appendChild(missile);
+  board.appendChild(svg);
+
+  try{
+    // Quadratic arc from the launcher up and over to the target cell, with the
+    // missile rotated to face along its own path.
+    const arc=Math.max(40,Math.abs(ty-ly)*0.5);
+    const at=t=>({x:lx+(tx-lx)*t, y:ly+(ty-ly)*t-arc*4*t*(1-t)});
+    const steps=14, frames=[];
+    for(let i=0;i<=steps;i++){
+      const p=at(i/steps), n=at(Math.min(1,i/steps+0.02));
+      const angle=Math.atan2(n.y-p.y,n.x-p.x)*180/Math.PI;
+      frames.push({transform:`translate(${p.x}px,${p.y}px) rotate(${angle}deg)`});
+    }
+    await missile.animate(frames,{duration:BS_FLIGHT_MS,easing:'linear',fill:'forwards'}).finished;
+    missile.remove();
+
+    const impact=bsSvg('g',{transform:`translate(${tx},${ty})`});
+    if(result==='miss'){
+      [0,1,2].forEach(i=>impact.appendChild(bsSvg('circle',{r:'4',fill:'none',stroke:'#dff3ff','stroke-width':'2.5','data-i':i})));
+      svg.appendChild(impact);
+      await Promise.all(Array.from(impact.children).map((ring,i)=>ring.animate(
+        [{transform:'scale(0.3)',opacity:0.9},{transform:`scale(${2.4+i*0.9})`,opacity:0}],
+        {duration:BS_IMPACT_MS,delay:i*60,easing:'ease-out',fill:'forwards'}
+      ).finished));
+    } else {
+      const burst=bsSvg('circle',{r:'6',fill:'#ffcb42',stroke:'#c8493f','stroke-width':'3'});
+      impact.appendChild(burst);
+      for(let i=0;i<8;i++){
+        const a=i*Math.PI/4;
+        impact.appendChild(bsSvg('line',{x1:Math.cos(a)*5,y1:Math.sin(a)*5,x2:Math.cos(a)*16,y2:Math.sin(a)*16,stroke:'#c8493f','stroke-width':'2.5','stroke-linecap':'round'}));
+      }
+      svg.appendChild(impact);
+      await Promise.all(Array.from(impact.children).map(part=>part.animate(
+        [{transform:'scale(0.4)',opacity:1},{transform:'scale(1.8)',opacity:0}],
+        {duration:BS_IMPACT_MS,easing:'ease-out',fill:'forwards'}
+      ).finished));
+    }
+  } catch(err) {
+    // A cancelled animation (view torn down mid-flight) must never strand the
+    // turn loop — bs.busy is released by fireBattleship's finally block.
+  } finally {
+    svg.remove();
+  }
 }
 async function fireBattleship(){
   const bs=gameState.battleship;

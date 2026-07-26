@@ -24,6 +24,9 @@ async function openBattleship(page) {
       }
     };
   });
+  // Animations are verified in their own test; every other test runs with
+  // reduced motion so shots resolve instantly and deterministically.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(pathToFileURL(path.join(__dirname, '..', 'index.html')).href);
   await page.evaluate(() => {
     window._testMode = true;
@@ -305,4 +308,23 @@ test('losing the whole fleet resets the round and keeps the placement', async ({
   expect(after.phase).toBe('playing');        // still playable, not finished
 
   await expect(page.getByRole('heading', { name: 'Ujian Selesai' })).toHaveCount(0);
+});
+
+test('a shot plays a missile and impact animation when motion is allowed', async ({ page }) => {
+  await openBattleship(page);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await placeFleet(page);
+
+  await enterCoords(page, 9, 9);
+  await page.getByRole('button', { name: 'Tembak' }).click();
+
+  // The SVG overlay exists while the shot is in flight...
+  await expect(page.locator('.bs-fx')).toHaveCount(1);
+  // ...and is cleaned up once the whole turn (including the computer's reply)
+  // finishes, leaving no orphaned overlays behind.
+  // The winning shot leaves busy=true by design (finishBattleship sets
+  // _gameOver, and the finally block deliberately does not re-enable input on
+  // a finished game), so the wait must also break on _gameOver or it hangs.
+  await page.waitForFunction(() => !gameState.battleship.busy || window._gameOver);
+  await expect(page.locator('.bs-fx')).toHaveCount(0);
 });
