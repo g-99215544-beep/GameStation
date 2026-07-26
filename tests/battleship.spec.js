@@ -195,6 +195,70 @@ test('battleship board, fleet panel, and coordinate pad stay visible on a phone'
   expect(layoutAfter.scrollHeight).toBeLessThanOrEqual(layoutAfter.innerHeight + 1);
 });
 
+test('the whole 11x11 board fits inside its frame on a phone', async ({ page }) => {
+  // The board must never need its own scroll on a phone: a student who cannot
+  // see column x=10 or row y=0 cannot check where their shots landed.
+  const measure = () => page.evaluate(() => {
+    const wrap = document.querySelector('.bs-board-wrap');
+    const wrapRect = wrap.getBoundingClientRect();
+    const corners = ['0_0', '10_0', '0_10', '10_10'].map(key => {
+      const cell = document.getElementById((document.getElementById('bs_0_0') ? 'bs_' : 'bsp_') + key);
+      const rect = cell.getBoundingClientRect();
+      return { key, left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    });
+    return {
+      overflowX: wrap.scrollWidth - wrap.clientWidth,
+      overflowY: wrap.scrollHeight - wrap.clientHeight,
+      wrap: { left: wrapRect.left, right: wrapRect.right, top: wrapRect.top, bottom: wrapRect.bottom },
+      corners
+    };
+  });
+
+  const expectFitsWidth = layout => {
+    expect(layout.overflowX).toBeLessThanOrEqual(1);
+    for (const corner of layout.corners) {
+      expect(corner.left, `cell ${corner.key} left edge`).toBeGreaterThanOrEqual(layout.wrap.left - 1);
+      expect(corner.right, `cell ${corner.key} right edge`).toBeLessThanOrEqual(layout.wrap.right + 1);
+    }
+  };
+
+  const expectFits = layout => {
+    expectFitsWidth(layout);
+    expect(layout.overflowY).toBeLessThanOrEqual(1);
+    for (const corner of layout.corners) {
+      expect(corner.top, `cell ${corner.key} top edge`).toBeGreaterThanOrEqual(layout.wrap.top - 1);
+      expect(corner.bottom, `cell ${corner.key} bottom edge`).toBeLessThanOrEqual(layout.wrap.bottom + 1);
+    }
+  };
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openBattleship(page);
+
+  // Placement phase: every corner of the student's own board is reachable.
+  expectFits(await measure());
+
+  await placeFleet(page);
+
+  // Battle phase with the pad closed — the state the student reads results in,
+  // since firing closes the pad. The whole grid must be visible here.
+  expectFits(await measure());
+
+  // With the pad open there is not enough height left for a legible full board,
+  // so the board may scroll vertically — but never sideways, which is what used
+  // to hide column x=10.
+  await page.locator('#bsBoxX').click();
+  await expect(page.locator('#bsPad')).toBeVisible();
+  expectFitsWidth(await measure());
+
+  // A narrower phone must still fit the whole board once the pad closes. The
+  // board re-fits on the window's resize event, so poll rather than measure the
+  // first frame after the viewport changes.
+  await page.locator('.bs-pad-close').click();
+  await page.setViewportSize({ width: 360, height: 780 });
+  await expect.poll(async () => (await measure()).overflowY).toBeLessThanOrEqual(1);
+  expectFits(await measure());
+});
+
 test('battleship requires placing all five ships before play begins', async ({ page }) => {
   await openBattleship(page);
 

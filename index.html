@@ -2847,6 +2847,9 @@ function finishCrossword(onTime){
   submitCompletion(onTime,score,timeTakenSec);
 }
 // ---------- BATTLESHIP: place your fleet, then trade shots with the computer ----------
+// Mirrors the .bs-board CSS: 11 coordinates plus the label row/column, with a
+// 2px grid gap and 5px of board padding.
+const BS_BOARD_TRACKS=12, BS_BOARD_GAP=2, BS_BOARD_PAD=5;
 function startBattleship(st){
   gameState.type='battleship';
   gameState.total=5;
@@ -2926,6 +2929,7 @@ function renderBattleship(){
       </div>
       ${bsCoordRow('Letak','placeBsShip()')}
     </div>`;
+    fitBsBoard();
     return;
   }
   document.getElementById('gameCard').innerHTML=`<div class="battleship-game">
@@ -2943,14 +2947,35 @@ function renderBattleship(){
     <div id="bsEnemyMsg" aria-live="polite"></div>
     ${bsCoordRow('Tembak','fireBattleship()')}
   </div>`;
+  fitBsBoard();
 }
+// Shrinks the board so all 12 rows and columns fit inside their frame: on a
+// phone a fixed cell size pushes x=10 and y=0 out of sight, and a student who
+// cannot see a square cannot check where the shot landed. Wide screens keep
+// the CSS size, which already fits.
+function fitBsBoard(){
+  const wrap=document.querySelector('.bs-board-wrap');
+  const board=wrap && wrap.querySelector('.bs-board:not(.mini)');
+  if(!board) return;
+  if(window.innerWidth>720 || !document.body.classList.contains('battleship-mode')){ board.style.removeProperty('--bs-cell'); return; }
+  const cs=getComputedStyle(wrap);
+  const availW=wrap.clientWidth-parseFloat(cs.paddingLeft)-parseFloat(cs.paddingRight);
+  const availH=wrap.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom);
+  const chrome=BS_BOARD_GAP*(BS_BOARD_TRACKS-1)+BS_BOARD_PAD*2;
+  const size=Math.floor((Math.min(availW,availH)-chrome)/BS_BOARD_TRACKS);
+  board.style.setProperty('--bs-cell',Math.max(14,Math.min(28,size))+'px');
+}
+// Both message lines start empty and grow when they get text, so the board has
+// to be re-fitted after every message change or it outgrows the space left.
 function setBsMsg(text){
   const msg=document.getElementById('bsMsg');
   if(msg) msg.textContent=text;
+  fitBsBoard();
 }
 function setBsEnemyMsg(text){
   const msg=document.getElementById('bsEnemyMsg');
   if(msg) msg.textContent=text;
+  fitBsBoard();
 }
 function clearBsCoords(){
   const bs=gameState.battleship;
@@ -3017,6 +3042,7 @@ function selectBsField(field){
   if(boxY) boxY.classList.toggle('active', field==='y');
   const pad=document.getElementById('bsPad');
   if(pad) pad.hidden=false;
+  fitBsBoard();
 }
 function updateBsActionEnabled(){
   const bs=gameState.battleship;
@@ -3044,7 +3070,9 @@ function bsBackspace(){
 function hideBsPad(){
   const pad=document.getElementById('bsPad');
   if(pad) pad.hidden=true;
+  fitBsBoard();
 }
+window.addEventListener('resize',fitBsBoard);
 const BS_FLIGHT_MS=500, BS_IMPACT_MS=300;
 function bsReducedMotion(){
   return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
