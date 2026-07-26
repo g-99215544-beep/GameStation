@@ -110,60 +110,28 @@ test('canPlace accepts valid positions and rejects off-grid or overlapping ones'
   assert.strictEqual(E.canPlace(occupied, 2, 4, 3, 'h'), true);  // clear row above
 });
 
-test('adjacentCells returns in-bounds orthogonal neighbours only', () => {
-  assert.strictEqual(E.adjacentCells(5, 5).length, 4);
-  assert.strictEqual(E.adjacentCells(0, 0).length, 2);
-  assert.strictEqual(E.adjacentCells(10, 10).length, 2);
-  assert.ok(E.adjacentCells(0, 0).every(c => c.x >= 0 && c.y >= 0));
-});
-
-test('nextComputerShot drains its hunt queue before firing randomly', () => {
-  const shot = E.nextComputerShot({}, { queue: [{ x: 4, y: 7 }, { x: 5, y: 7 }] }, seeded(1));
-  assert.deepStrictEqual({ x: shot.x, y: shot.y }, { x: 4, y: 7 });
-  assert.deepStrictEqual(shot.huntState.queue, [{ x: 5, y: 7 }]);
-});
-
-test('nextComputerShot skips queued cells that were already fired at', () => {
-  const shotLog = { '4,7': 'miss' };
-  const shot = E.nextComputerShot(shotLog, { queue: [{ x: 4, y: 7 }, { x: 5, y: 7 }] }, seeded(1));
-  assert.deepStrictEqual({ x: shot.x, y: shot.y }, { x: 5, y: 7 });
-});
-
 test('nextComputerShot never repeats a cell and returns null once the grid is full', () => {
   let shotLog = {};
-  let huntState = { queue: [] };
   const seen = new Set();
   for (let i = 0; i < E.GRID_SIZE * E.GRID_SIZE; i++) {
-    const shot = E.nextComputerShot(shotLog, huntState, seeded(i + 1));
+    const shot = E.nextComputerShot(shotLog, seeded(i + 1));
     assert.ok(shot, `ran out of cells early at shot ${i}`);
     const key = `${shot.x},${shot.y}`;
     assert.ok(!seen.has(key), `repeated cell ${key}`);
     seen.add(key);
     shotLog = Object.assign({}, shotLog, { [key]: 'miss' });
-    huntState = shot.huntState;
   }
-  assert.strictEqual(E.nextComputerShot(shotLog, huntState, seeded(1)), null);
+  assert.strictEqual(E.nextComputerShot(shotLog, seeded(1)), null);
 });
 
-test('the hunting AI sinks a whole fleet well inside the grid size', () => {
-  for (let seed = 1; seed <= 50; seed++) {
-    const fleet = E.generateFleet(seeded(seed));
-    let shotLog = {};
-    let huntState = { queue: [] };
-    let shots = 0;
-    while (!E.isFleetSunk(fleet, shotLog) && shots < E.GRID_SIZE * E.GRID_SIZE) {
-      const shot = E.nextComputerShot(shotLog, huntState, seeded(seed * 1000 + shots));
-      assert.ok(shot, 'AI ran out of cells before sinking the fleet');
-      const res = E.fireAt(fleet, shotLog, shot.x, shot.y);
-      shotLog = res.shotLog;
-      huntState = shot.huntState;
-      if (res.result === 'hit') {
-        huntState = { queue: huntState.queue.concat(E.adjacentCells(shot.x, shot.y)) };
-      } else if (res.result === 'sunk') {
-        huntState = { queue: [] };
-      }
-      shots++;
+// Leaving exactly one cell open forces the random pick, so the "only ever
+// returns an un-fired cell" contract is checked without depending on the RNG.
+test('nextComputerShot only ever picks a cell absent from the shot log', () => {
+  const shotLog = {};
+  for (let x = 0; x < E.GRID_SIZE; x++) {
+    for (let y = 0; y < E.GRID_SIZE; y++) {
+      if (!(x === 3 && y === 4)) shotLog[`${x},${y}`] = 'miss';
     }
-    assert.ok(E.isFleetSunk(fleet, shotLog), `seed ${seed}: fleet not sunk in ${shots} shots`);
   }
+  assert.deepStrictEqual(E.nextComputerShot(shotLog, seeded(9)), { x: 3, y: 4 });
 });
