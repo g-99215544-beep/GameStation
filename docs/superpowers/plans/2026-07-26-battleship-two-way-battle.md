@@ -730,7 +730,10 @@ In `tests/battleship.spec.js`, replace the `fireAt` helper with one that waits f
 async function fireAt(page, x, y) {
   await enterCoords(page, x, y);
   await page.getByRole('button', { name: 'Tembak' }).click();
-  await page.waitForFunction(() => !gameState.battleship.busy);
+  // The winning shot leaves busy=true by design (finishBattleship sets
+  // _gameOver, and the finally block deliberately does not re-enable input on
+  // a finished game), so the wait must also break on _gameOver or it hangs.
+  await page.waitForFunction(() => !gameState.battleship.busy || window._gameOver);
 }
 ```
 
@@ -983,7 +986,10 @@ test('a shot plays a missile and impact animation when motion is allowed', async
   await expect(page.locator('.bs-fx')).toHaveCount(1);
   // ...and is cleaned up once the whole turn (including the computer's reply)
   // finishes, leaving no orphaned overlays behind.
-  await page.waitForFunction(() => !gameState.battleship.busy);
+  // The winning shot leaves busy=true by design (finishBattleship sets
+  // _gameOver, and the finally block deliberately does not re-enable input on
+  // a finished game), so the wait must also break on _gameOver or it hangs.
+  await page.waitForFunction(() => !gameState.battleship.busy || window._gameOver);
   await expect(page.locator('.bs-fx')).toHaveCount(0);
 });
 ```
