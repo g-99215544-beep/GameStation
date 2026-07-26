@@ -354,7 +354,8 @@
   .bs-cell.miss{background:#eef6f9;color:#5b8ea3;border-color:#bcd7e0;}
   .bs-mini-head{display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0 4px;font-weight:700;font-size:13px;color:var(--navy);}
   .bs-mini-wrap{position:relative;display:flex;justify-content:center;padding:6px;background:#dce9ed;border:2px solid var(--navy);border-radius:6px;}
-  #bsMsg{min-height:24px;font-weight:700;color:var(--navy);text-align:center;margin:8px 0;}
+  #bsMsg,#bsEnemyMsg{min-height:24px;font-weight:700;color:var(--navy);text-align:center;margin:8px 0;}
+  #bsEnemyMsg{color:#8f342c;}
   .bs-fleet-status{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:8px 0;}
   .bs-fleet-item{padding:5px 10px;border-radius:20px;background:#fdf3d8;color:#12385b;font-weight:700;font-size:12px;}
   .bs-fleet-item.sunk{background:#dff5e5;color:var(--green);text-decoration:line-through;}
@@ -383,7 +384,7 @@
     body.battleship-mode .bs-board{--bs-cell:28px;}
     body.battleship-mode .bs-board.mini{--bs-cell:12px;}
     body.battleship-mode .bs-board-wrap{flex:1 1 0;min-height:0;min-width:0;max-height:none;}
-    body.battleship-mode #bsMsg{min-height:0;margin:4px 0;}
+    body.battleship-mode #bsMsg,body.battleship-mode #bsEnemyMsg{min-height:0;margin:4px 0;}
     body.battleship-mode .bs-fleet-status{margin:4px 0;}
     body.battleship-mode .bs-mini-head{margin:4px 0 2px;}
     body.battleship-mode .bs-coord-row{margin:8px 0;}
@@ -2938,11 +2939,16 @@ function renderBattleship(){
     <div class="bs-mini-wrap">
       <div class="bs-board plain mini">${renderBsBoard(bs.playerFleet,bs.enemyShotLog,{prefix:'bsp',showShips:true,showLabels:false})}</div>
     </div>
+    <div id="bsEnemyMsg" aria-live="polite"></div>
     ${bsCoordRow('Tembak','fireBattleship()')}
   </div>`;
 }
 function setBsMsg(text){
   const msg=document.getElementById('bsMsg');
+  if(msg) msg.textContent=text;
+}
+function setBsEnemyMsg(text){
+  const msg=document.getElementById('bsEnemyMsg');
   if(msg) msg.textContent=text;
 }
 function clearBsCoords(){
@@ -3038,24 +3044,64 @@ function hideBsPad(){
   const pad=document.getElementById('bsPad');
   if(pad) pad.hidden=true;
 }
-function fireBattleship(){
+async function bsAnimateShot(prefix,x,y,result){
+  return Promise.resolve();
+}
+async function fireBattleship(){
   const bs=gameState.battleship;
   if(!bs || window._gameOver || bs.busy || bs.phase!=='playing') return;
   if(bs.pendingX==='' || bs.pendingY==='') return;
   const x=Number(bs.pendingX), y=Number(bs.pendingY);
   const shot=BattleshipEngine.fireAt(bs.enemyFleet,bs.playerShotLog,x,y);
   if(shot.result==='already-shot'){ setBsMsg('Sudah ditembak di sini.'); clearBsCoords(); return; }
-  bs.playerShotLog=shot.shotLog;
-  gameState.correct=BattleshipEngine.countSunk(bs.enemyFleet,bs.playerShotLog);
-  applyBsCell('bs',x,y,shot.result);
-  if(shot.result==='sunk'){
-    setBsMsg(`Kapal ${shot.shipName} tenggelam!`);
-    const list=document.getElementById('bsFleetList');
-    if(list) list.innerHTML=renderBsFleetList();
-  } else setBsMsg(shot.result==='hit'?'Kena!':'Tidak kena.');
+
+  bs.busy=true;
   clearBsCoords();
   hideBsPad();
-  if(BattleshipEngine.isFleetSunk(bs.enemyFleet,bs.playerShotLog)) finishBattleship(!timeUp);
+  updateBsActionEnabled();
+  try{
+    await bsAnimateShot('bs',x,y,shot.result);
+    if(window._gameOver) return;
+    bs.playerShotLog=shot.shotLog;
+    gameState.correct=BattleshipEngine.countSunk(bs.enemyFleet,bs.playerShotLog);
+    applyBsCell('bs',x,y,shot.result);
+    if(shot.result==='sunk'){
+      setBsMsg(`Kapal ${shot.shipName} tenggelam!`);
+      const list=document.getElementById('bsFleetList');
+      if(list) list.innerHTML=renderBsFleetList();
+    } else setBsMsg(shot.result==='hit'?'Kena!':'Tidak kena.');
+
+    if(BattleshipEngine.isFleetSunk(bs.enemyFleet,bs.playerShotLog)){ finishBattleship(!timeUp); return; }
+
+    await bsComputerTurn();
+  } finally {
+    if(!window._gameOver){ bs.busy=false; updateBsActionEnabled(); }
+  }
+}
+async function bsComputerTurn(){
+  const bs=gameState.battleship;
+  const pick=BattleshipEngine.nextComputerShot(bs.enemyShotLog);
+  if(!pick) return;
+  const res=BattleshipEngine.fireAt(bs.playerFleet,bs.enemyShotLog,pick.x,pick.y);
+  await bsAnimateShot('bsp',pick.x,pick.y,res.result);
+  if(window._gameOver) return;
+  bs.enemyShotLog=res.shotLog;
+  applyBsCell('bsp',pick.x,pick.y,res.result);
+  // The computer writes to its OWN line so the student's shot result stays readable.
+  if(res.result==='sunk') setBsEnemyMsg(`Kapal anda ${res.shipName} musnah!`);
+  else setBsEnemyMsg(res.result==='hit'?'Komputer kena kapal anda!':'Komputer tersasar.');
+  if(BattleshipEngine.isFleetSunk(bs.playerFleet,bs.enemyShotLog)) bsResetRound();
+}
+function bsResetRound(){
+  const bs=gameState.battleship;
+  bs.round++;
+  bs.enemyFleet=BattleshipEngine.generateFleet();
+  bs.playerShotLog={};
+  bs.enemyShotLog={};
+  bs.busy=false;
+  gameState.correct=0;
+  renderBattleship();
+  setBsMsg('Semua kapal anda musnah! Pusingan baharu bermula.');
 }
 function finishBattleship(onTime){
   if(window._gameOver) return;

@@ -62,6 +62,10 @@ async function enterCoords(page, x, y) {
 async function fireAt(page, x, y) {
   await enterCoords(page, x, y);
   await page.getByRole('button', { name: 'Tembak' }).click();
+  // On a winning shot, fireBattleship deliberately leaves bs.busy=true forever
+  // (input stays locked once window._gameOver is set), so also unblock on
+  // game-over rather than waiting on busy alone.
+  await page.waitForFunction(() => !gameState.battleship.busy || window._gameOver);
 }
 
 test('battleship supports coordinate entry, hit/miss feedback, sinking, and a full win', async ({ page }) => {
@@ -237,4 +241,68 @@ test('a successful placement fully clears the coordinate boxes', async ({ page }
   await page.locator('#bsPad button').filter({ hasText: /^3$/ }).click();
   await expect(page.locator('#bsBoxY')).toHaveText('');
   await expect(page.getByRole('button', { name: 'Letak' })).toBeDisabled();
+});
+
+test('the computer fires back after every player shot', async ({ page }) => {
+  await openBattleship(page);
+  await placeFleet(page);
+
+  const before = await page.evaluate(() => Object.keys(gameState.battleship.enemyShotLog).length);
+  expect(before).toBe(0);
+
+  await fireAt(page, 9, 9);
+
+  const after = await page.evaluate(() => Object.keys(gameState.battleship.enemyShotLog).length);
+  expect(after).toBe(1);
+
+  // The computer's shot must have marked a cell on the player's own board.
+  const marked = await page.evaluate(() => {
+    const [key] = Object.keys(gameState.battleship.enemyShotLog);
+    const [x, y] = key.split(',');
+    return document.getElementById(`bsp_${x}_${y}`).className;
+  });
+  expect(marked).toMatch(/hit|miss/);
+});
+
+test('losing the whole fleet resets the round and keeps the placement', async ({ page }) => {
+  await openBattleship(page);
+  await placeFleet(page);
+
+  const layoutBefore = await page.evaluate(() => JSON.stringify(gameState.battleship.playerFleet));
+
+  // The AI picks uniformly among un-fired cells, so the only way to force its
+  // next shot is to leave exactly one cell open: sink every player ship cell
+  // but the last, then close off every other square on the board.
+  await page.evaluate(() => {
+    const bs = gameState.battleship;
+    const cells = bs.playerFleet.flatMap(s => s.cells);
+    const last = cells[cells.length - 1];
+    const fire = (x, y) => {
+      bs.enemyShotLog = BattleshipEngine.fireAt(bs.playerFleet, bs.enemyShotLog, x, y).shotLog;
+    };
+    cells.slice(0, -1).forEach(c => fire(c.x, c.y));
+    for (let x = 0; x < BattleshipEngine.GRID_SIZE; x++) {
+      for (let y = 0; y < BattleshipEngine.GRID_SIZE; y++) {
+        if (x !== last.x || y !== last.y) fire(x, y);
+      }
+    }
+  });
+
+  await fireAt(page, 8, 8);
+
+  await expect(page.locator('#bsMsg')).toContainText('Pusingan baharu');
+  const after = await page.evaluate(() => ({
+    layout: JSON.stringify(gameState.battleship.playerFleet),
+    playerShots: Object.keys(gameState.battleship.playerShotLog).length,
+    enemyShots: Object.keys(gameState.battleship.enemyShotLog).length,
+    round: gameState.battleship.round,
+    phase: gameState.battleship.phase
+  }));
+  expect(after.layout).toBe(layoutBefore);   // placement preserved
+  expect(after.playerShots).toBe(0);          // both boards cleared
+  expect(after.enemyShots).toBe(0);
+  expect(after.round).toBe(2);
+  expect(after.phase).toBe('playing');        // still playable, not finished
+
+  await expect(page.getByRole('heading', { name: 'Ujian Selesai' })).toHaveCount(0);
 });
