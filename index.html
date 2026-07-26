@@ -343,22 +343,31 @@
   .participant-mode .cw-pad{border-radius:5px;background:linear-gradient(135deg,#fff3b4,#e6b954);}
   .battleship-game{max-width:600px;margin:auto;overflow-anchor:none;}
   .battleship-game > p{color:#666;font-size:14px;margin:4px 0 12px;}
-  .bs-board-wrap{width:100%;max-height:min(58vh,480px);overflow:auto;padding:12px;background:#dce9ed;border:3px solid var(--navy);border-radius:8px;touch-action:pan-x pan-y;}
-  .bs-board{--bs-cell:34px;display:grid;grid-template-columns:repeat(12,var(--bs-cell));grid-template-rows:repeat(12,var(--bs-cell));gap:2px;width:max-content;padding:5px;background:#0d4268;border-radius:5px;}
-  .bs-row-label,.bs-col-label,.bs-corner{display:flex;align-items:center;justify-content:center;font-weight:700;font-size:calc(var(--bs-cell) * .4);color:#fff;}
-  .bs-cell{display:flex;align-items:center;justify-content:center;background:#a8d8e8;border:1px solid #6fa8bf;color:#0d4268;font-weight:900;font-size:calc(var(--bs-cell) * .5);user-select:none;}
+  .bs-board-wrap{position:relative;width:100%;max-height:min(58vh,480px);overflow:auto;padding:12px;background:#dce9ed;border:3px solid var(--navy);border-radius:8px;touch-action:pan-x pan-y;}
+  .bs-board{--bs-cell:34px;display:grid;grid-template-columns:repeat(12,var(--bs-cell));gap:2px;width:max-content;padding:5px;background:#0d4268;border-radius:5px;}
+  .bs-board.plain{grid-template-columns:repeat(11,var(--bs-cell));}
+  .bs-board.mini{--bs-cell:13px;gap:1px;}
+  .bs-row-label,.bs-col-label,.bs-corner{display:flex;align-items:center;justify-content:center;height:var(--bs-cell);font-weight:700;font-size:calc(var(--bs-cell) * .4);color:#fff;}
+  .bs-cell{display:flex;align-items:center;justify-content:center;height:var(--bs-cell);background:#a8d8e8;border:1px solid #6fa8bf;color:#0d4268;font-weight:900;font-size:calc(var(--bs-cell) * .5);user-select:none;}
+  .bs-cell.ship{background:#5c6b7a;border-color:#3d4854;}
   .bs-cell.hit{background:#c8493f;color:#fff;border-color:#8f342c;}
   .bs-cell.miss{background:#eef6f9;color:#5b8ea3;border-color:#bcd7e0;}
+  .bs-mini-head{display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0 4px;font-weight:700;font-size:13px;color:var(--navy);}
+  .bs-mini-wrap{position:relative;display:flex;justify-content:center;padding:6px;background:#dce9ed;border:2px solid var(--navy);border-radius:6px;}
   #bsMsg{min-height:24px;font-weight:700;color:var(--navy);text-align:center;margin:8px 0;}
-  .bs-fleet-status{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:10px 0;}
-  .bs-fleet-item{padding:6px 12px;border-radius:20px;background:#fdf3d8;color:#12385b;font-weight:700;font-size:13px;}
+  .bs-fleet-status{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:8px 0;}
+  .bs-fleet-item{padding:5px 10px;border-radius:20px;background:#fdf3d8;color:#12385b;font-weight:700;font-size:12px;}
   .bs-fleet-item.sunk{background:#dff5e5;color:var(--green);text-decoration:line-through;}
-  .bs-coord-row{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:14px 0;}
+  .bs-place-prompt{text-align:center;font-weight:800;color:var(--navy);margin:8px 0;}
+  .bs-orient{display:flex;gap:8px;justify-content:center;margin:8px 0;}
+  .bs-orient button{margin:0;padding:8px 16px;font-size:14px;background:#e6e8ed;color:var(--navy);}
+  .bs-orient button.active{background:var(--navy);color:var(--gold);}
+  .bs-coord-row{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:12px 0;}
   .bs-coord-row span{font-size:24px;font-weight:800;color:var(--navy);}
   .bs-coord-box{min-width:44px;height:44px;padding:0 8px;display:flex;align-items:center;justify-content:center;border:3px solid #8b5427;border-radius:6px;background:#fff9df;color:#17324d;font-weight:900;font-size:20px;cursor:pointer;touch-action:manipulation;}
   .bs-coord-box.active{outline:4px solid #20a9e0;outline-offset:-4px;background:#d7f3ff;}
   .bs-coord-row button.big{width:auto;margin:0;padding:10px 24px;}
-  .bs-pad{display:grid;grid-template-columns:repeat(3,minmax(58px,1fr));gap:7px;width:min(100%,330px);margin:14px auto 0;padding:10px;border:3px solid #704018;border-radius:7px;background:#fff0b5;box-shadow:0 -3px 12px #063a6655;}
+  .bs-pad{display:grid;grid-template-columns:repeat(3,minmax(58px,1fr));gap:7px;width:min(100%,330px);margin:12px auto 0;padding:10px;border:3px solid #704018;border-radius:7px;background:#fff0b5;box-shadow:0 -3px 12px #063a6655;}
   .bs-pad[hidden]{display:none;}
   .bs-pad button{min-height:48px;margin:0;padding:6px;font-size:20px;}
   .bs-pad-close{grid-column:1/-1;font-size:15px;}
@@ -371,15 +380,18 @@
     body.battleship-mode .battleship-game{display:flex;flex-direction:column;height:100%;width:100%;min-height:0;min-width:0;max-width:none;margin:0;}
     body.battleship-mode .battleship-game h2{margin:0 0 4px;font-size:17px;}
     body.battleship-mode .battleship-game > p{font-size:12px;margin:0;}
-    body.battleship-mode .bs-board{--bs-cell:30px;}
+    body.battleship-mode .bs-board{--bs-cell:28px;}
+    body.battleship-mode .bs-board.mini{--bs-cell:12px;}
     body.battleship-mode .bs-board-wrap{flex:1 1 0;min-height:0;min-width:0;max-height:none;}
-    body.battleship-mode #bsMsg{min-height:0;}
+    body.battleship-mode #bsMsg{min-height:0;margin:4px 0;}
+    body.battleship-mode .bs-fleet-status{margin:4px 0;}
+    body.battleship-mode .bs-mini-head{margin:4px 0 2px;}
     body.battleship-mode .bs-coord-row{margin:8px 0;}
     .bs-pad{grid-template-columns:repeat(4,minmax(48px,1fr));gap:5px;width:100%;max-width:420px;margin:8px auto 0;padding:8px;}
     .bs-pad button{min-height:40px;padding:4px;font-size:18px;}
     .bs-pad-close{min-height:36px;}
   }
-  .participant-mode .bs-board-wrap{border-color:#704018;border-radius:5px;background:#8fc7d4;box-shadow:4px 4px 0 #063a66;}
+  .participant-mode .bs-board-wrap,.participant-mode .bs-mini-wrap{border-color:#704018;border-radius:5px;background:#8fc7d4;box-shadow:4px 4px 0 #063a66;}
   .participant-mode .bs-board{box-shadow:inset 0 0 0 2px #4ea5cd;}
   .participant-mode .bs-coord-box.active{outline-color:#0e8fc8;background:#d7f3ff;}
   .participant-mode .bs-pad{border-radius:5px;background:linear-gradient(135deg,#fff3b4,#e6b954);}
@@ -2832,70 +2844,164 @@ function finishCrossword(onTime){
   if(window._testMode){ showTestResult(onTime,score,timeTakenSec); return; }
   submitCompletion(onTime,score,timeTakenSec);
 }
-// ---------- BATTLESHIP: fire coordinates at a hidden computer fleet ----------
+// ---------- BATTLESHIP: place your fleet, then trade shots with the computer ----------
 function startBattleship(st){
-  const fleet=BattleshipEngine.generateFleet();
   gameState.type='battleship';
   gameState.total=5;
   gameState.correct=0;
-  gameState.battleship={station:st,fleet,shotLog:{},pendingX:'',pendingY:'',activeField:'x'};
+  gameState.battleship={
+    station:st,phase:'placing',
+    playerFleet:[],placingIndex:0,orientation:'h',
+    enemyFleet:[],playerShotLog:{},enemyShotLog:{},
+    pendingX:'',pendingY:'',activeField:'x',busy:false,round:1
+  };
   window._battleshipTimeout=()=>finishBattleship(false);
   document.body.classList.add('battleship-mode');
   renderBattleship();
 }
+function renderBsBoard(fleet,shotLog,opts){
+  const size=BattleshipEngine.GRID_SIZE;
+  const shipAt=new Set();
+  if(opts.showShips) fleet.forEach(s=>s.cells.forEach(c=>shipAt.add(`${c.x},${c.y}`)));
+  let cells='';
+  for(let y=size-1;y>=0;y--){
+    if(opts.showLabels) cells+=`<div class="bs-row-label">${y}</div>`;
+    for(let x=0;x<size;x++){
+      const key=`${x},${y}`, shot=shotLog[key];
+      let cls='water', mark='', state='belum ditembak';
+      if(shot==='hit'){ cls='hit'; mark='X'; state='kena'; }
+      else if(shot==='miss'){ cls='miss'; mark='O'; state='tidak kena'; }
+      else if(shipAt.has(key)){ cls='ship'; state='kapal anda'; }
+      cells+=`<div id="${opts.prefix}_${x}_${y}" class="bs-cell ${cls}" aria-label="Petak (${x}, ${y}), ${state}">${mark}</div>`;
+    }
+  }
+  if(opts.showLabels){
+    cells+='<div class="bs-corner" aria-hidden="true"></div>';
+    for(let x=0;x<size;x++) cells+=`<div class="bs-col-label">${x}</div>`;
+  }
+  return cells;
+}
 function renderBsFleetList(){
   const bs=gameState.battleship;
-  return bs.fleet.map(ship=>{
-    const sunk=BattleshipEngine.isShipSunk(ship,bs.shotLog);
+  return bs.enemyFleet.map(ship=>{
+    const sunk=BattleshipEngine.isShipSunk(ship,bs.playerShotLog);
     return `<div class="bs-fleet-item${sunk?' sunk':''}">${escapeHtml(ship.name)} (${ship.length})</div>`;
   }).join('');
 }
-function renderBattleship(){
-  const bs=gameState.battleship;
-  const size=BattleshipEngine.GRID_SIZE;
-  let cells='';
-  for(let y=size-1;y>=0;y--){
-    cells+=`<div class="bs-row-label">${y}</div>`;
-    for(let x=0;x<size;x++){
-      const key=`${x},${y}`;
-      const shot=bs.shotLog[key];
-      const cls=shot==='hit'?'hit':(shot==='miss'?'miss':'water');
-      const mark=shot==='hit'?'X':(shot==='miss'?'O':'');
-      const label=shot?`, ${shot==='hit'?'kena':'tidak kena'}`:'';
-      cells+=`<div id="bs_${x}_${y}" class="bs-cell ${cls}" aria-label="Petak (${x}, ${y})${label}">${mark}</div>`;
-    }
-  }
-  cells+='<div class="bs-corner" aria-hidden="true"></div>';
-  for(let x=0;x<size;x++){
-    cells+=`<div class="bs-col-label">${x}</div>`;
-  }
-  document.getElementById('gameCard').innerHTML=`<div class="battleship-game">
-    <h2>${escapeHtml(bs.station.name)}</h2>
-    <p>Tembak armada tersembunyi komputer. Masukkan koordinat (x, y) lalu tekan Tembak.</p>
-    <div class="bs-board-wrap">
-      <div class="bs-board">${cells}</div>
-    </div>
-    <div id="bsMsg" aria-live="polite"></div>
-    <div id="bsFleetList" class="bs-fleet-status">${renderBsFleetList()}</div>
-    <div class="bs-coord-row">
+function bsCoordRow(label,handler){
+  return `<div class="bs-coord-row">
       <span>(</span>
       <div id="bsBoxX" class="bs-coord-box" role="button" tabindex="0" aria-label="Koordinat x" onclick="selectBsField('x')"></div>
       <span>,</span>
       <div id="bsBoxY" class="bs-coord-box" role="button" tabindex="0" aria-label="Koordinat y" onclick="selectBsField('y')"></div>
       <span>)</span>
-      <button id="bsFireBtn" class="big" type="button" onclick="fireBattleship()" disabled>Tembak</button>
+      <button id="bsActionBtn" class="big" type="button" onclick="${handler}" disabled>${label}</button>
     </div>
     <div id="bsPad" class="bs-pad" hidden>
-      ${[1,2,3,4,5,6,7,8,9].map(digit=>`<button type="button" onclick="bsInput(${digit})">${digit}</button>`).join('')}
+      ${[1,2,3,4,5,6,7,8,9].map(d=>`<button type="button" onclick="bsInput(${d})">${d}</button>`).join('')}
       <button type="button" onclick="bsBackspace()" aria-label="Padam">&#9003;</button>
       <button type="button" onclick="bsInput(0)">0</button>
       <button class="bs-pad-close" type="button" onclick="hideBsPad()">Selesai</button>
+    </div>`;
+}
+function renderBattleship(){
+  const bs=gameState.battleship;
+  const head=`<h2>${escapeHtml(bs.station.name)}</h2>`;
+  if(bs.phase==='placing'){
+    const spec=BattleshipEngine.FLEET_SPEC[bs.placingIndex];
+    document.getElementById('gameCard').innerHTML=`<div class="battleship-game">
+      ${head}
+      <p>Susun armada anda dahulu. Masukkan koordinat (x, y) permulaan kapal, pilih arah, lalu tekan Letak.</p>
+      <div id="bsPlacePrompt" class="bs-place-prompt">Letak ${escapeHtml(spec.name)} — ${spec.length} petak (${bs.placingIndex+1}/5)</div>
+      <div class="bs-board-wrap">
+        <div class="bs-board">${renderBsBoard(bs.playerFleet,{},{prefix:'bsp',showShips:true,showLabels:true})}</div>
+      </div>
+      <div id="bsMsg" aria-live="polite"></div>
+      <div class="bs-orient">
+        <button id="bsOrientH" type="button" class="${bs.orientation==='h'?'active':''}" onclick="setBsOrientation('h')">Melintang &rarr;</button>
+        <button id="bsOrientV" type="button" class="${bs.orientation==='v'?'active':''}" onclick="setBsOrientation('v')">Menegak &uarr;</button>
+        <button type="button" onclick="resetBsPlacement()">Susun Semula</button>
+      </div>
+      ${bsCoordRow('Letak','placeBsShip()')}
+    </div>`;
+    return;
+  }
+  document.getElementById('gameCard').innerHTML=`<div class="battleship-game">
+    ${head}
+    <p>Tembak armada komputer. Masukkan koordinat (x, y) lalu tekan Tembak.</p>
+    <div class="bs-board-wrap">
+      <div class="bs-board">${renderBsBoard(bs.enemyFleet,bs.playerShotLog,{prefix:'bs',showShips:false,showLabels:true})}</div>
     </div>
+    <div id="bsMsg" aria-live="polite"></div>
+    <div id="bsFleetList" class="bs-fleet-status">${renderBsFleetList()}</div>
+    <div class="bs-mini-head">Armada anda</div>
+    <div class="bs-mini-wrap">
+      <div class="bs-board plain mini">${renderBsBoard(bs.playerFleet,bs.enemyShotLog,{prefix:'bsp',showShips:true,showLabels:false})}</div>
+    </div>
+    ${bsCoordRow('Tembak','fireBattleship()')}
   </div>`;
+}
+function setBsMsg(text){
+  const msg=document.getElementById('bsMsg');
+  if(msg) msg.textContent=text;
+}
+function clearBsCoords(){
+  const bs=gameState.battleship;
+  bs.pendingX=''; bs.pendingY='';
+  const boxX=document.getElementById('bsBoxX'); if(boxX) boxX.textContent='';
+  const boxY=document.getElementById('bsBoxY'); if(boxY) boxY.textContent='';
+  updateBsActionEnabled();
+}
+function applyBsCell(prefix,x,y,result){
+  const cell=document.getElementById(`${prefix}_${x}_${y}`);
+  if(!cell) return;
+  cell.classList.remove('water','ship');
+  cell.classList.add(result==='miss'?'miss':'hit');
+  cell.textContent=result==='miss'?'O':'X';
+  cell.setAttribute('aria-label',`Petak (${x}, ${y}), ${result==='miss'?'tidak kena':'kena'}`);
+}
+function setBsOrientation(o){
+  const bs=gameState.battleship;
+  if(!bs || bs.phase!=='placing') return;
+  bs.orientation=o;
+  const h=document.getElementById('bsOrientH'), v=document.getElementById('bsOrientV');
+  if(h) h.classList.toggle('active',o==='h');
+  if(v) v.classList.toggle('active',o==='v');
+}
+function resetBsPlacement(){
+  const bs=gameState.battleship;
+  if(!bs || bs.phase!=='placing') return;
+  bs.playerFleet=[]; bs.placingIndex=0;
+  renderBattleship();
+  setBsMsg('Susunan dikosongkan. Mula semula.');
+}
+function placeBsShip(){
+  const bs=gameState.battleship;
+  if(!bs || window._gameOver || bs.phase!=='placing') return;
+  if(bs.pendingX==='' || bs.pendingY==='') return;
+  const x=Number(bs.pendingX), y=Number(bs.pendingY);
+  const spec=BattleshipEngine.FLEET_SPEC[bs.placingIndex];
+  const occupied=bs.playerFleet.reduce((all,s)=>all.concat(s.cells),[]);
+  if(!BattleshipEngine.canPlace(occupied,x,y,spec.length,bs.orientation)){
+    setBsMsg('Tidak muat di situ. Cuba koordinat atau arah lain.');
+    clearBsCoords();
+    return;
+  }
+  bs.playerFleet.push({name:spec.name,length:spec.length,cells:BattleshipEngine.shipCells(x,y,spec.length,bs.orientation)});
+  bs.placingIndex++;
+  if(bs.placingIndex>=BattleshipEngine.FLEET_SPEC.length){
+    bs.phase='playing';
+    bs.enemyFleet=BattleshipEngine.generateFleet();
+    renderBattleship();
+    setBsMsg('Armada sedia! Mula menembak.');
+    return;
+  }
+  renderBattleship();
+  setBsMsg(`${spec.name} diletakkan.`);
 }
 function selectBsField(field){
   const bs=gameState.battleship;
-  if(!bs || window._gameOver) return;
+  if(!bs || window._gameOver || bs.busy) return;
   bs.activeField=field;
   const boxX=document.getElementById('bsBoxX'), boxY=document.getElementById('bsBoxY');
   if(boxX) boxX.classList.toggle('active', field==='x');
@@ -2903,29 +3009,28 @@ function selectBsField(field){
   const pad=document.getElementById('bsPad');
   if(pad) pad.hidden=false;
 }
-function updateBsFireEnabled(){
+function updateBsActionEnabled(){
   const bs=gameState.battleship;
-  const btn=document.getElementById('bsFireBtn');
-  if(btn && bs) btn.disabled=!(bs.pendingX!=='' && bs.pendingY!=='');
+  const btn=document.getElementById('bsActionBtn');
+  if(btn && bs) btn.disabled=bs.busy || bs.pendingX==='' || bs.pendingY==='';
 }
 function bsInput(digit){
   const bs=gameState.battleship;
-  if(!bs || !Number.isInteger(digit) || digit<0 || digit>9) return;
+  if(!bs || bs.busy || !Number.isInteger(digit) || digit<0 || digit>9) return;
   const key=bs.activeField==='x'?'pendingX':'pendingY';
-  const current=bs[key];
-  bs[key]=(current==='1' && digit===0)?'10':String(digit);
+  bs[key]=(bs[key]==='1' && digit===0)?'10':String(digit);
   const box=document.getElementById(bs.activeField==='x'?'bsBoxX':'bsBoxY');
   if(box) box.textContent=bs[key];
-  updateBsFireEnabled();
+  updateBsActionEnabled();
 }
 function bsBackspace(){
   const bs=gameState.battleship;
-  if(!bs) return;
+  if(!bs || bs.busy) return;
   const key=bs.activeField==='x'?'pendingX':'pendingY';
   bs[key]=bs[key].slice(0,-1);
   const box=document.getElementById(bs.activeField==='x'?'bsBoxX':'bsBoxY');
   if(box) box.textContent=bs[key];
-  updateBsFireEnabled();
+  updateBsActionEnabled();
 }
 function hideBsPad(){
   const pad=document.getElementById('bsPad');
@@ -2933,44 +3038,22 @@ function hideBsPad(){
 }
 function fireBattleship(){
   const bs=gameState.battleship;
-  if(!bs || window._gameOver) return;
+  if(!bs || window._gameOver || bs.busy || bs.phase!=='playing') return;
   if(bs.pendingX==='' || bs.pendingY==='') return;
   const x=Number(bs.pendingX), y=Number(bs.pendingY);
-  const {shotLog,result,shipName}=BattleshipEngine.fireAt(bs.fleet,bs.shotLog,x,y);
-  bs.shotLog=shotLog;
-  gameState.correct=BattleshipEngine.countSunk(bs.fleet,bs.shotLog);
-
-  const msg=document.getElementById('bsMsg');
-  if(result==='already-shot'){
-    if(msg) msg.textContent='Sudah ditembak di sini.';
-  } else {
-    const cell=document.getElementById(`bs_${x}_${y}`);
-    if(cell){
-      cell.classList.remove('water');
-      cell.classList.add(result==='miss'?'miss':'hit');
-      cell.textContent=result==='miss'?'O':'X';
-      cell.setAttribute('aria-label',`Petak (${x}, ${y}), ${result==='miss'?'tidak kena':'kena'}`);
-    }
-    if(result==='sunk'){
-      if(msg) msg.textContent=`Kapal ${shipName} tenggelam!`;
-      const list=document.getElementById('bsFleetList');
-      if(list) list.innerHTML=renderBsFleetList();
-    } else if(result==='hit'){
-      if(msg) msg.textContent='Kena!';
-    } else {
-      if(msg) msg.textContent='Tidak kena.';
-    }
-  }
-
-  bs.pendingX=''; bs.pendingY='';
-  const boxX=document.getElementById('bsBoxX'); if(boxX) boxX.textContent='';
-  const boxY=document.getElementById('bsBoxY'); if(boxY) boxY.textContent='';
-  updateBsFireEnabled();
+  const shot=BattleshipEngine.fireAt(bs.enemyFleet,bs.playerShotLog,x,y);
+  if(shot.result==='already-shot'){ setBsMsg('Sudah ditembak di sini.'); clearBsCoords(); return; }
+  bs.playerShotLog=shot.shotLog;
+  gameState.correct=BattleshipEngine.countSunk(bs.enemyFleet,bs.playerShotLog);
+  applyBsCell('bs',x,y,shot.result);
+  if(shot.result==='sunk'){
+    setBsMsg(`Kapal ${shot.shipName} tenggelam!`);
+    const list=document.getElementById('bsFleetList');
+    if(list) list.innerHTML=renderBsFleetList();
+  } else setBsMsg(shot.result==='hit'?'Kena!':'Tidak kena.');
+  clearBsCoords();
   hideBsPad();
-
-  if(BattleshipEngine.isFleetSunk(bs.fleet,bs.shotLog)){
-    finishBattleship(!timeUp);
-  }
+  if(BattleshipEngine.isFleetSunk(bs.enemyFleet,bs.playerShotLog)) finishBattleship(!timeUp);
 }
 function finishBattleship(onTime){
   if(window._gameOver) return;
@@ -2978,7 +3061,7 @@ function finishBattleship(onTime){
   window._battleshipTimeout=null;
   clearInterval(timerInterval);
   const bs=gameState.battleship;
-  const sunk=BattleshipEngine.countSunk(bs.fleet,bs.shotLog);
+  const sunk=BattleshipEngine.countSunk(bs.enemyFleet,bs.playerShotLog);
   gameState.correct=sunk;
   const timeTakenSec=Math.round((Date.now()-window._startedAt)/1000);
   let score=Math.round((sunk/5)*100);

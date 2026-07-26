@@ -37,7 +37,18 @@ async function openBattleship(page) {
   });
 }
 
-async function fireAt(page, x, y) {
+async function placeFleet(page) {
+  // Place all 5 ships in fixed, non-overlapping rows through the real UI:
+  // rows y=0..4, each ship horizontal starting at x=0. The longest ship is 5
+  // cells, so every row fits inside the 11-wide grid.
+  const count = await page.evaluate(() => BattleshipEngine.FLEET_SPEC.length);
+  for (let i = 0; i < count; i++) {
+    await enterCoords(page, 0, i);
+    await page.getByRole('button', { name: 'Letak' }).click();
+  }
+}
+
+async function enterCoords(page, x, y) {
   await page.locator('#bsBoxX').click();
   for (const digit of String(x)) {
     await page.locator('#bsPad button').filter({ hasText: new RegExp(`^${digit}$`) }).click();
@@ -46,17 +57,22 @@ async function fireAt(page, x, y) {
   for (const digit of String(y)) {
     await page.locator('#bsPad button').filter({ hasText: new RegExp(`^${digit}$`) }).click();
   }
+}
+
+async function fireAt(page, x, y) {
+  await enterCoords(page, x, y);
   await page.getByRole('button', { name: 'Tembak' }).click();
 }
 
 test('battleship supports coordinate entry, hit/miss feedback, sinking, and a full win', async ({ page }) => {
   await openBattleship(page);
+  await placeFleet(page);
 
   await expect(page.locator('.bs-fleet-item')).toHaveCount(5);
   await expect(page.locator('#bsPad')).toBeHidden();
   await expect(page.getByRole('button', { name: 'Tembak' })).toBeDisabled();
 
-  const fleet = await page.evaluate(() => gameState.battleship.fleet);
+  const fleet = await page.evaluate(() => gameState.battleship.enemyFleet);
 
   const firstCell = fleet[0].cells[0];
   await fireAt(page, firstCell.x, firstCell.y);
@@ -92,8 +108,8 @@ test('battleship supports coordinate entry, hit/miss feedback, sinking, and a fu
   let remaining = await page.evaluate(() => {
     const bs = gameState.battleship;
     const cells = [];
-    bs.fleet.forEach(ship => ship.cells.forEach(c => {
-      if (!(`${c.x},${c.y}` in bs.shotLog)) cells.push({ x: c.x, y: c.y });
+    bs.enemyFleet.forEach(ship => ship.cells.forEach(c => {
+      if (!(`${c.x},${c.y}` in bs.playerShotLog)) cells.push({ x: c.x, y: c.y });
     }));
     return cells;
   });
@@ -107,15 +123,16 @@ test('battleship supports coordinate entry, hit/miss feedback, sinking, and a fu
 
 test('battleship timeout keeps partial credit and applies the late penalty', async ({ page }) => {
   await openBattleship(page);
+  await placeFleet(page);
   await page.evaluate(() => {
     const bs = gameState.battleship;
-    bs.fleet.slice(0, 2).forEach(ship => {
+    bs.enemyFleet.slice(0, 2).forEach(ship => {
       ship.cells.forEach(c => {
-        const res = BattleshipEngine.fireAt(bs.fleet, bs.shotLog, c.x, c.y);
-        bs.shotLog = res.shotLog;
+        const res = BattleshipEngine.fireAt(bs.enemyFleet, bs.playerShotLog, c.x, c.y);
+        bs.playerShotLog = res.shotLog;
       });
     });
-    gameState.correct = BattleshipEngine.countSunk(bs.fleet, bs.shotLog);
+    gameState.correct = BattleshipEngine.countSunk(bs.enemyFleet, bs.playerShotLog);
     timeUp = true;
     window._battleshipTimeout();
   });
@@ -128,6 +145,7 @@ test('battleship timeout keeps partial credit and applies the late penalty', asy
 test('battleship board, fleet panel, and coordinate pad stay visible on a phone', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openBattleship(page);
+  await placeFleet(page);
   await page.locator('#bsBoxX').click();
 
   const pad = page.locator('#bsPad');
@@ -168,4 +186,36 @@ test('battleship board, fleet panel, and coordinate pad stay visible on a phone'
   expect(layoutAfter.padBottom).toBeLessThanOrEqual(layoutAfter.innerHeight);
   expect(layoutAfter.headingTop).toBeGreaterThanOrEqual(0);
   expect(layoutAfter.scrollHeight).toBeLessThanOrEqual(layoutAfter.innerHeight + 1);
+});
+
+test('battleship requires placing all five ships before play begins', async ({ page }) => {
+  await openBattleship(page);
+
+  await expect(page.locator('#bsPlacePrompt')).toContainText('Lookout Cruiser');
+  await expect(page.getByRole('button', { name: 'Letak' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Tembak' })).toHaveCount(0);
+
+  // An off-grid placement is rejected and does not consume the ship.
+  await enterCoords(page, 10, 0);
+  await page.getByRole('button', { name: 'Letak' }).click();
+  await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
+  await expect(page.locator('#bsPlacePrompt')).toContainText('Lookout Cruiser');
+
+  await enterCoords(page, 0, 0);
+  await page.getByRole('button', { name: 'Letak' }).click();
+  await expect(page.locator('#bsPlacePrompt')).toContainText('Submarine');
+
+  // An overlapping placement is rejected too.
+  await enterCoords(page, 0, 0);
+  await page.getByRole('button', { name: 'Letak' }).click();
+  await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
+  await expect(page.locator('#bsPlacePrompt')).toContainText('Submarine');
+
+  await page.getByRole('button', { name: 'Susun Semula' }).click();
+  await expect(page.locator('#bsPlacePrompt')).toContainText('Lookout Cruiser');
+
+  await placeFleet(page);
+  await expect(page.getByRole('button', { name: 'Tembak' })).toBeVisible();
+  await expect(page.locator('.bs-fleet-item')).toHaveCount(5);
+  await expect(page.locator('.bs-board.mini')).toBeVisible();
 });
