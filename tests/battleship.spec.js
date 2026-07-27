@@ -517,3 +517,59 @@ test('a shot plays a missile and impact animation when motion is allowed', async
   await page.waitForFunction(() => !gameState.battleship.busy || window._gameOver);
   await expect(page.locator('.bs-fx')).toHaveCount(0);
 });
+
+test('tapping a placed ship rotates it about its starting cell', async ({ page }) => {
+  await openBattleship(page);
+  await dragShip(page, 'Submarine', 4, 2);
+
+  await page.locator('#bsp_4_2').click();
+
+  // Horizontal (4,2)-(6,2) becomes vertical (4,2)-(4,4): y grows upward.
+  const cells = await page.evaluate(() => bsShipByName('Submarine').cells);
+  expect(cells).toEqual([{ x: 4, y: 2 }, { x: 4, y: 3 }, { x: 4, y: 4 }]);
+  await expect(page.locator('#bsp_4_4')).toHaveClass(/ship/);
+  await expect(page.locator('#bsp_6_2')).not.toHaveClass(/ship/);
+
+  // Tapping again turns it back.
+  await page.locator('#bsp_4_2').click();
+  expect(await page.evaluate(() => bsShipByName('Submarine').cells)).toEqual([
+    { x: 4, y: 2 }, { x: 5, y: 2 }, { x: 6, y: 2 }
+  ]);
+});
+
+test('a rotation that would not fit is refused and the ship keeps its cells', async ({ page }) => {
+  await openBattleship(page);
+  // Starting at y=9, a 5-cell vertical ship would need y=9..13 — off the grid.
+  await dragShip(page, 'Pirate ship', 0, 9);
+
+  await page.locator('#bsp_0_9').click();
+
+  expect(await page.evaluate(() => bsShipByName('Pirate ship').cells)).toEqual([
+    { x: 0, y: 9 }, { x: 1, y: 9 }, { x: 2, y: 9 }, { x: 3, y: 9 }, { x: 4, y: 9 }
+  ]);
+  await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
+});
+
+test('dragging a placed ship moves it and frees the cells it left', async ({ page }) => {
+  await openBattleship(page);
+  await dragShip(page, 'Submarine', 0, 0);
+
+  await dragShip(page, 'Submarine', 7, 7, { from: 'grid', fromX: 0, fromY: 0 });
+
+  expect(await page.evaluate(() => bsShipByName('Submarine').cells)).toEqual([
+    { x: 7, y: 7 }, { x: 8, y: 7 }, { x: 9, y: 7 }
+  ]);
+  await expect(page.locator('#bsp_0_0')).toHaveClass(/water/);
+  await expect(page.locator('#bsp_7_7')).toHaveClass(/ship/);
+});
+
+test('a placed ship may be moved onto cells it currently occupies', async ({ page }) => {
+  await openBattleship(page);
+  await dragShip(page, 'Destroyer', 3, 3);
+
+  // Shift one cell right: the target overlaps the ship's own old cells, which
+  // must not count as a collision.
+  await dragShip(page, 'Destroyer', 4, 3, { from: 'grid', fromX: 3, fromY: 3 });
+
+  expect(await page.evaluate(() => bsShipByName('Destroyer').cells[0])).toEqual({ x: 4, y: 3 });
+});

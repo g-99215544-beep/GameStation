@@ -3110,7 +3110,11 @@ function bsPointerUp(event){
   if(drag.ghost) drag.ghost.remove();
   clearBsPreview();
   bs.drag=null;
-  if(event.type==='pointercancel' || !dragged) return;
+  if(event.type==='pointercancel') return;
+  if(!dragged){
+    if(drag.fromGrid && !rotateBsShip(drag.name)) setBsMsg('Tidak muat di situ. Cuba tempat lain.');
+    return;
+  }
   const cell=bsCellFromPoint(event.clientX,event.clientY);
   if(!cell){ setBsMsg('Tidak muat di situ. Cuba tempat lain.'); return; }
   const origin=bsDragOrigin(cell,drag.grabIndex,drag.orientation);
@@ -3136,6 +3140,14 @@ function placeBsShipAt(name,x,y,orientation){
   bs.playerFleet.push({name:spec.name,length:spec.length,cells:BattleshipEngine.shipCells(x,y,spec.length,orientation)});
   renderBattleship();
   return true;
+}
+// A tap turns a ship 90° about its starting cell — the cell the student can see
+// stays put, and the rest of the hull swings round it.
+function rotateBsShip(name){
+  const ship=bsShipByName(name);
+  if(!ship) return false;
+  const horizontal=ship.cells.length>1 && ship.cells[1].x!==ship.cells[0].x;
+  return placeBsShipAt(name,ship.cells[0].x,ship.cells[0].y,horizontal?'v':'h');
 }
 function renderBsDock(){
   const placed=new Set(gameState.battleship.playerFleet.map(s=>s.name));
