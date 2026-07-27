@@ -588,3 +588,24 @@ test('tapping a ship in the dock does nothing', async ({ page }) => {
   // tap too, and its false return trips the "Tidak muat" refusal message.
   await expect(page.locator('#bsMsg')).toHaveText('');
 });
+
+test('the placement screen fits a phone and drags work at phone size', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openBattleship(page);
+
+  const layout = await page.evaluate(() => ({
+    dockBottom: document.querySelector('.bs-dock').getBoundingClientRect().bottom,
+    startBottom: document.getElementById('bsStartBtn').getBoundingClientRect().bottom,
+    headingTop: document.querySelector('.battleship-game h2').getBoundingClientRect().top,
+    innerHeight: window.innerHeight,
+    scrollHeight: document.documentElement.scrollHeight
+  }));
+  expect(layout.headingTop).toBeGreaterThanOrEqual(0);
+  expect(layout.dockBottom).toBeLessThanOrEqual(layout.innerHeight);
+  expect(layout.startBottom).toBeLessThanOrEqual(layout.innerHeight);
+  expect(layout.scrollHeight).toBeLessThanOrEqual(layout.innerHeight + 1);
+
+  // A drag must still hit the right cell at phone cell sizes.
+  await dragShip(page, 'Submarine', 8, 8);
+  expect(await page.evaluate(() => bsShipByName('Submarine').cells[0])).toEqual({ x: 8, y: 8 });
+});
