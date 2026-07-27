@@ -364,6 +364,9 @@
   .bs-cell.ship{background:#5c6b7a;border-color:#3d4854;}
   .bs-cell.hit{background:#c8493f;color:#fff;border-color:#8f342c;}
   .bs-cell.miss{background:#eef6f9;color:#5b8ea3;border-color:#bcd7e0;}
+  .bs-battlefield{position:relative;display:flex;flex:1 1 auto;flex-direction:column;min-height:0;}
+  .bs-enemy-zone{position:relative;display:grid;grid-template-columns:minmax(0,1fr) min(56vw,320px) minmax(0,1fr);align-items:center;gap:5px;width:100%;min-width:0;padding:8px;background:#dce9ed;border:3px solid var(--navy);border-radius:8px;overflow:hidden;}
+  .bs-enemy-zone .bs-board-wrap{width:100%;min-width:0;max-height:none;overflow:hidden;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;contain:inline-size;}
   .bs-fx{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible;z-index:3;}
   .bs-mini-head{display:flex;align-items:center;justify-content:center;gap:8px;margin:8px 0 4px;font-weight:700;font-size:13px;color:var(--navy);}
   .bs-mini-wrap{position:relative;display:flex;justify-content:center;padding:6px;background:#dce9ed;border:2px solid var(--navy);border-radius:6px;}
@@ -371,7 +374,11 @@
   #bsEnemyMsg{color:#8f342c;}
   .bs-fleet-status{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:8px 0;}
   .bs-fleet-item{padding:5px 10px;border-radius:20px;background:#fdf3d8;color:#12385b;font-weight:700;font-size:12px;}
-  .bs-fleet-item.sunk{background:#dff5e5;color:var(--green);text-decoration:line-through;}
+  .bs-fleet-side{display:flex;min-width:0;flex-direction:column;gap:6px;justify-content:center;}
+  .bs-fleet-side .bs-fleet-item{min-width:0;padding:5px 2px;border-radius:6px;font-size:9px;line-height:1.15;text-align:center;overflow-wrap:anywhere;}
+  .bs-fleet-mark{display:block;margin-bottom:2px;color:#0c5f91;font-size:13px;line-height:1;}
+  .bs-fleet-item.sunk{background:#ffe0d7;color:#9b3028;text-decoration:line-through;}
+  .bs-fleet-item.sunk .bs-fleet-mark{color:#c22d27;font-size:16px;text-decoration:none;}
   .bs-place-prompt{text-align:center;font-weight:800;color:var(--navy);margin:8px 0;}
   .bs-dock{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:10px 0;}
   .bs-dock-ship{display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border:2px solid var(--navy);border-radius:6px;background:#fdf3d8;cursor:grab;touch-action:none;}
@@ -392,13 +399,9 @@
   .bs-orient button.active{background:var(--navy);color:var(--gold);}
   .bs-coord-row{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;margin:12px 0;}
   .bs-coord-row span{font-size:24px;font-weight:800;color:var(--navy);}
-  .bs-coord-box{min-width:44px;height:44px;padding:0 8px;display:flex;align-items:center;justify-content:center;border:3px solid #8b5427;border-radius:6px;background:#fff9df;color:#17324d;font-weight:900;font-size:20px;cursor:pointer;touch-action:manipulation;}
-  .bs-coord-box.active{outline:4px solid #20a9e0;outline-offset:-4px;background:#d7f3ff;}
+  .bs-coord-box{width:44px;min-width:44px;height:44px;margin:0;padding:0 6px;border:3px solid #8b5427;border-radius:6px;background:#fff9df;color:#17324d;font-weight:900;font-size:20px;text-align:center;appearance:textfield;touch-action:manipulation;}
+  .bs-coord-box:focus{outline:4px solid #20a9e0;outline-offset:-4px;background:#d7f3ff;}
   .bs-coord-row button.big{width:auto;margin:0;padding:10px 24px;}
-  .bs-pad{display:grid;grid-template-columns:repeat(3,minmax(58px,1fr));gap:7px;width:min(100%,330px);margin:12px auto 0;padding:10px;border:3px solid #704018;border-radius:7px;background:#fff0b5;box-shadow:0 -3px 12px #063a6655;}
-  .bs-pad[hidden]{display:none;}
-  .bs-pad button{min-height:48px;margin:0;padding:6px;font-size:20px;}
-  .bs-pad-close{grid-column:1/-1;font-size:15px;}
   @media (max-width:720px){
     body.battleship-mode{overflow:hidden;display:flex;flex-direction:column;height:100vh;height:100dvh;}
     body.battleship-mode .topbar{flex:0 0 auto;}
@@ -406,11 +409,14 @@
     body.battleship-mode #view-game.active{height:100%;display:flex;flex-direction:column;min-height:0;}
     body.battleship-mode #gameCard{flex:1 1 0;min-height:0;min-width:0;display:flex;flex-direction:column;padding:12px;}
     body.battleship-mode .battleship-game{display:flex;flex-direction:column;height:100%;width:100%;min-height:0;min-width:0;max-width:none;margin:0;}
+    body.battleship-mode .bs-battlefield{flex:1 1 0;}
     body.battleship-mode .battleship-game h2{margin:0 0 4px;font-size:17px;}
     body.battleship-mode .battleship-game > p{font-size:12px;margin:0;}
     body.battleship-mode .bs-board{--bs-cell:28px;}
     body.battleship-mode .bs-board.mini{--bs-cell:12px;}
     body.battleship-mode .bs-board-wrap{flex:1 1 0;min-height:0;min-width:0;max-height:none;}
+    body.battleship-mode .bs-enemy-zone{flex:1 1 0;min-height:0;padding:6px;}
+    body.battleship-mode .bs-enemy-zone .bs-board-wrap{flex:none;width:100%;}
     body.battleship-mode #bsMsg,body.battleship-mode #bsEnemyMsg{min-height:0;margin:4px 0;}
     body.battleship-mode .bs-fleet-status{margin:4px 0;}
     body.battleship-mode .bs-mini-head{margin:4px 0 2px;}
@@ -418,14 +424,12 @@
     body.battleship-mode .bs-dock-ship{padding:4px;gap:2px;--bs-dock-cell:16px;}
     body.battleship-mode .bs-dock-name{font-size:10px;}
     body.battleship-mode .bs-coord-row{margin:8px 0;}
-    .bs-pad{grid-template-columns:repeat(4,minmax(48px,1fr));gap:5px;width:100%;max-width:420px;margin:8px auto 0;padding:8px;}
-    .bs-pad button{min-height:40px;padding:4px;font-size:18px;}
-    .bs-pad-close{min-height:36px;}
   }
   .participant-mode .bs-board-wrap,.participant-mode .bs-mini-wrap{border-color:#704018;border-radius:5px;background:#8fc7d4;box-shadow:4px 4px 0 #063a66;}
+  .participant-mode .bs-enemy-zone{border-color:#704018;border-radius:5px;background:#8fc7d4;box-shadow:4px 4px 0 #063a66;}
+  .participant-mode .bs-enemy-zone .bs-board-wrap{border:0;border-radius:0;background:transparent;box-shadow:none;}
   .participant-mode .bs-board{box-shadow:inset 0 0 0 2px #4ea5cd;}
-  .participant-mode .bs-coord-box.active{outline-color:#0e8fc8;background:#d7f3ff;}
-  .participant-mode .bs-pad{border-radius:5px;background:linear-gradient(135deg,#fff3b4,#e6b954);}
+  .participant-mode .bs-coord-box:focus{outline-color:#0e8fc8;background:#d7f3ff;}
   .participant-mode .finalbox{padding:24px 10px;}.participant-mode .finalbox h2{color:#12385b;}.participant-mode #timer{border:2px solid #ffcb42;background:#092844;box-shadow:2px 2px 0 #061e38;color:#fff0ad;border-radius:4px;}
   @media (max-width:720px){
     .topbar{padding:12px 16px;}
@@ -468,6 +472,7 @@
 <div class="topbar">
   <h1 id="topTitle">🎯 Game Station</h1>
   <div class="topbar-actions">
+    <button class="icon-btn" id="soundToggle" type="button" onclick="toggleGameSfx()" aria-label="Matikan bunyi" aria-pressed="false" title="Matikan bunyi">🔊</button>
     <button class="icon-btn" id="adminAccessBtn" type="button" onclick="showAdminLogin()" aria-label="Login admin" title="Login admin">&#9881;</button>
     <span id="connectivityBadge" hidden style="font-size:12px;font-weight:800;padding:5px 8px;border-radius:999px;background:#6b4c18;color:#fff8df;">📴 Luar Talian</span>
     <div id="timer" style="display:none;">--:--</div>
@@ -804,6 +809,95 @@ function rootRef(sub=''){ return db.ref(sub ? `${ROOT_PATH}/${sub}` : ROOT_PATH)
 let groupDraft = [];
 let sifirQInterval = null;
 let stationCount = 3;
+const GAME_SFX_MUTED_KEY='gamestation_sfx_muted';
+let gameAudioContext=null;
+let gameSfxMuted=(()=>{ try{return localStorage.getItem(GAME_SFX_MUTED_KEY)==='1';}catch(_){return false;} })();
+function updateSoundToggle(){
+  const button=document.getElementById('soundToggle');
+  if(!button) return;
+  button.textContent=gameSfxMuted?'🔇':'🔊';
+  button.setAttribute('aria-pressed',String(gameSfxMuted));
+  button.setAttribute('aria-label',gameSfxMuted?'Hidupkan bunyi':'Matikan bunyi');
+  button.title=gameSfxMuted?'Hidupkan bunyi':'Matikan bunyi';
+}
+function toggleGameSfx(){
+  gameSfxMuted=!gameSfxMuted;
+  try{ localStorage.setItem(GAME_SFX_MUTED_KEY,gameSfxMuted?'1':'0'); }catch(_){}
+  updateSoundToggle();
+  if(!gameSfxMuted) playGameSfx('correct');
+}
+function getGameAudioContext(){
+  if(gameSfxMuted) return null;
+  const AudioContextClass=window.AudioContext||window.webkitAudioContext;
+  if(!AudioContextClass) return null;
+  if(!gameAudioContext) gameAudioContext=new AudioContextClass();
+  if(gameAudioContext.state==='suspended') gameAudioContext.resume().catch(()=>{});
+  return gameAudioContext;
+}
+function scheduleGameTone(context,start,frequency,duration,options={}){
+  const oscillator=context.createOscillator();
+  const gain=context.createGain();
+  oscillator.type=options.type||'sine';
+  oscillator.frequency.setValueAtTime(frequency,start);
+  if(options.endFrequency) oscillator.frequency.exponentialRampToValueAtTime(Math.max(1,options.endFrequency),start+duration);
+  const volume=options.volume==null ? .1 : options.volume;
+  gain.gain.setValueAtTime(.0001,start);
+  gain.gain.exponentialRampToValueAtTime(Math.max(.0001,volume),start+.012);
+  gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(start);
+  oscillator.stop(start+duration+.02);
+}
+function scheduleGameNoise(context,start,duration,volume=.12,filterFrequency=900){
+  const frames=Math.max(1,Math.floor(context.sampleRate*duration));
+  const buffer=context.createBuffer(1,frames,context.sampleRate);
+  const channel=buffer.getChannelData(0);
+  for(let i=0;i<frames;i++) channel[i]=(Math.random()*2-1)*(1-i/frames);
+  const source=context.createBufferSource();
+  const filter=context.createBiquadFilter();
+  const gain=context.createGain();
+  source.buffer=buffer;
+  filter.type='lowpass';
+  filter.frequency.setValueAtTime(filterFrequency,start);
+  gain.gain.setValueAtTime(volume,start);
+  gain.gain.exponentialRampToValueAtTime(.0001,start+duration);
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(context.destination);
+  source.start(start);
+  source.stop(start+duration+.02);
+}
+function playGameSfx(name){
+  const context=getGameAudioContext();
+  if(!context) return;
+  const now=context.currentTime+.01;
+  try{
+    if(name==='correct'){
+      scheduleGameTone(context,now,523,.12,{volume:.08});
+      scheduleGameTone(context,now+.09,659,.13,{volume:.085});
+      scheduleGameTone(context,now+.18,784,.18,{volume:.09});
+    }else if(name==='wrong'){
+      scheduleGameTone(context,now,230,.18,{type:'sawtooth',endFrequency:170,volume:.065});
+      scheduleGameTone(context,now+.13,155,.2,{type:'sawtooth',endFrequency:115,volume:.055});
+    }else if(name==='bs-cannon' || name==='bs-enemy-cannon'){
+      scheduleGameNoise(context,now,.2,name==='bs-cannon' ? .16 : .11,520);
+      scheduleGameTone(context,now,105,.24,{type:'triangle',endFrequency:48,volume:name==='bs-cannon' ? .13 : .09});
+    }else if(name==='bs-hit' || name==='bs-enemy-hit'){
+      scheduleGameNoise(context,now,.18,name==='bs-hit' ? .14 : .1,1250);
+      scheduleGameTone(context,now,190,.2,{type:'square',endFrequency:95,volume:.075});
+    }else if(name==='bs-miss' || name==='bs-enemy-miss'){
+      scheduleGameNoise(context,now,.28,.09,2400);
+      scheduleGameTone(context,now,680,.3,{endFrequency:260,volume:.045});
+    }else if(name==='bs-sunk' || name==='bs-enemy-sunk'){
+      scheduleGameNoise(context,now,.32,.15,700);
+      scheduleGameTone(context,now,185,.22,{type:'sawtooth',endFrequency:125,volume:.075});
+      scheduleGameTone(context,now+.15,125,.3,{type:'sawtooth',endFrequency:62,volume:.07});
+    }
+  }catch(_){}
+}
+updateSoundToggle();
+window.addEventListener('pointerdown',()=>{ getGameAudioContext(); },{once:true,capture:true});
 function currentStationCount(){ return StationLayout.clampStationCount(Object.keys(stations||{}).length); }
 let browserOnline = navigator.onLine !== false;
 let firebaseConnected = true;
@@ -2365,13 +2459,16 @@ function checkPassword(){
   const input = document.getElementById('passInput').value.trim();
   const msg = document.getElementById('passMsg');
   if(!isValidStationPassword(input)){
+    playGameSfx('wrong');
     msg.innerHTML='<div class="msg err">Masukkan password tepat 5 huruf atau digit.</div>';
     return;
   }
   if(input.toUpperCase() === String(st.password).toUpperCase()){
+    playGameSfx('correct');
     msg.innerHTML='<div class="msg ok">✅ Password betul! Game bermula...</div>';
     setTimeout(()=>startGame(stId), 600);
   } else {
+    playGameSfx('wrong');
     msg.innerHTML='<div class="msg err">❌ Password salah. Semak password atau QR bagi stesen ini.</div>';
   }
 }
@@ -2590,13 +2687,15 @@ function submitWorksheetAnswer(){
   const message=document.getElementById('worksheetMsg');
   const expected=gameState.questions[gameState.currentQuestion].answer;
   if(normalizeWorksheetAnswer(input&&input.value)!==normalizeWorksheetAnswer(expected)){
+    playGameSfx('wrong');
     if(message) message.innerHTML='<div class="msg err">Jawapan belum tepat. Semak lembaran kerja dan cuba lagi.</div>';
     if(input){ input.focus(); input.select(); }
     return;
   }
+  playGameSfx('correct');
   gameState.correct++;
   gameState.currentQuestion++;
-  if(gameState.currentQuestion>=gameState.total){ finishGame(); return; }
+  if(gameState.currentQuestion>=gameState.total){ finishGame(false,true); return; }
   renderWorksheetQuestion();
 }
 function pickChoice(i,c){
@@ -2610,15 +2709,19 @@ function selectA(a,el){
   if(gameState.selectedQ===null) return;
   const p = gameState.pairs[gameState.selectedQ];
   if(String(p.a)===String(a)){
+    playGameSfx('correct');
     gameState.matched++;
     document.querySelectorAll('.match-btn')[gameState.selectedQ].classList.add('matched');
     el.classList.add('matched');
     if(gameState.matched===gameState.total){
       document.getElementById('matchMsg').innerHTML='<div class="msg ok">Semua padan!</div>';
       gameState.correct=gameState.total;
-      setTimeout(()=>finishGame(),500);
+      setTimeout(()=>finishGame(false,true),500);
     }
-  } else { el.style.background='#fbe4e2'; setTimeout(()=>el.style.background='',400); }
+  } else {
+    playGameSfx('wrong');
+    el.style.background='#fbe4e2'; setTimeout(()=>el.style.background='',400);
+  }
   gameState.selectedQ=null;
 }
 function checkGrid(){
@@ -2686,6 +2789,7 @@ function answerSifir(choice){
   const sifir=gameState.sifir;
   const question=sifir.questions[sifir.qIndex];
   if(Number(choice)===Number(question.answer)){
+    playGameSfx('correct');
     sifir.qIndex++;
     gameState.correct=sifir.qIndex;
     if(sifir.qIndex>=SifirEngine.SIFIR_TARGET){
@@ -2699,6 +2803,7 @@ function answerSifir(choice){
 }
 function restartSifir(message){
   if(window._gameOver) return;
+  playGameSfx('wrong');
   if(sifirQInterval) clearInterval(sifirQInterval);
   sifirQInterval=null;
   const sifir=gameState.sifir;
@@ -2836,12 +2941,14 @@ function checkSudokuStage(){
   }));
   const msg=document.getElementById('sudokuMsg');
   if(empty || wrong){
+    playGameSfx('wrong');
     const parts=[];
     if(empty) parts.push(`${empty} kotak belum diisi`);
     if(wrong) parts.push(`${wrong} jawapan perlu disemak`);
     msg.innerHTML=`<div class="msg err">${parts.join(' dan ')}.</div>`;
     return;
   }
+  playGameSfx('correct');
   sudoku.completed++;
   gameState.correct=sudoku.completed;
   if(sudoku.completed>=sudoku.stages.length){
@@ -2993,9 +3100,11 @@ function checkCrossword(){
   const result=CrosswordEngine.grade(crossword.grid,crossword.answers);
   gameState.correct=result.correct;
   if(result.solved){
+    playGameSfx('correct');
     finishCrossword(!timeUp);
     return;
   }
+  playGameSfx('wrong');
   const msg=document.getElementById('crosswordMsg');
   if(msg) msg.innerHTML=`<div class="msg err">${result.empty} kotak belum diisi dan ${result.wrong} jawapan perlu disemak.</div>`;
 }
@@ -3031,6 +3140,9 @@ function startBattleship(st){
   document.body.classList.add('battleship-mode');
   renderBattleship();
 }
+function bsXLabel(x){
+  return String.fromCharCode(65+Number(x));
+}
 function renderBsBoard(fleet,shotLog,opts){
   const size=BattleshipEngine.GRID_SIZE;
   const shipAt=new Map();
@@ -3045,36 +3157,39 @@ function renderBsBoard(fleet,shotLog,opts){
       else if(shot==='miss'){ cls='miss'; mark='O'; state='tidak kena'; }
       else if(shipAt.has(key)){ cls='ship'; state='kapal anda'; }
       const owner=cls==='ship'?` data-ship="${escapeHtml(shipAt.get(key))}"`:'';
-      cells+=`<div id="${opts.prefix}_${x}_${y}" class="bs-cell ${cls}"${owner} aria-label="Petak (${x}, ${y}), ${state}">${mark}</div>`;
+      cells+=`<div id="${opts.prefix}_${x}_${y}" class="bs-cell ${cls}"${owner} aria-label="Petak (${bsXLabel(x)}, ${y}), ${state}">${mark}</div>`;
     }
   }
   if(opts.showLabels){
     cells+='<div class="bs-corner" aria-hidden="true"></div>';
-    for(let x=0;x<size;x++) cells+=`<div class="bs-col-label">${x}</div>`;
+    for(let x=0;x<size;x++) cells+=`<div class="bs-col-label">${bsXLabel(x)}</div>`;
   }
   return cells;
 }
-function renderBsFleetList(){
+function renderBsFleetList(side){
   const bs=gameState.battleship;
-  return bs.enemyFleet.map(ship=>{
+  return bs.enemyFleet.map((ship,index)=>({ship,index})).filter(item=>side==='left'?item.index%2===0:item.index%2===1).map(({ship})=>{
     const sunk=BattleshipEngine.isShipSunk(ship,bs.playerShotLog);
-    return `<div class="bs-fleet-item${sunk?' sunk':''}">${escapeHtml(ship.name)} (${ship.length})</div>`;
+    return `<div class="bs-fleet-item${sunk?' sunk':''}">
+      <span class="bs-fleet-mark" aria-hidden="true">${sunk?'✕':'○'}</span>
+      <span class="bs-fleet-name">${escapeHtml(ship.name)} (${ship.length})</span>
+    </div>`;
   }).join('');
+}
+function updateBsFleetList(){
+  const left=document.getElementById('bsFleetLeft');
+  const right=document.getElementById('bsFleetRight');
+  if(left) left.innerHTML=renderBsFleetList('left');
+  if(right) right.innerHTML=renderBsFleetList('right');
 }
 function bsCoordRow(label,handler){
   return `<div class="bs-coord-row">
       <span>(</span>
-      <div id="bsBoxX" class="bs-coord-box" role="button" tabindex="0" aria-label="Koordinat x" onclick="selectBsField('x')"></div>
+      <input id="bsBoxX" class="bs-coord-box" type="text" inputmode="text" pattern="[A-Ka-k]" maxlength="1" placeholder="A" autocomplete="off" autocapitalize="characters" aria-label="Koordinat huruf A hingga K" oninput="bsCoordinateInput('x',this)" onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('bsBoxY').focus();}">
       <span>,</span>
-      <div id="bsBoxY" class="bs-coord-box" role="button" tabindex="0" aria-label="Koordinat y" onclick="selectBsField('y')"></div>
+      <input id="bsBoxY" class="bs-coord-box" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="2" placeholder="0" autocomplete="off" aria-label="Koordinat nombor 0 hingga 10" oninput="bsCoordinateInput('y',this)" onkeydown="if(event.key==='Enter'&&!document.getElementById('bsActionBtn').disabled){event.preventDefault();${handler}}">
       <span>)</span>
       <button id="bsActionBtn" class="big" type="button" onclick="${handler}" disabled>${label}</button>
-    </div>
-    <div id="bsPad" class="bs-pad" hidden>
-      ${[1,2,3,4,5,6,7,8,9].map(d=>`<button type="button" onclick="bsInput(${d})">${d}</button>`).join('')}
-      <button type="button" onclick="bsBackspace()" aria-label="Padam">&#9003;</button>
-      <button type="button" onclick="bsInput(0)">0</button>
-      <button class="bs-pad-close" type="button" onclick="hideBsPad()">Selesai</button>
     </div>`;
 }
 function renderBattleship(){
@@ -3100,18 +3215,23 @@ function renderBattleship(){
   }
   document.getElementById('gameCard').innerHTML=`<div class="battleship-game">
     ${head}
-    <p>Tembak armada komputer. Masukkan koordinat (x, y) lalu tekan Tembak.</p>
-    <div class="bs-board-wrap">
-      <div class="bs-board">${renderBsBoard(bs.enemyFleet,bs.playerShotLog,{prefix:'bs',showShips:false,showLabels:true})}</div>
+    <p>Tembak armada komputer. Masukkan koordinat (A-K, 0-10) lalu tekan Tembak.</p>
+    <div class="bs-battlefield">
+      <div id="bsEnemyBoardWrap" class="bs-enemy-zone">
+        <div id="bsFleetLeft" class="bs-fleet-side" aria-label="Kapal lawan">${renderBsFleetList('left')}</div>
+        <div id="bsEnemyGridWrap" class="bs-board-wrap">
+          <div class="bs-board">${renderBsBoard(bs.enemyFleet,bs.playerShotLog,{prefix:'bs',showShips:false,showLabels:true})}</div>
+        </div>
+        <div id="bsFleetRight" class="bs-fleet-side" aria-label="Kapal lawan">${renderBsFleetList('right')}</div>
+      </div>
+      <div id="bsMsg" aria-live="polite"></div>
+      ${bsCoordRow('Tembak','fireBattleship()')}
+      <div class="bs-mini-head">Armada anda</div>
+      <div id="bsPlayerBoardWrap" class="bs-mini-wrap">
+        <div class="bs-board plain mini">${renderBsBoard(bs.playerFleet,bs.enemyShotLog,{prefix:'bsp',showShips:true,showLabels:false})}</div>
+      </div>
+      <div id="bsEnemyMsg" aria-live="polite"></div>
     </div>
-    <div id="bsMsg" aria-live="polite"></div>
-    <div id="bsFleetList" class="bs-fleet-status">${renderBsFleetList()}</div>
-    <div class="bs-mini-head">Armada anda</div>
-    <div class="bs-mini-wrap">
-      <div class="bs-board plain mini">${renderBsBoard(bs.playerFleet,bs.enemyShotLog,{prefix:'bsp',showShips:true,showLabels:false})}</div>
-    </div>
-    <div id="bsEnemyMsg" aria-live="polite"></div>
-    ${bsCoordRow('Tembak','fireBattleship()')}
   </div>`;
   fitBsBoard();
 }
@@ -3152,8 +3272,8 @@ function setBsEnemyMsg(text){
 function clearBsCoords(){
   const bs=gameState.battleship;
   bs.pendingX=''; bs.pendingY='';
-  const boxX=document.getElementById('bsBoxX'); if(boxX) boxX.textContent='';
-  const boxY=document.getElementById('bsBoxY'); if(boxY) boxY.textContent='';
+  const boxX=document.getElementById('bsBoxX'); if(boxX) boxX.value='';
+  const boxY=document.getElementById('bsBoxY'); if(boxY) boxY.value='';
   updateBsActionEnabled();
 }
 function applyBsCell(prefix,x,y,result){
@@ -3162,7 +3282,7 @@ function applyBsCell(prefix,x,y,result){
   cell.classList.remove('water','ship');
   cell.classList.add(result==='miss'?'miss':'hit');
   cell.textContent=result==='miss'?'O':'X';
-  cell.setAttribute('aria-label',`Petak (${x}, ${y}), ${result==='miss'?'tidak kena':'kena'}`);
+  cell.setAttribute('aria-label',`Petak (${bsXLabel(x)}, ${y}), ${result==='miss'?'tidak kena':'kena'}`);
 }
 // Placement is drag-driven: below this many pixels of travel a press is a tap
 // (rotate), above it a drag (place/move). One code path serves finger and mouse.
@@ -3336,44 +3456,30 @@ function resetBsPlacement(){
   renderBattleship();
   setBsMsg('Susunan dikosongkan. Mula semula.');
 }
-function selectBsField(field){
-  const bs=gameState.battleship;
-  if(!bs || window._gameOver || bs.busy) return;
-  bs.activeField=field;
-  const boxX=document.getElementById('bsBoxX'), boxY=document.getElementById('bsBoxY');
-  if(boxX) boxX.classList.toggle('active', field==='x');
-  if(boxY) boxY.classList.toggle('active', field==='y');
-  const pad=document.getElementById('bsPad');
-  if(pad) pad.hidden=false;
-  fitBsBoard();
-}
 function updateBsActionEnabled(){
   const bs=gameState.battleship;
   const btn=document.getElementById('bsActionBtn');
-  if(btn && bs) btn.disabled=bs.busy || bs.pendingX==='' || bs.pendingY==='';
+  const locked=!bs || bs.busy || window._gameOver;
+  const boxX=document.getElementById('bsBoxX');
+  const boxY=document.getElementById('bsBoxY');
+  if(boxX) boxX.disabled=locked;
+  if(boxY) boxY.disabled=locked;
+  if(btn && bs) btn.disabled=locked || bs.pendingX==='' || bs.pendingY==='';
 }
-function bsInput(digit){
+function bsCoordinateInput(field,input){
   const bs=gameState.battleship;
-  if(!bs || bs.busy || !Number.isInteger(digit) || digit<0 || digit>9) return;
-  const key=bs.activeField==='x'?'pendingX':'pendingY';
-  bs[key]=(bs[key]==='1' && digit===0)?'10':String(digit);
-  const box=document.getElementById(bs.activeField==='x'?'bsBoxX':'bsBoxY');
-  if(box) box.textContent=bs[key];
+  if(!bs || window._gameOver || bs.busy || !input || (field!=='x' && field!=='y')) return;
+  if(field==='x'){
+    const letter=String(input.value||'').toUpperCase().replace(/[^A-K]/g,'').slice(0,1);
+    input.value=letter;
+    bs.pendingX=letter?String(letter.charCodeAt(0)-65):'';
+  } else {
+    let value=String(input.value||'').replace(/\D/g,'').slice(0,2);
+    if(value!=='' && Number(value)>10) value='';
+    input.value=value;
+    bs.pendingY=value;
+  }
   updateBsActionEnabled();
-}
-function bsBackspace(){
-  const bs=gameState.battleship;
-  if(!bs || bs.busy) return;
-  const key=bs.activeField==='x'?'pendingX':'pendingY';
-  bs[key]=bs[key].slice(0,-1);
-  const box=document.getElementById(bs.activeField==='x'?'bsBoxX':'bsBoxY');
-  if(box) box.textContent=bs[key];
-  updateBsActionEnabled();
-}
-function hideBsPad(){
-  const pad=document.getElementById('bsPad');
-  if(pad) pad.hidden=true;
-  fitBsBoard();
 }
 window.addEventListener('resize',fitBsBoard);
 const BS_FLIGHT_MS=500, BS_IMPACT_MS=300;
@@ -3402,29 +3508,42 @@ function bsMissileShape(){
   g.appendChild(bsSvg('path',{d:'M-8 2.5 L-12 6 L-11 1 Z',fill:'#8f342c'}));
   return g;
 }
-async function bsAnimateShot(prefix,x,y,result){
+async function bsAnimateShot(sourcePrefix,targetPrefix,x,y,result){
   if(bsReducedMotion()) return;
-  const cell=document.getElementById(`${prefix}_${x}_${y}`);
-  const board=cell && cell.closest('.bs-board-wrap,.bs-mini-wrap');
-  if(!cell || !board) return;
-  const boardBox=board.getBoundingClientRect(), cellBox=cell.getBoundingClientRect();
-  const tx=cellBox.left-boardBox.left+cellBox.width/2;
-  const ty=cellBox.top-boardBox.top+cellBox.height/2;
-  const lx=boardBox.width/2, ly=boardBox.height-6;
+  const cell=document.getElementById(`${targetPrefix}_${x}_${y}`);
+  const sourceBoard=document.getElementById(sourcePrefix==='bs'?'bsEnemyGridWrap':'bsPlayerBoardWrap');
+  const arena=document.querySelector('.bs-battlefield');
+  if(!cell || !sourceBoard || !arena) return;
+  const arenaBox=arena.getBoundingClientRect();
+  const sourceBox=sourceBoard.getBoundingClientRect();
+  const cellBox=cell.getBoundingClientRect();
+  const tx=cellBox.left-arenaBox.left+cellBox.width/2;
+  const ty=cellBox.top-arenaBox.top+cellBox.height/2;
+  const sx=sourceBox.left-arenaBox.left+sourceBox.width/2;
+  const sy=ty<sourceBox.top-arenaBox.top
+    ? sourceBox.top-arenaBox.top+6
+    : sourceBox.bottom-arenaBox.top-6;
 
-  const svg=bsSvg('svg',{class:'bs-fx'});
+  const svg=bsSvg('svg',{class:'bs-fx','data-source':sourcePrefix,'data-target':targetPrefix});
   const launcher=bsLauncherShape();
-  launcher.setAttribute('transform',`translate(${lx},${ly})`);
+  launcher.setAttribute('transform',`translate(${sx},${sy})`);
   const missile=bsMissileShape();
   svg.appendChild(launcher);
   svg.appendChild(missile);
-  board.appendChild(svg);
+  arena.appendChild(svg);
 
   try{
-    // Quadratic arc from the launcher up and over to the target cell, with the
-    // missile rotated to face along its own path.
-    const arc=Math.max(40,Math.abs(ty-ly)*0.5);
-    const at=t=>({x:lx+(tx-lx)*t, y:ly+(ty-ly)*t-arc*4*t*(1-t)});
+    // Arc across the gap between the two boards. The perpendicular bend sends
+    // player shots around the right and computer shots around the left, while
+    // both still finish at the exact receiving cell.
+    const dx=tx-sx, dy=ty-sy;
+    const distance=Math.max(1,Math.hypot(dx,dy));
+    const bend=Math.max(42,Math.min(100,distance*.22));
+    const nx=-dy/distance, ny=dx/distance;
+    const at=t=>({
+      x:sx+dx*t+nx*bend*4*t*(1-t),
+      y:sy+dy*t+ny*bend*4*t*(1-t)
+    });
     const steps=14, frames=[];
     for(let i=0;i<=steps;i++){
       const p=at(i/steps), n=at(Math.min(1,i/steps+0.02));
@@ -3468,22 +3587,22 @@ async function fireBattleship(){
   if(bs.pendingX==='' || bs.pendingY==='') return;
   const x=Number(bs.pendingX), y=Number(bs.pendingY);
   const shot=BattleshipEngine.fireAt(bs.enemyFleet,bs.playerShotLog,x,y);
-  if(shot.result==='already-shot'){ setBsMsg('Sudah ditembak di sini.'); clearBsCoords(); return; }
+  if(shot.result==='already-shot'){ playGameSfx('wrong'); setBsMsg('Sudah ditembak di sini.'); clearBsCoords(); return; }
 
+  playGameSfx('bs-cannon');
   bs.busy=true;
   clearBsCoords();
-  hideBsPad();
   updateBsActionEnabled();
   try{
-    await bsAnimateShot('bs',x,y,shot.result);
+    await bsAnimateShot('bsp','bs',x,y,shot.result);
     if(window._gameOver) return;
     bs.playerShotLog=shot.shotLog;
     gameState.correct=BattleshipEngine.countSunk(bs.enemyFleet,bs.playerShotLog);
     applyBsCell('bs',x,y,shot.result);
+    playGameSfx(shot.result==='sunk'?'bs-sunk':shot.result==='hit'?'bs-hit':'bs-miss');
     if(shot.result==='sunk'){
       setBsMsg(`Kapal ${shot.shipName} tenggelam!`);
-      const list=document.getElementById('bsFleetList');
-      if(list) list.innerHTML=renderBsFleetList();
+      updateBsFleetList();
     } else setBsMsg(shot.result==='hit'?'Kena!':'Tidak kena.');
 
     if(BattleshipEngine.isFleetSunk(bs.enemyFleet,bs.playerShotLog)){ finishBattleship(!timeUp); return; }
@@ -3498,10 +3617,12 @@ async function bsComputerTurn(){
   const pick=BattleshipEngine.nextComputerShot(bs.enemyShotLog);
   if(!pick) return;
   const res=BattleshipEngine.fireAt(bs.playerFleet,bs.enemyShotLog,pick.x,pick.y);
-  await bsAnimateShot('bsp',pick.x,pick.y,res.result);
+  playGameSfx('bs-enemy-cannon');
+  await bsAnimateShot('bs','bsp',pick.x,pick.y,res.result);
   if(window._gameOver) return;
   bs.enemyShotLog=res.shotLog;
   applyBsCell('bsp',pick.x,pick.y,res.result);
+  playGameSfx(res.result==='sunk'?'bs-enemy-sunk':res.result==='hit'?'bs-enemy-hit':'bs-enemy-miss');
   // The computer writes to its OWN line so the student's shot result stays readable.
   if(res.result==='sunk') setBsEnemyMsg(`Kapal anda ${res.shipName} musnah!`);
   else setBsEnemyMsg(res.result==='hit'?'Komputer kena kapal anda!':'Komputer tersasar.');
@@ -3607,6 +3728,7 @@ function updateRunLive(){
 function finishRun(reachedTarget){
   if(window._gameOver) return;   // guard against double-finish (target hit + timeout race)
   window._gameOver = true;
+  playGameSfx(reachedTarget?'correct':'wrong');
   if(window._runWatchId!=null && navigator.geolocation){
     navigator.geolocation.clearWatch(window._runWatchId); window._runWatchId=null;
   }
@@ -3768,6 +3890,7 @@ function startTangram(st){
 
   function onShapeSolved(){
     stopAssist();
+    playGameSfx('correct');
     done++; idx++;
     if(idx < SHAPES.length){
       card.innerHTML = testBanner() + `<div class="finalbox">
@@ -3788,6 +3911,7 @@ function startTangram(st){
     if(timerInterval) clearInterval(timerInterval);
     const remain = Math.max(0, timeLeftSec);
     const allDone = done >= SHAPES.length;
+    if(!allDone) playGameSfx('wrong');
     const score = done*TG_STAGE_MARK + (allDone ? Math.round((remain/totalSec)*TG_TIME_BONUS) : 0);
     const timeTakenSec = Math.round((Date.now()-window._startedAt)/1000);
     if(window._testMode){ showTangramTestResult(done, SHAPES.length, score, timeTakenSec); return; }
@@ -3813,7 +3937,7 @@ function showTangramTestResult(done, total, score, timeTakenSec){
     ${window._demoMode ? '<button class="big" onclick="startTangramDemo()">↺ Main Semula</button>' : '<button class="big" onclick="endTest()">← Kembali ke Admin</button>'}
   </div>`;
 }
-function finishGame(forceOk){
+function finishGame(forceOk,suppressSfx){
   if(window._gameOver) return;   // guard against double-completion (e.g. solve then timeout)
   window._gameOver=true;
   if(gameState.type==='quiz'||gameState.type==='pilihan'){
@@ -3825,6 +3949,7 @@ function finishGame(forceOk){
     gameState.correct=correct;
   }
   if(forceOk){ gameState.correct=gameState.total=1; }
+  if(!suppressSfx) playGameSfx(gameState.correct>=gameState.total?'correct':'wrong');
   clearInterval(timerInterval);
   const onTime = !timeUp;
   const timeTakenSec = Math.round((Date.now()-window._startedAt)/1000);
