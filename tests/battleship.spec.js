@@ -52,7 +52,7 @@ async function openBattleship(page) {
 
 async function placeFleet(page) {
   // Rows y=0..4, each ship horizontal from x=0: the longest ship is 5 cells,
-  // so every row fits inside the 11-wide grid.
+  // so every row fits inside the 9-wide grid.
   const ships = await page.evaluate(() => BattleshipEngine.FLEET_SPEC.map(s => s.name));
   for (let i = 0; i < ships.length; i++) await dragShip(page, ships[i], 0, i);
   await page.getByRole('button', { name: 'Sedia! Mula Menembak' }).click();
@@ -104,8 +104,8 @@ test('battleship supports coordinate entry, hit/miss feedback, sinking, and a fu
   const occupied = new Set();
   fleet.forEach(ship => ship.cells.forEach(c => occupied.add(`${c.x},${c.y}`)));
   let missCell = null;
-  for (let y = 0; y < 11 && !missCell; y++) {
-    for (let x = 0; x < 11 && !missCell; x++) {
+  for (let y = 0; y < 9 && !missCell; y++) {
+    for (let x = 0; x < 9 && !missCell; x++) {
       if (!occupied.has(`${x},${y}`)) missCell = { x, y };
     }
   }
@@ -197,22 +197,28 @@ test('both battle boards and native coordinate inputs stay visible on a phone wi
   await expect(page.locator('#bsPad')).toHaveCount(0);
 });
 
-test('battle view uses A-K columns, centered controls, and fleet lists beside the enemy board', async ({ page }) => {
+test('battle view uses A-I columns, centered controls, and fleet lists beside the enemy board', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openBattleship(page);
   await placeFleet(page);
 
   await expect(page.locator('#bsEnemyGridWrap .bs-col-label')).toHaveText(
-    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']
   );
   await page.locator('#bsBoxX').fill('c');
-  await page.locator('#bsBoxY').fill('10');
+  await page.locator('#bsBoxY').fill('8');
   await expect(page.locator('#bsBoxX')).toHaveValue('C');
   expect(await page.evaluate(() => ({
     x: gameState.battleship.pendingX,
     y: gameState.battleship.pendingY
-  }))).toEqual({ x: '2', y: '10' });
+  }))).toEqual({ x: '2', y: '8' });
   await expect(page.getByRole('button', { name: 'Tembak' })).toBeEnabled();
+  await page.locator('#bsBoxX').fill('J');
+  await expect(page.locator('#bsBoxX')).toHaveValue('');
+  await page.locator('#bsBoxX').fill('C');
+  await page.locator('#bsBoxY').fill('9');
+  await expect(page.locator('#bsBoxY')).toHaveValue('');
+  await page.locator('#bsBoxY').fill('8');
 
   const layout = await page.evaluate(() => {
     const zone = document.getElementById('bsEnemyBoardWrap').getBoundingClientRect();
@@ -242,13 +248,13 @@ test('battle view uses A-K columns, centered controls, and fleet lists beside th
   await expect(page.locator('.bs-fleet-side .bs-fleet-item')).toHaveCount(5);
 });
 
-test('the whole 11x11 board fits inside its frame on a phone', async ({ page }) => {
+test('the whole 9x9 board fits inside its frame on a phone', async ({ page }) => {
   // The board must never need its own scroll on a phone: a student who cannot
-  // see column x=10 or row y=0 cannot check where their shots landed.
+  // see column I or row 0 cannot check where their shots landed.
   const measure = () => page.evaluate(() => {
     const wrap = document.querySelector('.bs-board-wrap');
     const wrapRect = wrap.getBoundingClientRect();
-    const corners = ['0_0', '10_0', '0_10', '10_10'].map(key => {
+    const corners = ['0_0', '8_0', '0_8', '8_8'].map(key => {
       const cell = document.getElementById((document.getElementById('bs_0_0') ? 'bs_' : 'bsp_') + key);
       const rect = cell.getBoundingClientRect();
       return { key, left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
@@ -354,7 +360,7 @@ test('the dock lists every ship and the battle starts only when all five are pla
 
   // An off-grid or overlapping placement is refused and changes nothing.
   const refused = await page.evaluate(() => [
-    placeBsShipAt('Pirate ship', 10, 5, 'h'),
+    placeBsShipAt('Pirate ship', 8, 5, 'h'),
     placeBsShipAt('Pirate ship', 0, 0, 'h')
   ]);
   expect(refused).toEqual([false, false]);
@@ -397,8 +403,8 @@ test('a drop that does not fit returns the ship to the dock', async ({ page }) =
   await openBattleship(page);
   await dragShip(page, 'Submarine', 0, 0);
 
-  // Off the right edge: a 5-cell ship starting at x=9 runs past x=10.
-  await dragShip(page, 'Pirate ship', 9, 8);
+  // Off the right edge: a 5-cell ship starting at x=8 runs past the edge.
+  await dragShip(page, 'Pirate ship', 8, 8);
   expect(await page.evaluate(() => !!bsShipByName('Pirate ship'))).toBe(false);
   await expect(page.locator('.bs-dock-ship[data-ship="Pirate ship"]')).not.toHaveClass(/placed/);
   await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
@@ -459,7 +465,7 @@ test('the computer fires back after every player shot', async ({ page }) => {
   const before = await page.evaluate(() => Object.keys(gameState.battleship.enemyShotLog).length);
   expect(before).toBe(0);
 
-  await fireAt(page, 9, 9);
+  await fireAt(page, 8, 8);
 
   const after = await page.evaluate(() => Object.keys(gameState.battleship.enemyShotLog).length);
   expect(after).toBe(1);
@@ -528,7 +534,7 @@ test('projectiles travel from the firing board to the receiving board', async ({
     };
   });
 
-  await fireAt(page, 9, 9);
+  await fireAt(page, 8, 8);
   expect(await page.evaluate(() => window.__bsShotRoutes)).toEqual([
     { sourcePrefix: 'bsp', targetPrefix: 'bs' },
     { sourcePrefix: 'bs', targetPrefix: 'bsp' }
@@ -540,7 +546,7 @@ test('a shot plays a missile and impact animation when motion is allowed', async
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   await placeFleet(page);
 
-  await enterCoords(page, 9, 9);
+  await enterCoords(page, 8, 8);
   await page.getByRole('button', { name: 'Tembak' }).click();
 
   // The SVG overlay exists while the shot is in flight...
@@ -575,13 +581,13 @@ test('tapping a placed ship rotates it about its starting cell', async ({ page }
 
 test('a rotation that would not fit is refused and the ship keeps its cells', async ({ page }) => {
   await openBattleship(page);
-  // Starting at y=9, a 5-cell vertical ship would need y=9..13 — off the grid.
-  await dragShip(page, 'Pirate ship', 0, 9);
+  // Starting at y=8, a 5-cell vertical ship would need y=8..12 — off the grid.
+  await dragShip(page, 'Pirate ship', 0, 8);
 
-  await page.locator('#bsp_0_9').click();
+  await page.locator('#bsp_0_8').click();
 
   expect(await page.evaluate(() => bsShipByName('Pirate ship').cells)).toEqual([
-    { x: 0, y: 9 }, { x: 1, y: 9 }, { x: 2, y: 9 }, { x: 3, y: 9 }, { x: 4, y: 9 }
+    { x: 0, y: 8 }, { x: 1, y: 8 }, { x: 2, y: 8 }, { x: 3, y: 8 }, { x: 4, y: 8 }
   ]);
   await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
 });
@@ -590,13 +596,13 @@ test('dragging a placed ship moves it and frees the cells it left', async ({ pag
   await openBattleship(page);
   await dragShip(page, 'Submarine', 0, 0);
 
-  await dragShip(page, 'Submarine', 7, 7, { from: 'grid', fromX: 0, fromY: 0 });
+  await dragShip(page, 'Submarine', 6, 7, { from: 'grid', fromX: 0, fromY: 0 });
 
   expect(await page.evaluate(() => bsShipByName('Submarine').cells)).toEqual([
-    { x: 7, y: 7 }, { x: 8, y: 7 }, { x: 9, y: 7 }
+    { x: 6, y: 7 }, { x: 7, y: 7 }, { x: 8, y: 7 }
   ]);
   await expect(page.locator('#bsp_0_0')).toHaveClass(/water/);
-  await expect(page.locator('#bsp_7_7')).toHaveClass(/ship/);
+  await expect(page.locator('#bsp_6_7')).toHaveClass(/ship/);
 });
 
 test('a placed ship may be moved onto cells it currently occupies', async ({ page }) => {
@@ -642,8 +648,8 @@ test('the placement screen fits a phone and drags work at phone size', async ({ 
   expect(layout.scrollHeight).toBeLessThanOrEqual(layout.innerHeight + 1);
 
   // A drag must still hit the right cell at phone cell sizes.
-  await dragShip(page, 'Submarine', 8, 8);
-  expect(await page.evaluate(() => bsShipByName('Submarine').cells[0])).toEqual({ x: 8, y: 8 });
+  await dragShip(page, 'Submarine', 6, 8);
+  expect(await page.evaluate(() => bsShipByName('Submarine').cells[0])).toEqual({ x: 6, y: 8 });
 });
 
 test('resetting during a drag removes its ghost, preview, and stale pointer state', async ({ page }) => {
