@@ -136,7 +136,7 @@
   // How many target slots are currently filled by a correctly placed piece.
   // Each slot is consumed at most once, so two identical pieces stacked on the
   // same slot still count as one. Used to measure a student's progress on the
-  // board (see the stuck-hint assist in index.html).
+  // board (also useful for progress reporting in timed assists).
   function countPlacedInSlots(pieces, slots, polygons, tol) {
     tol = tol == null ? 0.05 : tol;
     const used = new Array(slots.length).fill(false);

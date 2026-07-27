@@ -3759,11 +3759,10 @@ function finishSudoku(onTime){
 // out of 200: 40 per shape completed, plus a time bonus of (timeLeft/total)*80
 // once all three are done. The admin "Uji" path runs this exact same flow.
 const TG_STAGE_MARK = 40, TG_TIME_BONUS = 80;
-// Stuck-hint assist (Segi Empat only — see SHAPES below): if a student makes
-// no progress for TG_HINT_IDLE_MS, a 💡 button appears. Tapping it reveals the
-// grey target's internal cut-lines for TG_HINT_SEC seconds (with a countdown),
-// then fades them out over TG_HINT_FADE_MS and the idle clock starts over.
-const TG_HINT_IDLE_MS = 60000, TG_HINT_SEC = 5, TG_HINT_FADE_MS = 700;
+// Automatic assist for Segi Empat only: every minute, reveal the grey target's
+// internal cut-lines for five seconds. It runs regardless of how many pieces
+// are already in place, so every student receives the same periodic support.
+const TG_HINT_INTERVAL_MS = 60000, TG_HINT_SEC = 5;
 function startTangram(st){
   const S = window.TangramShapes;
   gameState.type='tangram'; gameState.total=1; gameState.correct=0;
@@ -3776,7 +3775,7 @@ function startTangram(st){
   let idx = 0;    // shape currently being built
   let done = 0;   // shapes completed so far
   const card = document.getElementById('gameCard');
-  let assistTimer = null, assistRAF = null, assistCountdown = null, assistIdleMs = 0, assistBest = 0, assistRevealing = false;
+  let assistTimer = null, assistCountdown = null, assistRevealing = false;
   const testBanner = () => window._demoMode
     ? '<div class="msg" style="background:#e7f0ff;margin-top:0;">🎮 <b>Demo Tangram</b> — <button class="linkbtn" onclick="startTangramDemo()">↺ Main semula</button></div>'
     : window._testMode
@@ -3830,61 +3829,44 @@ function startTangram(st){
     if(shp.assist) startAssist();
   }
 
-  // ---- Stuck-hint assist (Segi Empat only) ----
+  // ---- Recurring automatic hint (Segi Empat only) ----
   function startAssist(){
-    assistIdleMs = 0; assistBest = 0; assistRevealing = false;
-    setHintButtonVisible(false);
+    assistRevealing = false;
+    setHintStatus(0);
     if(assistTimer) clearInterval(assistTimer);
-    assistTimer = setInterval(assistTick, 1000);
+    assistTimer = setInterval(revealHint, TG_HINT_INTERVAL_MS);
   }
   function stopAssist(){
     if(assistTimer){ clearInterval(assistTimer); assistTimer = null; }
     if(assistCountdown){ clearInterval(assistCountdown); assistCountdown = null; }
-    if(assistRAF){ cancelAnimationFrame(assistRAF); assistRAF = null; }
+    if(window._tgCtrl) window._tgCtrl.setGuideAlpha(0);
     assistRevealing = false;
+    setHintStatus(0);
   }
-  function assistTick(){
-    const board = document.getElementById('tgBoard');
-    // Bail out if the board is gone or hidden (student left this view/logged
-    // out) so the interval never runs orphaned.
-    if(!board || !board.offsetParent || !window._tgCtrl){ stopAssist(); return; }
-    if(assistRevealing) return; // idle clock pauses while the hint is showing
-    const placed = window._tgCtrl.getPlacedCount();
-    if(placed > assistBest){
-      assistBest = placed; assistIdleMs = 0; setHintButtonVisible(false); return;
-    }
-    assistIdleMs += 1000;
-    if(assistIdleMs >= TG_HINT_IDLE_MS) setHintButtonVisible(true);
-  }
-  function setHintButtonVisible(show){
+  function setHintStatus(secLeft){
     const bar = document.getElementById('tgHintBar');
     if(!bar) return;
-    bar.innerHTML = show ? '<button id="tgHintBtn" class="secondary" type="button" onclick="window._tgReveal()">💡 Bantuan</button>' : '';
+    bar.innerHTML = secLeft > 0 ? `<span id="tgHintCountdown">💡 Bantuan · ${secLeft}s</span>` : '';
   }
   function revealHint(){
     if(assistRevealing || !window._tgCtrl) return;
+    const board = document.getElementById('tgBoard');
+    if(!board || !board.offsetParent){ stopAssist(); return; }
     assistRevealing = true;
     window._tgCtrl.setGuideAlpha(1);
     let secLeft = TG_HINT_SEC;
-    const bar = document.getElementById('tgHintBar');
-    const renderCountdown = () => { if(bar) bar.innerHTML = `<span id="tgHintCountdown">💡 ${secLeft}</span>`; };
-    renderCountdown();
+    setHintStatus(secLeft);
     assistCountdown = setInterval(() => {
       secLeft--;
-      if(secLeft <= 0){ clearInterval(assistCountdown); assistCountdown = null; fadeOutHint(); return; }
-      renderCountdown();
+      if(secLeft <= 0){ hideHint(); return; }
+      setHintStatus(secLeft);
     }, 1000);
   }
-  function fadeOutHint(){
-    const start = performance.now();
-    const step = (now) => {
-      const t = Math.min(1, (now - start) / TG_HINT_FADE_MS);
-      if(window._tgCtrl) window._tgCtrl.setGuideAlpha(1 - t);
-      if(t < 1){ assistRAF = requestAnimationFrame(step); return; }
-      assistRAF = null; assistRevealing = false; assistIdleMs = 0;
-      setHintButtonVisible(false);
-    };
-    assistRAF = requestAnimationFrame(step);
+  function hideHint(){
+    if(assistCountdown){ clearInterval(assistCountdown); assistCountdown = null; }
+    if(window._tgCtrl) window._tgCtrl.setGuideAlpha(0);
+    assistRevealing = false;
+    setHintStatus(0);
   }
 
   function onShapeSolved(){
@@ -3920,7 +3902,6 @@ function startTangram(st){
   window._tgStart = startActivity;
   window._tgNext = playShape;
   window._tgTimeout = complete;   // invoked by tick() when the timer hits 0
-  window._tgReveal = revealHint;  // invoked by the 💡 hint button
   showInstructions();
 }
 function showTangramTestResult(done, total, score, timeTakenSec){
