@@ -3,6 +3,16 @@ const { pathToFileURL } = require('node:url');
 const { test, expect } = require('playwright/test');
 
 async function openBattleship(page) {
+  // The placing screen (board + dock + actions, plus the test-mode banner) is
+  // taller than Playwright's default 1280x720 viewport. .click() auto-scrolls
+  // its target into view, which is why earlier coordinate-entry tests never
+  // noticed, but dragShip below drives page.mouse directly — real pointer
+  // input, deliberately not auto-scrolling — so it needs every dock row and
+  // grid cell already on screen. Only bump the height of the untouched
+  // default; a test that first picks its own (e.g. mobile) viewport is left
+  // alone.
+  const vp = page.viewportSize();
+  if (vp && vp.width === 1280 && vp.height === 720) await page.setViewportSize({ width: 1280, height: 1300 });
   await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({ body: '' }));
   await page.addInitScript(() => {
     const snapshot = { val: () => null };
@@ -41,14 +51,25 @@ async function openBattleship(page) {
 }
 
 async function placeFleet(page) {
-  // Place all 5 ships in fixed, non-overlapping rows through the real UI:
-  // rows y=0..4, each ship horizontal starting at x=0. The longest ship is 5
-  // cells, so every row fits inside the 11-wide grid.
-  const count = await page.evaluate(() => BattleshipEngine.FLEET_SPEC.length);
-  for (let i = 0; i < count; i++) {
-    await enterCoords(page, 0, i);
-    await page.getByRole('button', { name: 'Letak' }).click();
-  }
+  // Rows y=0..4, each ship horizontal from x=0: the longest ship is 5 cells,
+  // so every row fits inside the 11-wide grid.
+  const ships = await page.evaluate(() => BattleshipEngine.FLEET_SPEC.map(s => s.name));
+  for (let i = 0; i < ships.length; i++) await dragShip(page, ships[i], 0, i);
+  await page.getByRole('button', { name: 'Sedia! Mula Menembak' }).click();
+}
+
+async function dragShip(page, name, x, y, options) {
+  // Drops the ship so that its `grabIndex`-th cell lands on grid cell (x, y).
+  const grabIndex = (options && options.grabIndex) || 0;
+  const from = (options && options.from) === 'grid'
+    ? page.locator(`#bsp_${options.fromX}_${options.fromY}`)
+    : page.locator(`.bs-dock-ship[data-ship="${name}"] .bs-dock-cell`).nth(grabIndex);
+  const source = await from.boundingBox();
+  const target = await page.locator(`#bsp_${x}_${y}`).boundingBox();
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 });
+  await page.mouse.up();
 }
 
 async function enterCoords(page, x, y) {
@@ -259,55 +280,159 @@ test('the whole 11x11 board fits inside its frame on a phone', async ({ page }) 
   expectFits(await measure());
 });
 
-test('battleship requires placing all five ships before play begins', async ({ page }) => {
+test('a resize event during placement schedules fitBsBoard\'s corrective pass — locks scheduling, not board fit', async ({ page }) => {
+  // fitBsBoard's window resize listener invokes fitBsBoard(event) directly
+  // (window.addEventListener('resize', fitBsBoard)), so the immediate,
+  // single-pass measurement taken on that call can be stale for the same
+  // reason a fresh render's first pass can: it needs the same deferred,
+  // one-animation-frame-later correction. That correction is only scheduled
+  // when the call that just ran was NOT itself the corrective pass, so the
+  // guard must check `_pass !== true`. A `!_pass` guard breaks silently on
+  // this exact path: a resize Event is truthy, so `!_pass` is false and the
+  // correction never gets scheduled — the placing-screen board can then stay
+  // clipped after a real device rotation, with no self-heal.
+  //
+  // This asserts scheduling, not fit, on purpose: Chromium settles an
+  // already-rendered board's layout synchronously on a plain resize, so a
+  // fit assertion here would pass with the guard broken too — scheduling is
+  // this guard's only observable effect on the resize path. Do not
+  // "improve" this into a geometry check; it would silently stop locking
+  // the regression. The user-visible 2px clipping this fix targets is
+  // covered instead by the fresh-render fit test below (which exercises the
+  // same deferred-pass mechanism via the initial-render path).
+  await page.setViewportSize({ width: 390, height: 844 });
   await openBattleship(page);
+  // Let the initial render's own automatic pass — and its deferred follow-up
+  // — finish, so only the resize dispatch below is under test.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  await expect(page.locator('.bs-dock')).toBeVisible(); // still the placing screen, dock present
 
-  await expect(page.locator('#bsPlacePrompt')).toContainText('Lookout Cruiser');
-  await expect(page.getByRole('button', { name: 'Letak' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Tembak' })).toHaveCount(0);
+  const scheduledCorrectivePass = await page.evaluate(() => {
+    let scheduled = false;
+    const originalRaf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = cb => { scheduled = true; return originalRaf(cb); };
+    window.dispatchEvent(new Event('resize'));
+    window.requestAnimationFrame = originalRaf;
+    return scheduled;
+  });
 
-  // An off-grid placement is rejected and does not consume the ship.
-  await enterCoords(page, 10, 0);
-  await page.getByRole('button', { name: 'Letak' }).click();
-  await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
-  await expect(page.locator('#bsPlacePrompt')).toContainText('Lookout Cruiser');
-
-  await enterCoords(page, 0, 0);
-  await page.getByRole('button', { name: 'Letak' }).click();
-  await expect(page.locator('#bsPlacePrompt')).toContainText('Submarine');
-
-  // An overlapping placement is rejected too.
-  await enterCoords(page, 0, 0);
-  await page.getByRole('button', { name: 'Letak' }).click();
-  await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
-  await expect(page.locator('#bsPlacePrompt')).toContainText('Submarine');
-
-  await page.getByRole('button', { name: 'Susun Semula' }).click();
-  await expect(page.locator('#bsPlacePrompt')).toContainText('Lookout Cruiser');
-
-  await placeFleet(page);
-  await expect(page.getByRole('button', { name: 'Tembak' })).toBeVisible();
-  await expect(page.locator('.bs-fleet-item')).toHaveCount(5);
-  await expect(page.locator('.bs-board.mini')).toBeVisible();
+  expect(scheduledCorrectivePass).toBe(true);
 });
 
-test('a successful placement fully clears the coordinate boxes', async ({ page }) => {
+test('the dock lists every ship and the battle starts only when all five are placed', async ({ page }) => {
   await openBattleship(page);
 
-  await enterCoords(page, 0, 0);
-  await page.getByRole('button', { name: 'Letak' }).click();
-  await expect(page.locator('#bsPlacePrompt')).toContainText('Submarine');
+  await expect(page.locator('.bs-dock-ship')).toHaveCount(5);
+  await expect(page.locator('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell')).toHaveCount(3);
+  await expect(page.locator('#bsPad')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Letak' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Sedia! Mula Menembak' })).toBeDisabled();
 
-  // Both boxes must be empty and the button dead after a successful placement.
-  await expect(page.locator('#bsBoxX')).toHaveText('');
-  await expect(page.locator('#bsBoxY')).toHaveText('');
-  await expect(page.getByRole('button', { name: 'Letak' })).toBeDisabled();
+  // Four ships is not enough.
+  await page.evaluate(() => {
+    BattleshipEngine.FLEET_SPEC.slice(0, 4).forEach((spec, i) => placeBsShipAt(spec.name, 0, i, 'h'));
+  });
+  await expect(page.locator('.bs-dock-ship.placed')).toHaveCount(4);
+  await expect(page.getByRole('button', { name: 'Sedia! Mula Menembak' })).toBeDisabled();
 
-  // Entering only an x must NOT enable the button on a stale y.
-  await page.locator('#bsBoxX').click();
-  await page.locator('#bsPad button').filter({ hasText: /^3$/ }).click();
-  await expect(page.locator('#bsBoxY')).toHaveText('');
-  await expect(page.getByRole('button', { name: 'Letak' })).toBeDisabled();
+  // An off-grid or overlapping placement is refused and changes nothing.
+  const refused = await page.evaluate(() => [
+    placeBsShipAt('Pirate ship', 10, 5, 'h'),
+    placeBsShipAt('Pirate ship', 0, 0, 'h')
+  ]);
+  expect(refused).toEqual([false, false]);
+  await expect(page.locator('.bs-dock-ship.placed')).toHaveCount(4);
+
+  await page.evaluate(() => placeBsShipAt('Pirate ship', 0, 4, 'h'));
+  await expect(page.locator('.bs-dock-ship.placed')).toHaveCount(5);
+  const start = page.getByRole('button', { name: 'Sedia! Mula Menembak' });
+  await expect(start).toBeEnabled();
+
+  await start.click();
+  await expect(page.getByRole('button', { name: 'Tembak' })).toBeVisible();
+  await expect(page.locator('.bs-dock')).toHaveCount(0);
+});
+
+test('a ship dragged from the dock lands on the cells it was dropped on', async ({ page }) => {
+  await openBattleship(page);
+
+  await dragShip(page, 'Submarine', 4, 6);
+
+  const cells = await page.evaluate(() => bsShipByName('Submarine').cells);
+  expect(cells).toEqual([{ x: 4, y: 6 }, { x: 5, y: 6 }, { x: 6, y: 6 }]);
+  await expect(page.locator('.bs-dock-ship[data-ship="Submarine"]')).toHaveClass(/placed/);
+  await expect(page.locator('#bsp_4_6')).toHaveClass(/ship/);
+});
+
+test('the grabbed cell is the cell that lands under the pointer', async ({ page }) => {
+  await openBattleship(page);
+
+  // Grab the Destroyer by its third cell (index 2) and drop that cell on (5,5):
+  // the ship must start two cells to the left, at (3,5).
+  await dragShip(page, 'Destroyer', 5, 5, { grabIndex: 2 });
+
+  const cells = await page.evaluate(() => bsShipByName('Destroyer').cells);
+  expect(cells[0]).toEqual({ x: 3, y: 5 });
+  expect(cells).toHaveLength(4);
+});
+
+test('a drop that does not fit returns the ship to the dock', async ({ page }) => {
+  await openBattleship(page);
+  await dragShip(page, 'Submarine', 0, 0);
+
+  // Off the right edge: a 5-cell ship starting at x=9 runs past x=10.
+  await dragShip(page, 'Pirate ship', 9, 8);
+  expect(await page.evaluate(() => !!bsShipByName('Pirate ship'))).toBe(false);
+  await expect(page.locator('.bs-dock-ship[data-ship="Pirate ship"]')).not.toHaveClass(/placed/);
+  await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
+
+  // On top of the Submarine already at (0,0)-(2,0).
+  await dragShip(page, 'Battleship', 1, 0);
+  expect(await page.evaluate(() => !!bsShipByName('Battleship'))).toBe(false);
+  await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
+});
+
+test('dragging highlights the target cells green when they fit and red when they do not', async ({ page }) => {
+  await openBattleship(page);
+  await dragShip(page, 'Submarine', 0, 0);
+
+  const grab = await page.locator('.bs-dock-ship[data-ship="Battleship"] .bs-dock-cell').first().boundingBox();
+  const good = await page.locator('#bsp_4_4').boundingBox();
+  const bad = await page.locator('#bsp_1_0').boundingBox();
+
+  await page.mouse.move(grab.x + grab.width / 2, grab.y + grab.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(good.x + good.width / 2, good.y + good.height / 2, { steps: 5 });
+  await expect(page.locator('.bs-cell.preview-ok')).toHaveCount(3);
+  await page.mouse.move(bad.x + bad.width / 2, bad.y + bad.height / 2, { steps: 5 });
+  await expect(page.locator('.bs-cell.preview-bad')).toHaveCount(3);
+  await expect(page.locator('.bs-cell.preview-ok')).toHaveCount(0);
+  await page.mouse.up();
+  await expect(page.locator('.bs-cell.preview-ok, .bs-cell.preview-bad')).toHaveCount(0);
+});
+
+test('a touch drag places a ship, so the phone path works', async ({ page }) => {
+  await openBattleship(page);
+
+  // page.mouse produces mouse-type pointer events; this drives the same
+  // handlers with pointerType 'touch', which is what a student's finger sends.
+  await page.evaluate(() => {
+    const dock = document.querySelector('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell');
+    const target = document.getElementById('bsp_2_3');
+    const at = el => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+    const from = at(dock), to = at(target);
+    const fire = (type, node, point) => node.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch', isPrimary: true,
+      clientX: point.x, clientY: point.y
+    }));
+    fire('pointerdown', dock, from);
+    fire('pointermove', window, { x: from.x + 20, y: from.y - 20 });
+    fire('pointermove', window, to);
+    fire('pointerup', window, to);
+  });
+
+  const cells = await page.evaluate(() => bsShipByName('Submarine').cells);
+  expect(cells[0]).toEqual({ x: 2, y: 3 });
 });
 
 test('the computer fires back after every player shot', async ({ page }) => {
@@ -391,4 +516,186 @@ test('a shot plays a missile and impact animation when motion is allowed', async
   // a finished game), so the wait must also break on _gameOver or it hangs.
   await page.waitForFunction(() => !gameState.battleship.busy || window._gameOver);
   await expect(page.locator('.bs-fx')).toHaveCount(0);
+});
+
+test('tapping a placed ship rotates it about its starting cell', async ({ page }) => {
+  await openBattleship(page);
+  await dragShip(page, 'Submarine', 4, 2);
+
+  await page.locator('#bsp_4_2').click();
+
+  // Horizontal (4,2)-(6,2) becomes vertical (4,2)-(4,4): y grows upward.
+  const cells = await page.evaluate(() => bsShipByName('Submarine').cells);
+  expect(cells).toEqual([{ x: 4, y: 2 }, { x: 4, y: 3 }, { x: 4, y: 4 }]);
+  await expect(page.locator('#bsp_4_4')).toHaveClass(/ship/);
+  await expect(page.locator('#bsp_6_2')).not.toHaveClass(/ship/);
+
+  // Tapping again turns it back.
+  await page.locator('#bsp_4_2').click();
+  expect(await page.evaluate(() => bsShipByName('Submarine').cells)).toEqual([
+    { x: 4, y: 2 }, { x: 5, y: 2 }, { x: 6, y: 2 }
+  ]);
+});
+
+test('a rotation that would not fit is refused and the ship keeps its cells', async ({ page }) => {
+  await openBattleship(page);
+  // Starting at y=9, a 5-cell vertical ship would need y=9..13 — off the grid.
+  await dragShip(page, 'Pirate ship', 0, 9);
+
+  await page.locator('#bsp_0_9').click();
+
+  expect(await page.evaluate(() => bsShipByName('Pirate ship').cells)).toEqual([
+    { x: 0, y: 9 }, { x: 1, y: 9 }, { x: 2, y: 9 }, { x: 3, y: 9 }, { x: 4, y: 9 }
+  ]);
+  await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
+});
+
+test('dragging a placed ship moves it and frees the cells it left', async ({ page }) => {
+  await openBattleship(page);
+  await dragShip(page, 'Submarine', 0, 0);
+
+  await dragShip(page, 'Submarine', 7, 7, { from: 'grid', fromX: 0, fromY: 0 });
+
+  expect(await page.evaluate(() => bsShipByName('Submarine').cells)).toEqual([
+    { x: 7, y: 7 }, { x: 8, y: 7 }, { x: 9, y: 7 }
+  ]);
+  await expect(page.locator('#bsp_0_0')).toHaveClass(/water/);
+  await expect(page.locator('#bsp_7_7')).toHaveClass(/ship/);
+});
+
+test('a placed ship may be moved onto cells it currently occupies', async ({ page }) => {
+  await openBattleship(page);
+  await dragShip(page, 'Destroyer', 3, 3);
+
+  // Shift one cell right: the target overlaps the ship's own old cells, which
+  // must not count as a collision.
+  await dragShip(page, 'Destroyer', 4, 3, { from: 'grid', fromX: 3, fromY: 3 });
+
+  expect(await page.evaluate(() => bsShipByName('Destroyer').cells[0])).toEqual({ x: 4, y: 3 });
+});
+
+test('tapping a ship in the dock does nothing', async ({ page }) => {
+  await openBattleship(page);
+
+  await page.locator('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell').first().click();
+
+  expect(await page.evaluate(() => bsShipByName('Submarine'))).toBeUndefined();
+  await expect(page.locator('.bs-dock-ship[data-ship="Submarine"]')).not.toHaveClass(/placed/);
+  // The two assertions above hold even if the fromGrid gate in bsPointerUp were
+  // broken: rotateBsShip('Submarine') would still find no such ship in
+  // playerFleet and early-return false, changing nothing. What only a working
+  // gate keeps quiet is bsMsg — a broken gate calls rotateBsShip for the dock
+  // tap too, and its false return trips the "Tidak muat" refusal message.
+  await expect(page.locator('#bsMsg')).toHaveText('');
+});
+
+test('the placement screen fits a phone and drags work at phone size', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openBattleship(page);
+
+  const layout = await page.evaluate(() => ({
+    dockBottom: document.querySelector('.bs-dock').getBoundingClientRect().bottom,
+    startBottom: document.getElementById('bsStartBtn').getBoundingClientRect().bottom,
+    headingTop: document.querySelector('.battleship-game h2').getBoundingClientRect().top,
+    innerHeight: window.innerHeight,
+    scrollHeight: document.documentElement.scrollHeight
+  }));
+  expect(layout.headingTop).toBeGreaterThanOrEqual(0);
+  expect(layout.dockBottom).toBeLessThanOrEqual(layout.innerHeight);
+  expect(layout.startBottom).toBeLessThanOrEqual(layout.innerHeight);
+  expect(layout.scrollHeight).toBeLessThanOrEqual(layout.innerHeight + 1);
+
+  // A drag must still hit the right cell at phone cell sizes.
+  await dragShip(page, 'Submarine', 8, 8);
+  expect(await page.evaluate(() => bsShipByName('Submarine').cells[0])).toEqual({ x: 8, y: 8 });
+});
+
+test('resetting during a drag removes its ghost, preview, and stale pointer state', async ({ page }) => {
+  await openBattleship(page);
+  const source = await page.locator('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell').first().boundingBox();
+  const target = await page.locator('#bsp_4_4').boundingBox();
+
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 5 });
+  await expect(page.locator('.bs-drag-ghost')).toHaveCount(1);
+  await expect(page.locator('.bs-cell.preview-ok')).toHaveCount(3);
+
+  await page.evaluate(() => resetBsPlacement());
+  await expect(page.locator('.bs-drag-ghost')).toHaveCount(0);
+  await expect(page.locator('.bs-cell.preview-ok, .bs-cell.preview-bad')).toHaveCount(0);
+  expect(await page.evaluate(() => gameState.battleship.drag)).toBeNull();
+
+  // A later pointerup must not revive the cancelled drop through a stale
+  // window listener.
+  await page.mouse.up();
+  expect(await page.evaluate(() => bsShipByName('Submarine'))).toBeUndefined();
+});
+
+test('non-primary touch pointers and non-left mouse buttons cannot start a drag', async ({ page }) => {
+  await openBattleship(page);
+  const states = await page.evaluate(() => {
+    const dock = document.querySelector('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell');
+    const rect = dock.getBoundingClientRect();
+    const init = {
+      bubbles: true,
+      cancelable: true,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2
+    };
+    dock.dispatchEvent(new PointerEvent('pointerdown', {
+      ...init, pointerId: 2, pointerType: 'touch', isPrimary: false
+    }));
+    const afterSecondTouch = gameState.battleship.drag;
+    if (afterSecondTouch) {
+      window.dispatchEvent(new PointerEvent('pointercancel', {
+        ...init, pointerId: 2, pointerType: 'touch', isPrimary: false
+      }));
+    }
+    dock.dispatchEvent(new PointerEvent('pointerdown', {
+      ...init, pointerId: 3, pointerType: 'mouse', button: 2, isPrimary: true
+    }));
+    return { afterSecondTouch, afterRightClick: gameState.battleship.drag };
+  });
+  expect(states).toEqual({ afterSecondTouch: null, afterRightClick: null });
+});
+
+test('a timeout during a drag clears pointer artifacts before showing the result', async ({ page }) => {
+  await openBattleship(page);
+  const source = await page.locator('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell').first().boundingBox();
+  const target = await page.locator('#bsp_4_4').boundingBox();
+
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 5 });
+  await expect(page.locator('.bs-drag-ghost')).toHaveCount(1);
+
+  await page.evaluate(() => finishBattleship(false));
+  await expect(page.getByRole('heading', { name: 'Ujian Selesai' })).toBeVisible();
+  await expect(page.locator('.bs-drag-ghost')).toHaveCount(0);
+  expect(await page.evaluate(() => gameState.battleship.drag)).toBeNull();
+
+  // The physical pointer can be released after the timeout without invoking
+  // a stale placement callback on the result screen.
+  await page.mouse.up();
+  await expect(page.getByRole('heading', { name: 'Ujian Selesai' })).toBeVisible();
+});
+
+test('leaving test mode during a drag clears pointer artifacts', async ({ page }) => {
+  await openBattleship(page);
+  const source = await page.locator('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell').first().boundingBox();
+  const target = await page.locator('#bsp_4_4').boundingBox();
+
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 5 });
+  await expect(page.locator('.bs-drag-ghost')).toHaveCount(1);
+
+  await page.evaluate(() => endTest());
+  await expect(page.locator('#view-admin')).toHaveClass(/\bactive\b/);
+  await expect(page.locator('.bs-drag-ghost')).toHaveCount(0);
+  expect(await page.evaluate(() => gameState.battleship.drag)).toBeNull();
+
+  await page.mouse.up();
+  await expect(page.locator('#view-admin')).toHaveClass(/\bactive\b/);
 });
