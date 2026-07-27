@@ -257,7 +257,7 @@ test('the whole 11x11 board fits inside its frame on a phone', async ({ page }) 
   expectFits(await measure());
 });
 
-test('a resize event during placement schedules fitBsBoard\'s deferred correction pass', async ({ page }) => {
+test('a resize event during placement schedules fitBsBoard\'s corrective pass — locks scheduling, not board fit', async ({ page }) => {
   // fitBsBoard's window resize listener invokes fitBsBoard(event) directly
   // (window.addEventListener('resize', fitBsBoard)), so the immediate,
   // single-pass measurement taken on that call can be stale for the same
@@ -269,13 +269,14 @@ test('a resize event during placement schedules fitBsBoard\'s deferred correctio
   // correction never gets scheduled — the placing-screen board can then stay
   // clipped after a real device rotation, with no self-heal.
   //
-  // A plain viewport-size change alone doesn't reproduce a measurable, timing
-  // -dependent pixel error in this test harness (Chromium settles existing-DOM
-  // layout synchronously on resize; only a fresh DOM render exhibits the
-  // multi-frame settling this fix targets), so pixel geometry after a resize
-  // can't distinguish the broken guard from the fixed one here. Asserting the
-  // scheduling directly instead is deterministic, requires no expect.poll
-  // retrying, and fails immediately if the guard regresses to `!_pass`.
+  // This asserts scheduling, not fit, on purpose: Chromium settles an
+  // already-rendered board's layout synchronously on a plain resize, so a
+  // fit assertion here would pass with the guard broken too — scheduling is
+  // this guard's only observable effect on the resize path. Do not
+  // "improve" this into a geometry check; it would silently stop locking
+  // the regression. The user-visible 2px clipping this fix targets is
+  // covered instead by the fresh-render fit test below (which exercises the
+  // same deferred-pass mechanism via the initial-render path).
   await page.setViewportSize({ width: 390, height: 844 });
   await openBattleship(page);
   // Let the initial render's own automatic pass — and its deferred follow-up
