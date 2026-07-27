@@ -30,7 +30,7 @@
     let selected = null, dragging = false, startPx = null, grab = null, solved = false;
     // Cut-line opacity, 0..1. Starts fully on when targetGuideLines is set
     // (stages that always show the guide); otherwise off, and toggled at
-    // runtime by setGuideAlpha() for the timed stuck-hint assist.
+    // runtime by setGuideAlpha() for the timed recurring assist.
     let guideAlpha = targetGuideLines ? 1 : 0;
 
     const wp = p => E.transformPolygon(polygons[p.type], p.pos, p.angle, p.flipped);
@@ -67,7 +67,7 @@
           ctx.closePath(); ctx.fill(); ctx.stroke();
         });
         // Internal cut-lines, drawn as a second stroke pass so their opacity
-        // can fade independently of the silhouette fill (the stuck-hint assist).
+        // can appear independently of the silhouette fill (the timed assist).
         if (guideAlpha > 0) {
           ctx.strokeStyle = `rgba(255,255,255,${guideAlpha})`;
           ctx.lineWidth = 2;
@@ -178,9 +178,10 @@
       flipSelected: () => { if (!selected) return; selected.flipped = !selected.flipped; snap(selected); draw(); check(); },
       getSelected: () => selected,
       redraw: draw,
-      // Stuck-hint assist support: fade the cut-lines in/out on demand, and
+      // Timed-hint support: toggle the cut-lines on demand, and
       // report how many pieces currently sit correctly in their target slot.
       setGuideAlpha: (a) => { guideAlpha = Math.max(0, Math.min(1, a)); draw(); },
+      getGuideAlpha: () => guideAlpha,
       getPlacedCount: () => targetSlots ? E.countPlacedInSlots(pieces, targetSlots, polygons) : 0,
       destroy: () => { canvas.removeEventListener('pointerdown', onDown); canvas.removeEventListener('pointermove', onMove); canvas.removeEventListener('pointerup', onUp); }
     };
