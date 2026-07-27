@@ -581,4 +581,10 @@ test('tapping a ship in the dock does nothing', async ({ page }) => {
 
   expect(await page.evaluate(() => bsShipByName('Submarine'))).toBeUndefined();
   await expect(page.locator('.bs-dock-ship[data-ship="Submarine"]')).not.toHaveClass(/placed/);
+  // The two assertions above hold even if the fromGrid gate in bsPointerUp were
+  // broken: rotateBsShip('Submarine') would still find no such ship in
+  // playerFleet and early-return false, changing nothing. What only a working
+  // gate keeps quiet is bsMsg — a broken gate calls rotateBsShip for the dock
+  // tap too, and its false return trips the "Tidak muat" refusal message.
+  await expect(page.locator('#bsMsg')).toHaveText('');
 });
