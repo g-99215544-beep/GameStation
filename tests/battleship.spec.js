@@ -257,6 +257,44 @@ test('the whole 11x11 board fits inside its frame on a phone', async ({ page }) 
   expectFits(await measure());
 });
 
+test('a resize event during placement schedules fitBsBoard\'s deferred correction pass', async ({ page }) => {
+  // fitBsBoard's window resize listener invokes fitBsBoard(event) directly
+  // (window.addEventListener('resize', fitBsBoard)), so the immediate,
+  // single-pass measurement taken on that call can be stale for the same
+  // reason a fresh render's first pass can: it needs the same deferred,
+  // one-animation-frame-later correction. That correction is only scheduled
+  // when the call that just ran was NOT itself the corrective pass, so the
+  // guard must check `_pass !== true`. A `!_pass` guard breaks silently on
+  // this exact path: a resize Event is truthy, so `!_pass` is false and the
+  // correction never gets scheduled — the placing-screen board can then stay
+  // clipped after a real device rotation, with no self-heal.
+  //
+  // A plain viewport-size change alone doesn't reproduce a measurable, timing
+  // -dependent pixel error in this test harness (Chromium settles existing-DOM
+  // layout synchronously on resize; only a fresh DOM render exhibits the
+  // multi-frame settling this fix targets), so pixel geometry after a resize
+  // can't distinguish the broken guard from the fixed one here. Asserting the
+  // scheduling directly instead is deterministic, requires no expect.poll
+  // retrying, and fails immediately if the guard regresses to `!_pass`.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openBattleship(page);
+  // Let the initial render's own automatic pass — and its deferred follow-up
+  // — finish, so only the resize dispatch below is under test.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+  await expect(page.locator('.bs-dock')).toBeVisible(); // still the placing screen, dock present
+
+  const scheduledCorrectivePass = await page.evaluate(() => {
+    let scheduled = false;
+    const originalRaf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = cb => { scheduled = true; return originalRaf(cb); };
+    window.dispatchEvent(new Event('resize'));
+    window.requestAnimationFrame = originalRaf;
+    return scheduled;
+  });
+
+  expect(scheduledCorrectivePass).toBe(true);
+});
+
 test('the dock lists every ship and the battle starts only when all five are placed', async ({ page }) => {
   await openBattleship(page);
 

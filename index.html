@@ -2979,7 +2979,7 @@ function fitBsBoard(_pass){
   const chrome=BS_BOARD_GAP*(BS_BOARD_TRACKS-1)+BS_BOARD_PAD*2;
   const size=Math.floor((Math.min(availW,availH)-chrome)/BS_BOARD_TRACKS);
   board.style.setProperty('--bs-cell',Math.max(14,Math.min(28,size))+'px');
-  if(!_pass) requestAnimationFrame(()=>fitBsBoard(true));
+  if(_pass!==true) requestAnimationFrame(()=>fitBsBoard(true));
 }
 // Both message lines start empty and grow when they get text, so the board has
 // to be re-fitted after every message change or it outgrows the space left.
