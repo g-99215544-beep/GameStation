@@ -73,14 +73,8 @@ async function dragShip(page, name, x, y, options) {
 }
 
 async function enterCoords(page, x, y) {
-  await page.locator('#bsBoxX').click();
-  for (const digit of String(x)) {
-    await page.locator('#bsPad button').filter({ hasText: new RegExp(`^${digit}$`) }).click();
-  }
-  await page.locator('#bsBoxY').click();
-  for (const digit of String(y)) {
-    await page.locator('#bsPad button').filter({ hasText: new RegExp(`^${digit}$`) }).click();
-  }
+  await page.locator('#bsBoxX').fill(String.fromCharCode(65 + x));
+  await page.locator('#bsBoxY').fill(String(y));
 }
 
 async function fireAt(page, x, y) {
@@ -97,7 +91,7 @@ test('battleship supports coordinate entry, hit/miss feedback, sinking, and a fu
   await placeFleet(page);
 
   await expect(page.locator('.bs-fleet-item')).toHaveCount(5);
-  await expect(page.locator('#bsPad')).toBeHidden();
+  await expect(page.locator('#bsPad')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Tembak' })).toBeDisabled();
 
   const fleet = await page.evaluate(() => gameState.battleship.enemyFleet);
@@ -129,6 +123,7 @@ test('battleship supports coordinate entry, hit/miss feedback, sinking, and a fu
   await fireAt(page, secondCell.x, secondCell.y);
   await expect(page.locator('#bsMsg')).toContainText('tenggelam');
   await expect(page.locator('.bs-fleet-item.sunk')).toHaveCount(1);
+  await expect(page.locator('.bs-fleet-item.sunk .bs-fleet-mark')).toHaveText('✕');
 
   // Fire every remaining un-fired ship cell across the rest of the fleet
   // through the real UI, so the production auto-finish wiring (the
@@ -170,50 +165,81 @@ test('battleship timeout keeps partial credit and applies the late penalty', asy
   await expect(page.locator('#resultCard')).toContainText('Markah: 20');
 });
 
-test('battleship board, fleet panel, and coordinate pad stay visible on a phone', async ({ page }) => {
+test('both battle boards and native coordinate inputs stay visible on a phone without a numpad', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openBattleship(page);
   await placeFleet(page);
-  await page.locator('#bsBoxX').click();
-
-  const pad = page.locator('#bsPad');
-  await expect(pad).toBeVisible();
+  await expect(page.locator('#bsPad')).toHaveCount(0);
 
   const layout = await page.evaluate(() => {
-    const padRect = document.getElementById('bsPad').getBoundingClientRect();
+    const enemyRect = document.getElementById('bsEnemyBoardWrap').getBoundingClientRect();
+    const playerRect = document.getElementById('bsPlayerBoardWrap').getBoundingClientRect();
+    const controlsRect = document.querySelector('.bs-coord-row').getBoundingClientRect();
     const headingRect = document.querySelector('.battleship-game h2').getBoundingClientRect();
     return {
-      padBottom: padRect.bottom,
+      enemyTop: enemyRect.top,
+      playerTop: playerRect.top,
+      controlsBottom: controlsRect.bottom,
       headingTop: headingRect.top,
       innerHeight: window.innerHeight,
       scrollHeight: document.documentElement.scrollHeight
     };
   });
-  expect(layout.padBottom).toBeLessThanOrEqual(layout.innerHeight);
+  expect(layout.enemyTop).toBeGreaterThanOrEqual(layout.headingTop);
+  expect(layout.playerTop).toBeGreaterThan(layout.enemyTop);
+  expect(layout.controlsBottom).toBeLessThanOrEqual(layout.innerHeight);
   expect(layout.headingTop).toBeGreaterThanOrEqual(0);
   expect(layout.scrollHeight).toBeLessThanOrEqual(layout.innerHeight + 1);
 
-  // fireBattleship() calls hideBsPad() on every shot, so real play triggers a
-  // close/reopen reflow cycle (board grows to fill the freed space, then
-  // shrinks again when the pad reopens). Fire a real shot and reopen the pad
-  // to confirm that reflow doesn't break the layout on a small phone.
   await fireAt(page, 0, 0);
-  await page.locator('#bsBoxX').click();
-  await expect(pad).toBeVisible();
+  await expect(page.locator('#bsBoxX')).toHaveValue('');
+  await expect(page.locator('#bsBoxY')).toHaveValue('');
+  await expect(page.locator('#bsPad')).toHaveCount(0);
+});
 
-  const layoutAfter = await page.evaluate(() => {
-    const padRect = document.getElementById('bsPad').getBoundingClientRect();
-    const headingRect = document.querySelector('.battleship-game h2').getBoundingClientRect();
+test('battle view uses A-K columns, centered controls, and fleet lists beside the enemy board', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openBattleship(page);
+  await placeFleet(page);
+
+  await expect(page.locator('#bsEnemyGridWrap .bs-col-label')).toHaveText(
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']
+  );
+  await page.locator('#bsBoxX').fill('c');
+  await page.locator('#bsBoxY').fill('10');
+  await expect(page.locator('#bsBoxX')).toHaveValue('C');
+  expect(await page.evaluate(() => ({
+    x: gameState.battleship.pendingX,
+    y: gameState.battleship.pendingY
+  }))).toEqual({ x: '2', y: '10' });
+  await expect(page.getByRole('button', { name: 'Tembak' })).toBeEnabled();
+
+  const layout = await page.evaluate(() => {
+    const zone = document.getElementById('bsEnemyBoardWrap').getBoundingClientRect();
+    const board = document.getElementById('bsEnemyGridWrap').getBoundingClientRect();
+    const controls = document.querySelector('.bs-coord-row').getBoundingClientRect();
+    const player = document.getElementById('bsPlayerBoardWrap').getBoundingClientRect();
+    const left = document.getElementById('bsFleetLeft').getBoundingClientRect();
+    const right = document.getElementById('bsFleetRight').getBoundingClientRect();
     return {
-      padBottom: padRect.bottom,
-      headingTop: headingRect.top,
-      innerHeight: window.innerHeight,
-      scrollHeight: document.documentElement.scrollHeight
+      zoneCenter: zone.left + zone.width / 2,
+      boardCenter: board.left + board.width / 2,
+      controlsBottom: controls.bottom,
+      playerTop: player.top,
+      leftRight: left.right,
+      boardLeft: board.left,
+      boardRight: board.right,
+      rightLeft: right.left,
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth
     };
   });
-  expect(layoutAfter.padBottom).toBeLessThanOrEqual(layoutAfter.innerHeight);
-  expect(layoutAfter.headingTop).toBeGreaterThanOrEqual(0);
-  expect(layoutAfter.scrollHeight).toBeLessThanOrEqual(layoutAfter.innerHeight + 1);
+  expect(Math.abs(layout.zoneCenter - layout.boardCenter)).toBeLessThanOrEqual(1);
+  expect(layout.controlsBottom).toBeLessThanOrEqual(layout.playerTop);
+  expect(layout.leftRight).toBeLessThanOrEqual(layout.boardLeft + 1);
+  expect(layout.rightLeft).toBeGreaterThanOrEqual(layout.boardRight - 1);
+  expect(layout.scrollWidth).toBeLessThanOrEqual(layout.innerWidth + 1);
+  await expect(page.locator('.bs-fleet-side .bs-fleet-item')).toHaveCount(5);
 });
 
 test('the whole 11x11 board fits inside its frame on a phone', async ({ page }) => {
@@ -260,21 +286,12 @@ test('the whole 11x11 board fits inside its frame on a phone', async ({ page }) 
 
   await placeFleet(page);
 
-  // Battle phase with the pad closed — the state the student reads results in,
-  // since firing closes the pad. The whole grid must be visible here.
+  // Battle phase: the whole grid remains visible because there is no custom
+  // numpad competing with the two boards for vertical space.
   expectFits(await measure());
 
-  // With the pad open there is not enough height left for a legible full board,
-  // so the board may scroll vertically — but never sideways, which is what used
-  // to hide column x=10.
-  await page.locator('#bsBoxX').click();
-  await expect(page.locator('#bsPad')).toBeVisible();
-  expectFitsWidth(await measure());
-
-  // A narrower phone must still fit the whole board once the pad closes. The
-  // board re-fits on the window's resize event, so poll rather than measure the
-  // first frame after the viewport changes.
-  await page.locator('.bs-pad-close').click();
+  // A narrower phone must still fit the whole board. The board re-fits on the
+  // window's resize event, so poll rather than measure the first frame.
   await page.setViewportSize({ width: 360, height: 780 });
   await expect.poll(async () => (await measure()).overflowY).toBeLessThanOrEqual(1);
   expectFits(await measure());
@@ -497,6 +514,25 @@ test('losing the whole fleet resets the round and keeps the placement', async ({
   expect(after.phase).toBe('playing');        // still playable, not finished
 
   await expect(page.getByRole('heading', { name: 'Ujian Selesai' })).toHaveCount(0);
+});
+
+test('projectiles travel from the firing board to the receiving board', async ({ page }) => {
+  await openBattleship(page);
+  await placeFleet(page);
+  await page.evaluate(() => {
+    window.__bsShotRoutes = [];
+    const animate = window.bsAnimateShot;
+    window.bsAnimateShot = async (sourcePrefix, targetPrefix, x, y, result) => {
+      window.__bsShotRoutes.push({ sourcePrefix, targetPrefix });
+      return animate(sourcePrefix, targetPrefix, x, y, result);
+    };
+  });
+
+  await fireAt(page, 9, 9);
+  expect(await page.evaluate(() => window.__bsShotRoutes)).toEqual([
+    { sourcePrefix: 'bsp', targetPrefix: 'bs' },
+    { sourcePrefix: 'bs', targetPrefix: 'bsp' }
+  ]);
 });
 
 test('a shot plays a missile and impact animation when motion is allowed', async ({ page }) => {
