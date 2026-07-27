@@ -15,7 +15,7 @@
             "location":    { ".validate": "newData.isString() && newData.val().length <= 200" },
             "password":    { ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9]{5}$/)" },
             "gameType":    { ".validate": "newData.isString() && newData.val().length <= 40" },
-            "gameDataRaw": { ".validate": "newData.isString() && newData.val().length <= 5000" },
+            "gameDataRaw": { ".validate": "newData.isString() && newData.val().length <= 7800000" },
             "$other":      { ".validate": true }
           }
         },

@@ -276,10 +276,22 @@
   .feature-actions button{margin:0;}
   .worksheet-editor{margin-top:14px;padding:14px;background:#fff8df;border:2px solid var(--gold);border-radius:10px;}
   .worksheet-help{margin:0 0 12px;color:#65513a;font-size:13px;line-height:1.45;}
-  .worksheet-question-row{padding:10px 0;border-top:1px solid #ead7aa;}.worksheet-question-row:first-of-type{border-top:0;}
-  .worksheet-question-row label{margin:0 0 5px;color:var(--navy);}.worksheet-question-row > div{display:flex;gap:8px;align-items:center;}.worksheet-question-row input{margin:0;}
+  .worksheet-question-row{padding:12px 0;border-top:1px solid #ead7aa;}.worksheet-question-row:first-of-type{border-top:0;}
+  .worksheet-question-row label{margin:0 0 5px;color:var(--navy);}.worksheet-answer-line{display:flex;gap:8px;align-items:center;}.worksheet-question-row input{margin:0;}
   .worksheet-question-row .worksheet-remove,.worksheet-add{margin:0;white-space:nowrap;}.worksheet-question-row .worksheet-remove{background:var(--red);}
   .worksheet-add{font-size:13px;padding:9px 12px;}
+  .worksheet-image-editor{margin-top:10px;padding:10px;border:1px dashed #c79b32;border-radius:9px;background:#fffdf5;}
+  .worksheet-image-tools{display:flex;flex-wrap:wrap;gap:7px;align-items:center;}
+  .worksheet-question-row .worksheet-image-pick,.worksheet-image-paste,.worksheet-image-clear{display:inline-flex;align-items:center;justify-content:center;margin:0;padding:8px 10px;border:0;border-radius:8px;background:var(--navy);color:#fff;font-size:13px;font-weight:800;line-height:1.2;cursor:pointer;}
+  .worksheet-question-row .worksheet-image-pick:hover,.worksheet-question-row .worksheet-image-pick:focus-within,.worksheet-image-paste:hover,.worksheet-image-paste:focus-visible{background:var(--gold);color:var(--navy);outline:none;}
+  .worksheet-image-clear{background:var(--red);}
+  .worksheet-image-input[hidden]{display:none;}
+  .worksheet-image-preview-wrap{margin:0 0 9px;text-align:center;}
+  .worksheet-image-preview{display:block;max-width:100%;max-height:260px;margin:0 auto;border:2px solid #ead7aa;border-radius:8px;background:#fff;object-fit:contain;}
+  .worksheet-image-status{display:block;margin-top:7px;color:#75582b;font-size:12px;line-height:1.35;}
+  .worksheet-question-figure{margin:14px 0;padding:8px;border:2px solid #e2bd5b;border-radius:10px;background:#fff;text-align:center;}
+  .worksheet-question-image{display:block;width:auto;max-width:100%;max-height:52vh;margin:0 auto;border-radius:6px;object-fit:contain;}
+  @media (max-width:520px){.worksheet-answer-line{align-items:stretch;flex-direction:column;}.worksheet-question-row .worksheet-remove{align-self:flex-start;}.worksheet-question-image{max-height:46vh;}}
   .run-editor{display:none;margin-top:10px;}
   .run-editor input{max-width:160px;}
   .group-setup{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
@@ -1769,40 +1781,164 @@ function generateStationPassword(){
   for(let i=0;i<5;i++) password += chars[Math.floor(Math.random()*chars.length)];
   return password;
 }
+const WORKSHEET_IMAGE_MAX_INPUT_BYTES=12*1024*1024;
+const WORKSHEET_IMAGE_MAX_BYTES=450*1024;
+const WORKSHEET_IMAGE_MAX_DIMENSION=1600;
+const WORKSHEET_DATA_MAX_CHARS=7800000;
+function safeWorksheetImage(value){
+  const image=String(value||'').trim();
+  return /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(image) ? image : '';
+}
 function worksheetQuestionsFromRaw(raw){
   let data={}; try{ data=JSON.parse(raw||'{}'); }catch(e){}
   const questions=Array.isArray(data.questions) ? data.questions : [];
   const clean=questions
     .filter(q=>q && Object.prototype.hasOwnProperty.call(q,'answer'))
-    .map(q=>({answer:String(q.answer==null?'':q.answer).trim()}));
-  return clean.length ? clean : [{answer:''}];
+    .map(q=>({answer:String(q.answer==null?'':q.answer).trim(),image:safeWorksheetImage(q.image)}));
+  return clean.length ? clean : [{answer:'',image:''}];
 }
 function escapeHtml(value){
   return String(value==null?'':value).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 function getWorksheetQuestionsFromEditor(i){
-  const inputs=document.querySelectorAll(`#worksheet_editor_${i} .worksheet-answer`);
-  const questions=Array.from(inputs).map(input=>({answer:input.value.trim()}));
-  return questions.length ? questions : [{answer:''}];
+  const rows=document.querySelectorAll(`#worksheet_editor_${i} .worksheet-question-row`);
+  const questions=Array.from(rows).map(row=>({
+    answer:(row.querySelector('.worksheet-answer')?.value||'').trim(),
+    image:safeWorksheetImage(row.querySelector('.worksheet-image-data')?.value)
+  }));
+  return questions.length ? questions : [{answer:'',image:''}];
+}
+function setWorksheetImageValue(i,index,image,status){
+  const row=document.querySelector(`#worksheet_editor_${i} .worksheet-question-row[data-question-index="${index}"]`);
+  if(!row) return;
+  const safe=safeWorksheetImage(image);
+  const data=row.querySelector('.worksheet-image-data');
+  const wrap=row.querySelector('.worksheet-image-preview-wrap');
+  const preview=row.querySelector('.worksheet-image-preview');
+  const clear=row.querySelector('.worksheet-image-clear');
+  const message=row.querySelector('.worksheet-image-status');
+  if(data) data.value=safe;
+  if(preview){
+    if(safe) preview.src=safe;
+    else preview.removeAttribute('src');
+  }
+  if(wrap) wrap.hidden=!safe;
+  if(clear) clear.hidden=!safe;
+  if(message) message.textContent=status || (safe?'Gambar sedia untuk dipaparkan kepada murid.':'Tiada gambar — soalan ini akan menggunakan lembaran bercetak.');
+}
+function setWorksheetImageStatus(i,index,status){
+  const message=document.querySelector(`#worksheet_editor_${i} .worksheet-question-row[data-question-index="${index}"] .worksheet-image-status`);
+  if(message) message.textContent=status;
+}
+function worksheetCanvasDataUrl(canvas,quality){
+  return canvas.toDataURL('image/jpeg',quality);
+}
+function worksheetDataUrlBytes(dataUrl){
+  const base64=String(dataUrl||'').split(',')[1]||'';
+  return Math.ceil(base64.length*3/4);
+}
+function loadWorksheetImage(file){
+  return new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file);
+    const image=new Image();
+    image.onload=()=>{ URL.revokeObjectURL(url); resolve(image); };
+    image.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('Fail gambar tidak dapat dibaca.')); };
+    image.src=url;
+  });
+}
+async function prepareWorksheetImage(file){
+  if(!file || !['image/png','image/jpeg','image/webp'].includes(String(file.type||'').toLowerCase())) throw new Error('Pilih fail gambar PNG, JPG atau WebP.');
+  if(file.size>WORKSHEET_IMAGE_MAX_INPUT_BYTES) throw new Error('Gambar terlalu besar. Pilih fail di bawah 12 MB.');
+  const image=await loadWorksheetImage(file);
+  if(!image.naturalWidth || !image.naturalHeight) throw new Error('Saiz gambar tidak sah.');
+  let scale=Math.min(1,WORKSHEET_IMAGE_MAX_DIMENSION/Math.max(image.naturalWidth,image.naturalHeight));
+  let lastDataUrl='';
+  for(let sizeAttempt=0;sizeAttempt<4;sizeAttempt++){
+    const width=Math.max(1,Math.round(image.naturalWidth*scale));
+    const height=Math.max(1,Math.round(image.naturalHeight*scale));
+    const canvas=document.createElement('canvas');
+    canvas.width=width; canvas.height=height;
+    const context=canvas.getContext('2d');
+    context.fillStyle='#fff';
+    context.fillRect(0,0,width,height);
+    context.drawImage(image,0,0,width,height);
+    for(const quality of [0.9,0.82,0.74,0.66,0.58]){
+      lastDataUrl=worksheetCanvasDataUrl(canvas,quality);
+      if(worksheetDataUrlBytes(lastDataUrl)<=WORKSHEET_IMAGE_MAX_BYTES) return lastDataUrl;
+    }
+    scale*=0.78;
+  }
+  if(lastDataUrl && worksheetDataUrlBytes(lastDataUrl)<=WORKSHEET_IMAGE_MAX_BYTES) return lastDataUrl;
+  throw new Error('Gambar masih terlalu besar selepas dikecilkan. Cuba crop gambar dahulu.');
+}
+async function setWorksheetImageFromFile(i,index,file){
+  if(!file) return;
+  const row=document.querySelector(`#worksheet_editor_${i} .worksheet-question-row[data-question-index="${index}"]`);
+  if(!row) return;
+  const previous=safeWorksheetImage(row.querySelector('.worksheet-image-data')?.value);
+  const job=`${Date.now()}-${Math.random()}`;
+  row.dataset.imageJob=job;
+  setWorksheetImageStatus(i,index,'Memproses gambar…');
+  try{
+    const image=await prepareWorksheetImage(file);
+    const current=document.querySelector(`#worksheet_editor_${i} .worksheet-question-row[data-question-index="${index}"]`);
+    if(!current || current.dataset.imageJob!==job) return;
+    setWorksheetImageValue(i,index,image,'Gambar sedia untuk dipaparkan kepada murid.');
+  }catch(error){
+    const current=document.querySelector(`#worksheet_editor_${i} .worksheet-question-row[data-question-index="${index}"]`);
+    if(!current || current.dataset.imageJob!==job) return;
+    setWorksheetImageValue(i,index,previous,error.message||'Gambar tidak dapat diproses.');
+  }
+}
+function pasteWorksheetImage(event,i,index){
+  const items=Array.from((event.clipboardData&&event.clipboardData.items)||[]);
+  const item=items.find(candidate=>candidate.kind==='file' && String(candidate.type||'').startsWith('image/'));
+  const file=item&&item.getAsFile();
+  event.preventDefault();
+  if(!file){
+    setWorksheetImageStatus(i,index,'Clipboard tidak mengandungi gambar PNG, JPG atau WebP.');
+    return;
+  }
+  setWorksheetImageFromFile(i,index,file);
+}
+function clearWorksheetImage(i,index){
+  const row=document.querySelector(`#worksheet_editor_${i} .worksheet-question-row[data-question-index="${index}"]`);
+  if(row) delete row.dataset.imageJob;
+  setWorksheetImageValue(i,index,'','Gambar dibuang. Soalan ini akan menggunakan lembaran bercetak.');
 }
 function renderWorksheetEditor(i,questions){
   const editor=document.getElementById('worksheet_editor_'+i);
   if(!editor) return;
-  const rows=questions.map((question,index)=>`<div class="worksheet-question-row">
+  const normalized=questions.map(question=>({
+    answer:String(question&&question.answer||''),
+    image:safeWorksheetImage(question&&question.image)
+  }));
+  const rows=normalized.map((question,index)=>`<div class="worksheet-question-row" data-question-index="${index}" onpaste="pasteWorksheetImage(event,${i},${index})">
     <label>Soalan ${index+1} — jawapan betul</label>
-    <div><input class="worksheet-answer" value="${escapeHtml(question.answer)}" placeholder="Contoh: 23440 atau sabun" autocomplete="off">${questions.length>1?`<button type="button" class="worksheet-remove" onclick="removeWorksheetQuestion(${i},${index})" aria-label="Buang Soalan ${index+1}">Buang</button>`:''}</div>
+    <div class="worksheet-answer-line"><input class="worksheet-answer" value="${escapeHtml(question.answer)}" placeholder="Contoh: 23440 atau sabun" autocomplete="off">${normalized.length>1?`<button type="button" class="worksheet-remove" onclick="removeWorksheetQuestion(${i},${index})" aria-label="Buang Soalan ${index+1}">Buang</button>`:''}</div>
+    <div class="worksheet-image-editor">
+      <div class="worksheet-image-preview-wrap" hidden><img class="worksheet-image-preview" alt="Preview Gambar Soalan ${index+1}"></div>
+      <div class="worksheet-image-tools">
+        <label class="worksheet-image-pick">📎 Pilih gambar<input class="worksheet-image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden onchange="setWorksheetImageFromFile(${i},${index},this.files[0]);this.value=''"></label>
+        <div class="worksheet-image-paste" role="button" tabindex="0" contenteditable="true" spellcheck="false" aria-label="Paste gambar Soalan ${index+1}">📋 Klik, kemudian Ctrl+V</div>
+        <button type="button" class="worksheet-image-clear" hidden onclick="clearWorksheetImage(${i},${index})">Buang gambar</button>
+      </div>
+      <input class="worksheet-image-data" type="hidden">
+      <small class="worksheet-image-status" role="status"></small>
+    </div>
   </div>`).join('');
-  editor.innerHTML=`<p class="worksheet-help">Soalan disediakan pada lembaran kerja bercetak. Murid hanya masukkan jawapan di app, satu demi satu.</p>${rows}<button type="button" class="secondary worksheet-add" onclick="addWorksheetQuestion(${i})">+ Tambah Soalan</button>`;
+  editor.innerHTML=`<p class="worksheet-help">Masukkan jawapan betul dan, jika mahu, attach atau paste gambar bagi setiap soalan. Gambar akan dipaparkan terus kepada murid di stesen.</p>${rows}<button type="button" class="secondary worksheet-add" onclick="addWorksheetQuestion(${i})">+ Tambah Soalan</button>`;
+  normalized.forEach((question,index)=>setWorksheetImageValue(i,index,question.image));
 }
 function addWorksheetQuestion(i){
   const questions=getWorksheetQuestionsFromEditor(i);
-  questions.push({answer:''});
+  questions.push({answer:'',image:''});
   renderWorksheetEditor(i,questions);
 }
 function removeWorksheetQuestion(i,index){
   const questions=getWorksheetQuestionsFromEditor(i);
   questions.splice(index,1);
-  renderWorksheetEditor(i,questions.length?questions:[{answer:''}]);
+  renderWorksheetEditor(i,questions.length?questions:[{answer:'',image:''}]);
 }
 function toggleWorksheetEditor(i){
   const gameType=document.getElementById('st_gametype_'+i).value;
@@ -1903,13 +2039,21 @@ function validateStationPasswords(stationConfig){
   return false;
 }
 function validateWorksheetStations(stationConfig){
-  const invalid=Object.values(stationConfig).filter(st=>{
+  const worksheets=Object.values(stationConfig).filter(st=>st.gameType==='lembaran_kerja');
+  const invalid=worksheets.filter(st=>{
     if(st.gameType!=='lembaran_kerja') return false;
     return worksheetQuestionsFromRaw(st.gameDataRaw).some(q=>!q.answer);
   });
-  if(!invalid.length) return true;
-  alert(`Isi jawapan betul bagi semua soalan Lembaran Kerja di Stesen ${invalid.map(st=>st.id).join(', ')}.`);
-  return false;
+  if(invalid.length){
+    alert(`Isi jawapan betul bagi semua soalan Lembaran Kerja di Stesen ${invalid.map(st=>st.id).join(', ')}.`);
+    return false;
+  }
+  const tooLarge=worksheets.filter(st=>String(st.gameDataRaw||'').length>WORKSHEET_DATA_MAX_CHARS);
+  if(tooLarge.length){
+    alert(`Jumlah gambar terlalu besar di Stesen ${tooLarge.map(st=>st.id).join(', ')}. Buang beberapa gambar atau gunakan gambar yang telah dicrop.`);
+    return false;
+  }
+  return true;
 }
 function rotationFor(startStation, count){
   return StationLayout.rotationOrder(startStation, count == null ? currentStationCount() : count);
@@ -2426,15 +2570,19 @@ function renderWorksheetQuestion(){
   const card=document.getElementById('gameCard');
   const current=gameState.currentQuestion;
   const total=gameState.total;
+  const question=gameState.questions[current]||{};
+  const image=safeWorksheetImage(question.image);
+  const imageHtml=image?`<figure class="worksheet-question-figure"><img class="worksheet-question-image" src="${escapeHtml(image)}" alt="Gambar Soalan ${current+1}"></figure>`:'';
   card.innerHTML=`<h2>📜 ${gameState.stationName}</h2>
-    <div class="clue">Rujuk lembaran kerja anda dan masukkan jawapan Soalan ${current+1}.</div>
+    <div class="clue">${image?'Rujuk gambar di bawah':'Rujuk lembaran kerja anda'} dan masukkan jawapan Soalan ${current+1}.</div>
+    ${imageHtml}
     <div class="qitem" style="margin-top:16px;">
       <b>Soalan ${current+1} daripada ${total}</b>
       <input id="worksheetAnswer" type="text" autocomplete="off" placeholder="Masukkan jawapan" onkeydown="if(event.key==='Enter') submitWorksheetAnswer()">
     </div>
     <button class="big" onclick="submitWorksheetAnswer()">Semak Jawapan</button>
     <div id="worksheetMsg"></div>`;
-  setTimeout(()=>document.getElementById('worksheetAnswer')?.focus(),0);
+  if(!image) setTimeout(()=>document.getElementById('worksheetAnswer')?.focus(),0);
 }
 function submitWorksheetAnswer(){
   if(window._gameOver) return;
