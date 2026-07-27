@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gs-shell-v7';
+const CACHE_NAME = 'gs-shell-v8';
 const LOCAL_ASSETS = [
   './', 'index.html',
   'tangram/engine.js', 'tangram/shapes.js', 'tangram/ui.js',

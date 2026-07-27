@@ -11,6 +11,7 @@ function seeded(seed) {
 }
 
 test('generateFleet places all 5 ships with correct lengths, in bounds, no overlaps', () => {
+  assert.strictEqual(E.GRID_SIZE, 9);
   for (let seed = 1; seed <= 500; seed++) {
     const fleet = E.generateFleet(seeded(seed));
     assert.strictEqual(fleet.length, E.FLEET_SPEC.length);
@@ -101,9 +102,9 @@ test('shipCells lays cells out horizontally and vertically', () => {
 
 test('canPlace accepts valid positions and rejects off-grid or overlapping ones', () => {
   assert.strictEqual(E.canPlace([], 0, 0, 5, 'h'), true);
-  assert.strictEqual(E.canPlace([], 6, 0, 5, 'h'), true);   // ends exactly at x=10
-  assert.strictEqual(E.canPlace([], 7, 0, 5, 'h'), false);  // runs off the right edge
-  assert.strictEqual(E.canPlace([], 0, 7, 5, 'v'), false);  // runs off the top edge
+  assert.strictEqual(E.canPlace([], 4, 0, 5, 'h'), true);   // ends exactly at x=8
+  assert.strictEqual(E.canPlace([], 5, 0, 5, 'h'), false);  // runs off the right edge
+  assert.strictEqual(E.canPlace([], 0, 5, 5, 'v'), false);  // runs off the top edge
   assert.strictEqual(E.canPlace([], 6, 0, 5, 'v'), true);
   const occupied = [{ x: 3, y: 3 }, { x: 4, y: 3 }];
   assert.strictEqual(E.canPlace(occupied, 2, 3, 3, 'h'), false); // crosses (3,3)

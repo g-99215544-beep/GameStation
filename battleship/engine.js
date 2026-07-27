@@ -3,7 +3,7 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = mod;
   else root.BattleshipEngine = mod;
 })(typeof self !== 'undefined' ? self : this, function () {
-  const GRID_SIZE = 11; // coordinates 0-10 inclusive on each axis
+  const GRID_SIZE = 9; // coordinates 0-8 inclusive on each axis
 
   const FLEET_SPEC = [
     { name: 'Lookout Cruiser', length: 2 },
@@ -15,7 +15,7 @@
 
   // Known-good layout used only if generateFleet's random placement can't
   // find room within the retry budget (should never happen at this
-  // grid size/fleet density — 17 cells in 121 — but keeps the game
+  // grid size/fleet density — 17 cells in 81 — but keeps the game
   // unbreakable in class).
   const FALLBACK_LAYOUT = [
     { name: 'Lookout Cruiser', length: 2, cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }] },
