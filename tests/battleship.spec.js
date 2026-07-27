@@ -3,6 +3,16 @@ const { pathToFileURL } = require('node:url');
 const { test, expect } = require('playwright/test');
 
 async function openBattleship(page) {
+  // The placing screen (board + dock + actions, plus the test-mode banner) is
+  // taller than Playwright's default 1280x720 viewport. .click() auto-scrolls
+  // its target into view, which is why earlier coordinate-entry tests never
+  // noticed, but dragShip below drives page.mouse directly — real pointer
+  // input, deliberately not auto-scrolling — so it needs every dock row and
+  // grid cell already on screen. Only bump the height of the untouched
+  // default; a test that first picks its own (e.g. mobile) viewport is left
+  // alone.
+  const vp = page.viewportSize();
+  if (vp && vp.width === 1280 && vp.height === 720) await page.setViewportSize({ width: 1280, height: 1300 });
   await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({ body: '' }));
   await page.addInitScript(() => {
     const snapshot = { val: () => null };
@@ -42,11 +52,24 @@ async function openBattleship(page) {
 
 async function placeFleet(page) {
   // Rows y=0..4, each ship horizontal from x=0: the longest ship is 5 cells,
-  // so every row fits inside the 11-wide grid. Task 2 swaps this for real drags.
-  await page.evaluate(() => {
-    BattleshipEngine.FLEET_SPEC.forEach((spec, i) => placeBsShipAt(spec.name, 0, i, 'h'));
-  });
+  // so every row fits inside the 11-wide grid.
+  const ships = await page.evaluate(() => BattleshipEngine.FLEET_SPEC.map(s => s.name));
+  for (let i = 0; i < ships.length; i++) await dragShip(page, ships[i], 0, i);
   await page.getByRole('button', { name: 'Sedia! Mula Menembak' }).click();
+}
+
+async function dragShip(page, name, x, y, options) {
+  // Drops the ship so that its `grabIndex`-th cell lands on grid cell (x, y).
+  const grabIndex = (options && options.grabIndex) || 0;
+  const from = (options && options.from) === 'grid'
+    ? page.locator(`#bsp_${options.fromX}_${options.fromY}`)
+    : page.locator(`.bs-dock-ship[data-ship="${name}"] .bs-dock-cell`).nth(grabIndex);
+  const source = await from.boundingBox();
+  const target = await page.locator(`#bsp_${x}_${y}`).boundingBox();
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 });
+  await page.mouse.up();
 }
 
 async function enterCoords(page, x, y) {
@@ -328,6 +351,88 @@ test('the dock lists every ship and the battle starts only when all five are pla
   await start.click();
   await expect(page.getByRole('button', { name: 'Tembak' })).toBeVisible();
   await expect(page.locator('.bs-dock')).toHaveCount(0);
+});
+
+test('a ship dragged from the dock lands on the cells it was dropped on', async ({ page }) => {
+  await openBattleship(page);
+
+  await dragShip(page, 'Submarine', 4, 6);
+
+  const cells = await page.evaluate(() => bsShipByName('Submarine').cells);
+  expect(cells).toEqual([{ x: 4, y: 6 }, { x: 5, y: 6 }, { x: 6, y: 6 }]);
+  await expect(page.locator('.bs-dock-ship[data-ship="Submarine"]')).toHaveClass(/placed/);
+  await expect(page.locator('#bsp_4_6')).toHaveClass(/ship/);
+});
+
+test('the grabbed cell is the cell that lands under the pointer', async ({ page }) => {
+  await openBattleship(page);
+
+  // Grab the Destroyer by its third cell (index 2) and drop that cell on (5,5):
+  // the ship must start two cells to the left, at (3,5).
+  await dragShip(page, 'Destroyer', 5, 5, { grabIndex: 2 });
+
+  const cells = await page.evaluate(() => bsShipByName('Destroyer').cells);
+  expect(cells[0]).toEqual({ x: 3, y: 5 });
+  expect(cells).toHaveLength(4);
+});
+
+test('a drop that does not fit returns the ship to the dock', async ({ page }) => {
+  await openBattleship(page);
+  await dragShip(page, 'Submarine', 0, 0);
+
+  // Off the right edge: a 5-cell ship starting at x=9 runs past x=10.
+  await dragShip(page, 'Pirate ship', 9, 8);
+  expect(await page.evaluate(() => !!bsShipByName('Pirate ship'))).toBe(false);
+  await expect(page.locator('.bs-dock-ship[data-ship="Pirate ship"]')).not.toHaveClass(/placed/);
+  await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
+
+  // On top of the Submarine already at (0,0)-(2,0).
+  await dragShip(page, 'Battleship', 1, 0);
+  expect(await page.evaluate(() => !!bsShipByName('Battleship'))).toBe(false);
+  await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
+});
+
+test('dragging highlights the target cells green when they fit and red when they do not', async ({ page }) => {
+  await openBattleship(page);
+  await dragShip(page, 'Submarine', 0, 0);
+
+  const grab = await page.locator('.bs-dock-ship[data-ship="Battleship"] .bs-dock-cell').first().boundingBox();
+  const good = await page.locator('#bsp_4_4').boundingBox();
+  const bad = await page.locator('#bsp_1_0').boundingBox();
+
+  await page.mouse.move(grab.x + grab.width / 2, grab.y + grab.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(good.x + good.width / 2, good.y + good.height / 2, { steps: 5 });
+  await expect(page.locator('.bs-cell.preview-ok')).toHaveCount(3);
+  await page.mouse.move(bad.x + bad.width / 2, bad.y + bad.height / 2, { steps: 5 });
+  await expect(page.locator('.bs-cell.preview-bad')).toHaveCount(3);
+  await expect(page.locator('.bs-cell.preview-ok')).toHaveCount(0);
+  await page.mouse.up();
+  await expect(page.locator('.bs-cell.preview-ok, .bs-cell.preview-bad')).toHaveCount(0);
+});
+
+test('a touch drag places a ship, so the phone path works', async ({ page }) => {
+  await openBattleship(page);
+
+  // page.mouse produces mouse-type pointer events; this drives the same
+  // handlers with pointerType 'touch', which is what a student's finger sends.
+  await page.evaluate(() => {
+    const dock = document.querySelector('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell');
+    const target = document.getElementById('bsp_2_3');
+    const at = el => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+    const from = at(dock), to = at(target);
+    const fire = (type, node, point) => node.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch',
+      clientX: point.x, clientY: point.y
+    }));
+    fire('pointerdown', dock, from);
+    fire('pointermove', window, { x: from.x + 20, y: from.y - 20 });
+    fire('pointermove', window, to);
+    fire('pointerup', window, to);
+  });
+
+  const cells = await page.evaluate(() => bsShipByName('Submarine').cells);
+  expect(cells[0]).toEqual({ x: 2, y: 3 });
 });
 
 test('the computer fires back after every player shot', async ({ page }) => {

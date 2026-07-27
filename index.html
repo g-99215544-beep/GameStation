@@ -367,6 +367,12 @@
   .bs-dock-cells{display:flex;gap:2px;}
   .bs-dock-cell{width:var(--bs-dock-cell,22px);height:var(--bs-dock-cell,22px);background:#5c6b7a;border:1px solid #3d4854;}
   .bs-dock-name{font-size:11px;font-weight:700;color:var(--navy);}
+  .bs-drag-ghost{position:fixed;z-index:90;display:flex;gap:2px;pointer-events:none;opacity:.85;}
+  .bs-drag-ghost.vertical{flex-direction:column-reverse;}
+  .bs-drag-ghost div{width:var(--bs-ghost-cell,22px);height:var(--bs-ghost-cell,22px);background:#5c6b7a;border:1px solid #3d4854;}
+  .bs-cell.preview-ok{background:#7fd39b;border-color:#3f8f5f;}
+  .bs-cell.preview-bad{background:#e78b84;border-color:#a8453c;}
+  .battleship-game.placing{touch-action:none;}
   .bs-place-actions{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:8px 0;}
   .bs-place-actions button{margin:0;}
   .bs-orient{display:flex;gap:8px;justify-content:center;margin:8px 0;}
@@ -2925,7 +2931,7 @@ function renderBattleship(){
   const bs=gameState.battleship;
   const head=`<h2>${escapeHtml(bs.station.name)}</h2>`;
   if(bs.phase==='placing'){
-    document.getElementById('gameCard').innerHTML=`<div class="battleship-game placing">
+    document.getElementById('gameCard').innerHTML=`<div class="battleship-game placing" onpointerdown="bsPointerDown(event)">
       ${head}
       <p>Seret kapal dari bawah ke grid. Ketik kapal di grid untuk pusingkannya.</p>
       <div class="bs-board-wrap">
@@ -3007,6 +3013,109 @@ function applyBsCell(prefix,x,y,result){
   cell.classList.add(result==='miss'?'miss':'hit');
   cell.textContent=result==='miss'?'O':'X';
   cell.setAttribute('aria-label',`Petak (${x}, ${y}), ${result==='miss'?'tidak kena':'kena'}`);
+}
+// Placement is drag-driven: below this many pixels of travel a press is a tap
+// (rotate), above it a drag (place/move). One code path serves finger and mouse.
+const BS_DRAG_THRESHOLD=8;
+function bsCellFromPoint(clientX,clientY){
+  const el=document.elementFromPoint(clientX,clientY);
+  const cell=el && el.closest && el.closest('.bs-cell');
+  if(!cell || !cell.id.startsWith('bsp_')) return null;
+  const parts=cell.id.split('_');
+  return {x:Number(parts[1]),y:Number(parts[2])};
+}
+function bsDragOrigin(cell,grabIndex,orientation){
+  return orientation==='h'?{x:cell.x-grabIndex,y:cell.y}:{x:cell.x,y:cell.y-grabIndex};
+}
+function clearBsPreview(){
+  document.querySelectorAll('.bs-cell.preview-ok,.bs-cell.preview-bad').forEach(c=>c.classList.remove('preview-ok','preview-bad'));
+}
+function showBsPreview(cells,ok){
+  clearBsPreview();
+  cells.forEach(c=>{
+    const el=document.getElementById(`bsp_${c.x}_${c.y}`);
+    if(el) el.classList.add(ok?'preview-ok':'preview-bad');
+  });
+}
+function bsMakeGhost(length,orientation){
+  const ghost=document.createElement('div');
+  ghost.className='bs-drag-ghost'+(orientation==='v'?' vertical':'');
+  const cell=document.querySelector('.bs-board:not(.mini) .bs-cell');
+  if(cell) ghost.style.setProperty('--bs-ghost-cell',cell.getBoundingClientRect().width+'px');
+  for(let i=0;i<length;i++) ghost.appendChild(document.createElement('div'));
+  document.body.appendChild(ghost);
+  return ghost;
+}
+function bsMoveGhost(clientX,clientY){
+  const drag=gameState.battleship.drag;
+  if(!drag || !drag.ghost) return;
+  const cellSize=parseFloat(getComputedStyle(drag.ghost).getPropertyValue('--bs-ghost-cell'))||22;
+  const step=cellSize+BS_BOARD_GAP;
+  const left=drag.orientation==='h'?clientX-(drag.grabIndex+0.5)*step:clientX-cellSize/2;
+  const top=drag.orientation==='h'?clientY-cellSize/2:clientY-(drag.length-drag.grabIndex-0.5)*step;
+  drag.ghost.style.left=left+'px';
+  drag.ghost.style.top=top+'px';
+}
+function bsPointerDown(event){
+  const bs=gameState.battleship;
+  if(!bs || bs.phase!=='placing' || bs.drag) return;
+  const dockShip=event.target.closest && event.target.closest('.bs-dock-ship');
+  const gridCell=event.target.closest && event.target.closest('.bs-cell[data-ship]');
+  let name,orientation,grabIndex,fromGrid;
+  if(dockShip){
+    name=dockShip.dataset.ship;
+    orientation='h';
+    fromGrid=false;
+    const cells=Array.from(dockShip.querySelectorAll('.bs-dock-cell'));
+    grabIndex=Math.max(0,cells.indexOf(event.target.closest('.bs-dock-cell')));
+  } else if(gridCell){
+    name=gridCell.dataset.ship;
+    const ship=bsShipByName(name);
+    if(!ship) return;
+    orientation=ship.cells.length>1 && ship.cells[1].x!==ship.cells[0].x?'h':'v';
+    fromGrid=true;
+    grabIndex=ship.cells.findIndex(c=>`bsp_${c.x}_${c.y}`===gridCell.id);
+  } else return;
+  const spec=BattleshipEngine.FLEET_SPEC.find(s=>s.name===name);
+  bs.drag={name,length:spec.length,orientation,grabIndex,fromGrid,
+    pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,ghost:null};
+  window.addEventListener('pointermove',bsPointerMove);
+  window.addEventListener('pointerup',bsPointerUp);
+  window.addEventListener('pointercancel',bsPointerUp);
+  event.preventDefault();
+}
+function bsPointerMove(event){
+  const drag=gameState.battleship.drag;
+  if(!drag || event.pointerId!==drag.pointerId) return;
+  const travelled=Math.hypot(event.clientX-drag.startX,event.clientY-drag.startY);
+  if(!drag.ghost){
+    if(travelled<BS_DRAG_THRESHOLD) return;
+    drag.ghost=bsMakeGhost(drag.length,drag.orientation);
+  }
+  bsMoveGhost(event.clientX,event.clientY);
+  const cell=bsCellFromPoint(event.clientX,event.clientY);
+  if(!cell){ clearBsPreview(); return; }
+  const origin=bsDragOrigin(cell,drag.grabIndex,drag.orientation);
+  const cells=BattleshipEngine.shipCells(origin.x,origin.y,drag.length,drag.orientation);
+  showBsPreview(cells,BattleshipEngine.canPlace(bsOccupiedCells(drag.name),origin.x,origin.y,drag.length,drag.orientation));
+}
+function bsPointerUp(event){
+  const bs=gameState.battleship;
+  const drag=bs.drag;
+  if(!drag || (event.pointerId!==undefined && event.pointerId!==drag.pointerId)) return;
+  window.removeEventListener('pointermove',bsPointerMove);
+  window.removeEventListener('pointerup',bsPointerUp);
+  window.removeEventListener('pointercancel',bsPointerUp);
+  const dragged=!!drag.ghost;
+  if(drag.ghost) drag.ghost.remove();
+  clearBsPreview();
+  bs.drag=null;
+  if(event.type==='pointercancel' || !dragged) return;
+  const cell=bsCellFromPoint(event.clientX,event.clientY);
+  if(!cell){ setBsMsg('Tidak muat di situ. Cuba tempat lain.'); return; }
+  const origin=bsDragOrigin(cell,drag.grabIndex,drag.orientation);
+  if(placeBsShipAt(drag.name,origin.x,origin.y,drag.orientation)) setBsMsg(`${drag.name} diletakkan.`);
+  else setBsMsg('Tidak muat di situ. Cuba tempat lain.');
 }
 function bsShipByName(name){
   return gameState.battleship.playerFleet.find(s=>s.name===name);
