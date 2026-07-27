@@ -1274,11 +1274,21 @@ function show(id){
 // (running back to finish first is rewarded). Index 0 = the 1st group to open.
 const CHEST_BONUS = [50,40,30,25,20,15,12,10,8,6,5,4,3,2];
 
-// Direct-play link: index.html?tangram (or ?demo=tangram) launches the Tangram
-// Challenge straight away, no login — for sharing with other teachers/devs.
-function isTangramDemo(){
+// Simple direct demo links such as ?tangram or ?battleship launch a game with
+// safe default data. They are intentionally not displayed inside the app.
+const DIRECT_GAME_DEMOS={
+  sudoku:{name:'Sudoku Challenge',gameType:'sudoku',gameDataRaw:'{}'},
+  crossword:{name:'Crossword Puzzle',gameType:'crossword',gameDataRaw:'{}'},
+  battleship:{name:'Battleship Koordinat',gameType:'battleship',gameDataRaw:'{}'},
+  sifir:{name:'Sifir Challenge',gameType:'sifir',gameDataRaw:'{}'},
+  tangram:{name:'Tangram Challenge',gameType:'tangram',gameDataRaw:'{}'},
+  jejak_lari:{name:'Jejak Lari GPS',gameType:'jejak_lari',gameDataRaw:'{"targetKm":1}'}
+};
+function directGameDemoType(){
   const q = new URLSearchParams(location.search);
-  return q.has('tangram') || q.get('demo')==='tangram';
+  const named=String(q.get('demo')||'').trim();
+  if(DIRECT_GAME_DEMOS[named]) return named;
+  return Object.keys(DIRECT_GAME_DEMOS).find(type=>q.has(type))||null;
 }
 // index.html?board opens the big-screen Smart Board finale (for the projector).
 function isSmartBoard(){
@@ -1292,8 +1302,9 @@ function connectFirebase(){
     db = firebase.database();
     initApp();
   }catch(e){
-    // The tangram demo needs no Firebase, so still launch it on connection error.
-    if(isTangramDemo()){ startTangramDemo(); return; }
+    // Direct demos need no Firebase, so still launch them on connection error.
+    const demoType=directGameDemoType();
+    if(demoType){ startDirectGameDemo(demoType); return; }
     document.body.innerHTML = '<div class="wrap"><div class="card"><h2>❌ Ralat Sambungan Firebase</h2><p>'+e.message+'</p></div></div>';
   }
 }
@@ -1452,7 +1463,8 @@ function renderGroupLoginOptions(){
 function initApp(){
   initConnectivity();
   renderGroupLoginOptions();
-  if(isTangramDemo()){ startTangramDemo(); return; }
+  const demoType=directGameDemoType();
+  if(demoType){ startDirectGameDemo(demoType); return; }
   watchHunts();
   const saved=readLocalJson('gs_session');
   if(saved && saved.role==='admin'){
@@ -1512,11 +1524,18 @@ function watchActiveHunt(){
   });
 }
 
-// Launch the tangram station directly in demo mode (test mode = no Firebase writes).
+// Launch any supported station directly in demo mode (no Firebase writes).
+function startDirectGameDemo(type){
+  const demo=DIRECT_GAME_DEMOS[type];
+  if(!demo) return;
+  window._testMode=true;
+  window._directTestMode=true;
+  window._demoMode=type==='tangram';
+  document.getElementById('topTitle').innerText=`🧪 ${demo.name}`;
+  startGame('demo',{...demo,id:'demo',timeLimitMin:10});
+}
 function startTangramDemo(){
-  window._testMode = true; window._demoMode = true;
-  document.getElementById('topTitle').innerText = '🧩 Tangram Challenge';
-  startGame('demo', { name:'Tangram Challenge', gameType:'tangram', timeLimitMin:10 });
+  startDirectGameDemo('tangram');
 }
 
 const SESSION_DURATION_MS = 12*60*60*1000; // 12 hours
@@ -2476,6 +2495,9 @@ function checkPassword(){
 // ---------- ADMIN: TEST A STATION ----------
 // Lets admin play through any station using the current (unsaved) form values,
 // without scanning a QR. Nothing is written to Firebase progress.
+function testExitLabel(){
+  return window._directTestMode?'↺ Uji semula':'← Kembali ke Admin';
+}
 function testStation(i){
   const gameType=document.getElementById('st_gametype_'+i).value;
   const st = {
@@ -2501,6 +2523,7 @@ function endTest(){
   if(sifirQInterval) clearInterval(sifirQInterval);
   sifirQInterval=null;
   if(window._runWatchId!=null && navigator.geolocation){ navigator.geolocation.clearWatch(window._runWatchId); window._runWatchId=null; }
+  if(window._directTestMode){ location.reload(); return; }
   window._testMode = false;
   document.getElementById('timer').style.display='none';
   show('view-admin');
@@ -2513,7 +2536,7 @@ function showTestResult(onTime, score, timeTakenSec){
     <h2>Ujian Selesai</h2>
     <p>${onTime?'Tepat masa':'Masa tamat'} — Markah: <b>${score}</b> <span style="color:#888;">(${timeTakenSec}s)</span></p>
     <p style="color:#888;font-size:13px;">Mod ujian — tiada markah disimpan ke Firebase.</p>
-    <button class="big" onclick="endTest()">← Kembali ke Admin</button>
+    <button class="big" onclick="endTest()">${testExitLabel()}</button>
   </div>`;
 }
 
@@ -2546,7 +2569,7 @@ function startGame(stId, testSt){
     banner.className='msg';
     banner.style.background='#fdf3d8';
     banner.style.marginTop='0';
-    banner.innerHTML='🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">← Kembali ke Admin</button>';
+    banner.innerHTML=`🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">${testExitLabel()}</button>`;
     card.insertBefore(banner, card.firstChild);
   }
 }
@@ -3662,7 +3685,7 @@ function startRun(st){
   window._runTimeout = null;
   const card = document.getElementById('gameCard');
   const testBanner = window._testMode
-    ? '<div class="msg" style="background:#fdf3d8;margin-top:0;">🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">← Kembali ke Admin</button></div>'
+    ? `<div class="msg" style="background:#fdf3d8;margin-top:0;">🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">${testExitLabel()}</button></div>`
     : '';
   card.innerHTML = `${testBanner}<h2>🏃 ${st.name}</h2>
     <div class="clue">Lari sejauh <b>${targetKm} km</b> sebelum masa tamat. GPS akan mengesan jarak larian anda.</div>
@@ -3707,7 +3730,7 @@ function onRunError(err){
 function renderRunLive(){
   const card = document.getElementById('gameCard');
   const testBanner = window._testMode
-    ? '<div class="msg" style="background:#fdf3d8;margin-top:0;">🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">← Kembali ke Admin</button></div>'
+    ? `<div class="msg" style="background:#fdf3d8;margin-top:0;">🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">${testExitLabel()}</button></div>`
     : '';
   card.innerHTML = `${testBanner}<h2>🏃 Larian Anda</h2>
     <div style="font-size:34px;font-weight:900;color:var(--navy);text-align:center;margin:10px 0;">
@@ -3779,7 +3802,7 @@ function startTangram(st){
   const testBanner = () => window._demoMode
     ? '<div class="msg" style="background:#e7f0ff;margin-top:0;">🎮 <b>Demo Tangram</b> — <button class="linkbtn" onclick="startTangramDemo()">↺ Main semula</button></div>'
     : window._testMode
-    ? '<div class="msg" style="background:#fdf3d8;margin-top:0;">🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">← Kembali ke Admin</button></div>'
+    ? `<div class="msg" style="background:#fdf3d8;margin-top:0;">🧪 <b>Mod Ujian</b> — markah tidak disimpan. <button class="linkbtn" onclick="endTest()">${testExitLabel()}</button></div>`
     : '';
 
   function showInstructions(){
@@ -3914,7 +3937,7 @@ function showTangramTestResult(done, total, score, timeTakenSec){
     <p>${msg}</p>
     <p>Markah: <b>${score}</b> / 200 <span style="color:#888;">(${timeTakenSec}s)</span></p>
     <p style="color:#888;font-size:13px;">${window._demoMode ? 'Demo — tiada markah disimpan.' : 'Mod ujian — tiada markah disimpan ke Firebase.'}</p>
-    ${window._demoMode ? '<button class="big" onclick="startTangramDemo()">↺ Main Semula</button>' : '<button class="big" onclick="endTest()">← Kembali ke Admin</button>'}
+    ${window._demoMode ? '<button class="big" onclick="startTangramDemo()">↺ Main Semula</button>' : `<button class="big" onclick="endTest()">${testExitLabel()}</button>`}
   </div>`;
 }
 function finishGame(forceOk,suppressSfx){
