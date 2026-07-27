@@ -422,7 +422,7 @@ test('a touch drag places a ship, so the phone path works', async ({ page }) => 
     const at = el => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
     const from = at(dock), to = at(target);
     const fire = (type, node, point) => node.dispatchEvent(new PointerEvent(type, {
-      bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch',
+      bubbles: true, cancelable: true, pointerId: 1, pointerType: 'touch', isPrimary: true,
       clientX: point.x, clientY: point.y
     }));
     fire('pointerdown', dock, from);
@@ -608,4 +608,94 @@ test('the placement screen fits a phone and drags work at phone size', async ({ 
   // A drag must still hit the right cell at phone cell sizes.
   await dragShip(page, 'Submarine', 8, 8);
   expect(await page.evaluate(() => bsShipByName('Submarine').cells[0])).toEqual({ x: 8, y: 8 });
+});
+
+test('resetting during a drag removes its ghost, preview, and stale pointer state', async ({ page }) => {
+  await openBattleship(page);
+  const source = await page.locator('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell').first().boundingBox();
+  const target = await page.locator('#bsp_4_4').boundingBox();
+
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 5 });
+  await expect(page.locator('.bs-drag-ghost')).toHaveCount(1);
+  await expect(page.locator('.bs-cell.preview-ok')).toHaveCount(3);
+
+  await page.evaluate(() => resetBsPlacement());
+  await expect(page.locator('.bs-drag-ghost')).toHaveCount(0);
+  await expect(page.locator('.bs-cell.preview-ok, .bs-cell.preview-bad')).toHaveCount(0);
+  expect(await page.evaluate(() => gameState.battleship.drag)).toBeNull();
+
+  // A later pointerup must not revive the cancelled drop through a stale
+  // window listener.
+  await page.mouse.up();
+  expect(await page.evaluate(() => bsShipByName('Submarine'))).toBeUndefined();
+});
+
+test('non-primary touch pointers and non-left mouse buttons cannot start a drag', async ({ page }) => {
+  await openBattleship(page);
+  const states = await page.evaluate(() => {
+    const dock = document.querySelector('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell');
+    const rect = dock.getBoundingClientRect();
+    const init = {
+      bubbles: true,
+      cancelable: true,
+      clientX: rect.left + rect.width / 2,
+      clientY: rect.top + rect.height / 2
+    };
+    dock.dispatchEvent(new PointerEvent('pointerdown', {
+      ...init, pointerId: 2, pointerType: 'touch', isPrimary: false
+    }));
+    const afterSecondTouch = gameState.battleship.drag;
+    if (afterSecondTouch) {
+      window.dispatchEvent(new PointerEvent('pointercancel', {
+        ...init, pointerId: 2, pointerType: 'touch', isPrimary: false
+      }));
+    }
+    dock.dispatchEvent(new PointerEvent('pointerdown', {
+      ...init, pointerId: 3, pointerType: 'mouse', button: 2, isPrimary: true
+    }));
+    return { afterSecondTouch, afterRightClick: gameState.battleship.drag };
+  });
+  expect(states).toEqual({ afterSecondTouch: null, afterRightClick: null });
+});
+
+test('a timeout during a drag clears pointer artifacts before showing the result', async ({ page }) => {
+  await openBattleship(page);
+  const source = await page.locator('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell').first().boundingBox();
+  const target = await page.locator('#bsp_4_4').boundingBox();
+
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 5 });
+  await expect(page.locator('.bs-drag-ghost')).toHaveCount(1);
+
+  await page.evaluate(() => finishBattleship(false));
+  await expect(page.getByRole('heading', { name: 'Ujian Selesai' })).toBeVisible();
+  await expect(page.locator('.bs-drag-ghost')).toHaveCount(0);
+  expect(await page.evaluate(() => gameState.battleship.drag)).toBeNull();
+
+  // The physical pointer can be released after the timeout without invoking
+  // a stale placement callback on the result screen.
+  await page.mouse.up();
+  await expect(page.getByRole('heading', { name: 'Ujian Selesai' })).toBeVisible();
+});
+
+test('leaving test mode during a drag clears pointer artifacts', async ({ page }) => {
+  await openBattleship(page);
+  const source = await page.locator('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell').first().boundingBox();
+  const target = await page.locator('#bsp_4_4').boundingBox();
+
+  await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 5 });
+  await expect(page.locator('.bs-drag-ghost')).toHaveCount(1);
+
+  await page.evaluate(() => endTest());
+  await expect(page.locator('#view-admin')).toHaveClass(/\bactive\b/);
+  await expect(page.locator('.bs-drag-ghost')).toHaveCount(0);
+  expect(await page.evaluate(() => gameState.battleship.drag)).toBeNull();
+
+  await page.mouse.up();
+  await expect(page.locator('#view-admin')).toHaveClass(/\bactive\b/);
 });
