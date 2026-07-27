@@ -68,6 +68,32 @@
     return FALLBACK_LAYOUT.map(ship => ({ name: ship.name, length: ship.length, cells: ship.cells.slice() }));
   }
 
+  function shipCells(x, y, length, orientation) {
+    return cellsFor(x, y, length, orientation === 'h');
+  }
+
+  function canPlace(occupiedCells, x, y, length, orientation) {
+    const cells = shipCells(x, y, length, orientation);
+    if (!inBounds(cells)) return false;
+    const occupied = new Set(occupiedCells.map(c => `${c.x},${c.y}`));
+    return !overlaps(cells, occupied);
+  }
+
+  // The computer's whole AI: pick uniformly among cells it has not fired at
+  // yet. Deliberately has no targeting and no memory between turns — it never
+  // chases a hit, so a student is never punished for being unlucky early.
+  function nextComputerShot(shotLog, rng) {
+    const random = rng || Math.random;
+    const open = [];
+    for (let y = 0; y < GRID_SIZE; y++) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        if (!Object.prototype.hasOwnProperty.call(shotLog, `${x},${y}`)) open.push({ x, y });
+      }
+    }
+    if (!open.length) return null;
+    return open[Math.floor(random() * open.length)];
+  }
+
   function isShipSunk(ship, shotLog) {
     return ship.cells.every(c => shotLog[`${c.x},${c.y}`] === 'hit');
   }
@@ -94,5 +120,8 @@
     return fleet.filter(ship => isShipSunk(ship, shotLog)).length;
   }
 
-  return { GRID_SIZE, FLEET_SPEC, generateFleet, fireAt, isFleetSunk, countSunk, isShipSunk };
+  return {
+    GRID_SIZE, FLEET_SPEC, generateFleet, fireAt, isFleetSunk, countSunk, isShipSunk,
+    shipCells, canPlace, nextComputerShot
+  };
 });

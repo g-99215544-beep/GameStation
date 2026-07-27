@@ -92,3 +92,46 @@ test('isShipSunk is true only when every cell of that ship is hit', () => {
   log = { '1,0': 'hit', '2,0': 'hit' };
   assert.strictEqual(E.isShipSunk(ship, log), true);
 });
+
+test('shipCells lays cells out horizontally and vertically', () => {
+  assert.deepStrictEqual(E.shipCells(2, 5, 3, 'h'), [{ x: 2, y: 5 }, { x: 3, y: 5 }, { x: 4, y: 5 }]);
+  assert.deepStrictEqual(E.shipCells(2, 5, 3, 'v'), [{ x: 2, y: 5 }, { x: 2, y: 6 }, { x: 2, y: 7 }]);
+  assert.deepStrictEqual(E.shipCells(0, 0, 1, 'h'), [{ x: 0, y: 0 }]);
+});
+
+test('canPlace accepts valid positions and rejects off-grid or overlapping ones', () => {
+  assert.strictEqual(E.canPlace([], 0, 0, 5, 'h'), true);
+  assert.strictEqual(E.canPlace([], 6, 0, 5, 'h'), true);   // ends exactly at x=10
+  assert.strictEqual(E.canPlace([], 7, 0, 5, 'h'), false);  // runs off the right edge
+  assert.strictEqual(E.canPlace([], 0, 7, 5, 'v'), false);  // runs off the top edge
+  assert.strictEqual(E.canPlace([], 6, 0, 5, 'v'), true);
+  const occupied = [{ x: 3, y: 3 }, { x: 4, y: 3 }];
+  assert.strictEqual(E.canPlace(occupied, 2, 3, 3, 'h'), false); // crosses (3,3)
+  assert.strictEqual(E.canPlace(occupied, 2, 4, 3, 'h'), true);  // clear row above
+});
+
+test('nextComputerShot never repeats a cell and returns null once the grid is full', () => {
+  let shotLog = {};
+  const seen = new Set();
+  for (let i = 0; i < E.GRID_SIZE * E.GRID_SIZE; i++) {
+    const shot = E.nextComputerShot(shotLog, seeded(i + 1));
+    assert.ok(shot, `ran out of cells early at shot ${i}`);
+    const key = `${shot.x},${shot.y}`;
+    assert.ok(!seen.has(key), `repeated cell ${key}`);
+    seen.add(key);
+    shotLog = Object.assign({}, shotLog, { [key]: 'miss' });
+  }
+  assert.strictEqual(E.nextComputerShot(shotLog, seeded(1)), null);
+});
+
+// Leaving exactly one cell open forces the random pick, so the "only ever
+// returns an un-fired cell" contract is checked without depending on the RNG.
+test('nextComputerShot only ever picks a cell absent from the shot log', () => {
+  const shotLog = {};
+  for (let x = 0; x < E.GRID_SIZE; x++) {
+    for (let y = 0; y < E.GRID_SIZE; y++) {
+      if (!(x === 3 && y === 4)) shotLog[`${x},${y}`] = 'miss';
+    }
+  }
+  assert.deepStrictEqual(E.nextComputerShot(shotLog, seeded(9)), { x: 3, y: 4 });
+});
