@@ -573,3 +573,12 @@ test('a placed ship may be moved onto cells it currently occupies', async ({ pag
 
   expect(await page.evaluate(() => bsShipByName('Destroyer').cells[0])).toEqual({ x: 4, y: 3 });
 });
+
+test('tapping a ship in the dock does nothing', async ({ page }) => {
+  await openBattleship(page);
+
+  await page.locator('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell').first().click();
+
+  expect(await page.evaluate(() => bsShipByName('Submarine'))).toBeUndefined();
+  await expect(page.locator('.bs-dock-ship[data-ship="Submarine"]')).not.toHaveClass(/placed/);
+});
