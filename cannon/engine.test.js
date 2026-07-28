@@ -23,6 +23,9 @@ test('clampDamage keeps the teacher setting inside 1..50', () => {
   assert.strictEqual(E.clampDamage(10.4), 10);
   assert.strictEqual(E.clampDamage('abc'), E.DEFAULT_DAMAGE);
   assert.strictEqual(E.clampDamage(undefined), E.DEFAULT_DAMAGE);
+  assert.strictEqual(E.clampDamage(null), E.DEFAULT_DAMAGE);
+  assert.strictEqual(E.clampDamage(''), E.DEFAULT_DAMAGE);
+  assert.strictEqual(E.clampDamage('   '), E.DEFAULT_DAMAGE);
 });
 
 test('applyDamage stops exactly at the floor and never goes below', () => {

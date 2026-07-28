@@ -26,6 +26,8 @@
   }
 
   function clampDamage(value) {
+    // Treat null, undefined, and whitespace-only strings as DEFAULT_DAMAGE
+    if (value == null || (typeof value === 'string' && !value.trim())) return DEFAULT_DAMAGE;
     const damage = Math.round(Number(value));
     if (!Number.isFinite(damage)) return DEFAULT_DAMAGE;
     return Math.min(MAX_DAMAGE, Math.max(1, damage));
