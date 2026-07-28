@@ -369,3 +369,29 @@ test('offline, firing is blocked but scanning stays available', async ({ page })
   await expect(page.locator('#cannonScanBtn')).toBeEnabled();
   await expect(page.locator('#cannonPanel')).toContainText('Perlu internet untuk menembak');
 });
+
+test('the offline hint does not duplicate across repeated renders', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.evaluate(() => { browserOnline = false; updateConnectivityBadge(); });
+  const fab = page.locator('#cannonFab');
+  const closeBtn = page.getByRole('button', { name: 'Tutup panel meriam' });
+
+  // A double-tapped fab (children do this constantly) calls openCannonPanel
+  // — and therefore renderCannonPanel — twice while the panel is already
+  // open, offline both times.
+  await fab.click();
+  await fab.click();
+  await expect(page.locator('#cannonOfflineHint')).toHaveCount(1);
+
+  // Closing and reopening re-renders again, still offline.
+  await closeBtn.click();
+  await fab.click();
+  await expect(page.locator('#cannonOfflineHint')).toHaveCount(1);
+
+  // Coming back online and re-rendering must remove the hint entirely, not
+  // just the first of several stacked copies (getElementById would only
+  // find one even if duplicates existed).
+  await page.evaluate(() => { browserOnline = true; updateConnectivityBadge(); renderCannonPanel(); });
+  await expect(page.locator('#cannonOfflineHint')).toHaveCount(0);
+});

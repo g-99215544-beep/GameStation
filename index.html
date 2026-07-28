@@ -1356,6 +1356,13 @@ function renderCannonPanel(){
     ? `Peluru anda: ${'💣'.repeat(ammo)} <span>(${ammo})</span>`
     : 'Peluru anda: <span>0</span><br><small class="cannon-hint">Cari QR meriam untuk dapat peluru.</small>';
   const ids=Object.keys(groups||{}).filter(gid=>String(gid)!==String(currentGroupId));
+  const offlineHint=offline
+    ? '<p class="cannon-hint" id="cannonOfflineHint">📴 Perlu internet untuk menembak. Anda masih boleh scan QR meriam.</p>'
+    : '';
+  // Rebuilt wholesale (not appended) on every render, including the offline
+  // hint, so repeated renders — e.g. closing and reopening the panel offline,
+  // or a double-tapped fab — can never stack duplicate #cannonOfflineHint
+  // nodes the way a separate insertAdjacentHTML call would.
   list.innerHTML=ids.map(gid=>{
     const p=allProgress[gid]||{};
     const hp=CannonEngine.readHp(p);
@@ -1370,9 +1377,7 @@ function renderCannonPanel(){
     return `<div class="cannon-target${inBattle?'':' is-won'}" data-gid="${gid}">
       <span class="cannon-target-name">Kumpulan ${gid}</span>${bar}${action}
     </div>`;
-  }).join('');
-  if(offline) list.insertAdjacentHTML('afterend','<p class="cannon-hint" id="cannonOfflineHint">📴 Perlu internet untuk menembak. Anda masih boleh scan QR meriam.</p>');
-  else document.getElementById('cannonOfflineHint')?.remove();
+  }).join('') + offlineHint;
 }
 // Filled in by Task 9.
 function openCannonScanner(){}
