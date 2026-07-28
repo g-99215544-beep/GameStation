@@ -89,9 +89,11 @@ test('applyDamage stops exactly at the floor and never goes below', () => {
   assert.strictEqual(E.applyDamage(100, 10), 90);
   assert.strictEqual(E.applyDamage(55, 10), 50);
   assert.strictEqual(E.applyDamage(50, 10), 50);
+  // 100 shots is past the floor for every damage value: the slowest, damage 1,
+  // needs 50 to walk 100 down to 50.
   for (let damage = 1; damage <= 50; damage++) {
     let hp = 100;
-    for (let shot = 0; shot < 40; shot++) hp = E.applyDamage(hp, damage);
+    for (let shot = 0; shot < 100; shot++) hp = E.applyDamage(hp, damage);
     assert.strictEqual(hp, E.MIN_HP, `damage ${damage} should settle at the floor`);
   }
 });
