@@ -28,11 +28,14 @@ function seedHunt(overrides = {}) {
     gamestation2026: {
       hunts: {
         h1: {
-          // status must be 'setup', not 'active' — an active session locks every
-          // station/cannon input via syncStationSetupLock() and pushConfig()
-          // refuses to save, which would make it impossible to drive this UI.
+          // status must be 'setup', not 'active', by default — an active session
+          // locks every station/cannon input via syncStationSetupLock() and
+          // pushConfig() refuses to save, which would make it impossible to
+          // drive the admin setup UI. Tests that need a logged-in student to
+          // actually reach the journey map (rather than the "waiting for
+          // session" screen) pass overrides.session to opt into 'active'.
           name: 'Ujian Meriam', createdAt: 1, updatedAt: 1,
-          session: { status: 'setup' },
+          session: overrides.session || { status: 'setup' },
           config: { stations, groups, ...(overrides.config || {}) },
           progress: overrides.progress || Object.fromEntries(
             Object.keys(groups).map(gid => [gid, {
@@ -41,7 +44,12 @@ function seedHunt(overrides = {}) {
           )
         }
       },
-      activeHuntId: null
+      // Left null by default so admin-flow tests (which log in via #adminAccessBtn
+      // and never touch #view-login) are unaffected. watchActiveHunt() only loads
+      // config/groups automatically when this points at a real hunt id, so any
+      // test that drives the student #view-login login form must override it to
+      // 'h1' — otherwise `groups` stays undefined and loginAsGroup() throws.
+      activeHuntId: overrides.activeHuntId !== undefined ? overrides.activeHuntId : null
     }
   };
 }
@@ -230,4 +238,43 @@ test('finishing a station never writes hp, ammo, claimed or incoming', async ({ 
   expect(saved).not.toHaveProperty('ammo');
   expect(saved).not.toHaveProperty('claimed');
   expect(saved).not.toHaveProperty('incoming');
+});
+
+// Logs a student in as the given group id via the login view. Seeded groups
+// use login password `1000 + <group id>` (see seedHunt above).
+async function loginAsGroup(page, groupId) {
+  await page.locator('#groupLoginSelect').selectOption(String(groupId));
+  await page.locator('#groupLoginPass').fill(String(1000 + Number(groupId)));
+  await page.getByRole('button', { name: 'Masuk sebagai Kumpulan' }).click();
+}
+
+test('the ship carries an HP bar sized to the group HP', async ({ page }) => {
+  await openApp(page, seedHunt({
+    activeHuntId: 'h1',
+    session: { status: 'active' },
+    config: { cannon: { enabled: true, damagePercent: 10 }, cannons: {} },
+    progress: {
+      1: { currentIndex: 1, status: 'idle', keys: [1], totalScore: 80, hp: 90, completedStations: { 1: { score: 80 } } },
+      2: { currentIndex: 0, status: 'idle', keys: [], totalScore: 0, completedStations: {} },
+      3: { currentIndex: 0, status: 'idle', keys: [], totalScore: 0, completedStations: {} }
+    }
+  }));
+  await loginAsGroup(page, 1);
+
+  await expect(page.locator('#journeyShipHp')).toBeVisible();
+  await expect(page.locator('#journeyShipHpText')).toHaveText('90%');
+  await expect(page.locator('#journeyShipHpFill')).toHaveCSS('width', /.+/);
+  const width = await page.locator('#journeyShipHpFill').evaluate(el => el.style.width);
+  expect(width).toBe('90%');
+});
+
+test('a group at full health shows a full green bar', async ({ page }) => {
+  await openApp(page, seedHunt({
+    activeHuntId: 'h1',
+    session: { status: 'active' },
+    config: { cannon: { enabled: true, damagePercent: 10 }, cannons: {} }
+  }));
+  await loginAsGroup(page, 2);
+  const width = await page.locator('#journeyShipHpFill').evaluate(el => el.style.width);
+  expect(width).toBe('100%');
 });
