@@ -17,6 +17,7 @@
 <script src="sifir/engine.js"></script>
 <script src="crossword/engine.js"></script>
 <script src="battleship/engine.js"></script>
+<script src="cannon/engine.js"></script>
 <script src="offline/store.js"></script>
 <script src="hunts/registry.js"></script>
 <style>
@@ -47,6 +48,13 @@
   .journey-map-video{display:block;width:100%;height:100%;object-fit:cover;}
   .journey-ship{position:absolute;z-index:2;width:25%;aspect-ratio:320/403;transform:translate(-50%,-88%);background-image:url('assets/ship/ship-sail-sheet.png?v=ship-sail-1');background-size:600% 400%;background-repeat:no-repeat;image-rendering:pixelated;filter:drop-shadow(3px 5px 0 rgba(0,46,81,.36));will-change:left,top,background-position,transform;}
   .journey-ship.facing-left{transform:translate(-50%,-88%) scaleX(-1);}
+  .journey-ship-hp{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;gap:2px;pointer-events:none;z-index:3;}
+  .journey-ship-hp[hidden]{display:none;}
+  .journey-ship-hp-bar{width:54px;height:7px;border-radius:4px;background:var(--red);border:1px solid #00000055;overflow:hidden;}
+  .journey-ship-hp-fill{display:block;height:100%;background:var(--green);transition:width .35s ease;}
+  .journey-ship-hp-text{font-size:10px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000;}
+  .journey-ship-hp.is-hit{animation:shipHpHit .5s ease;}
+  @keyframes shipHpHit{0%,100%{transform:translate(-50%,-100%) scale(1);}40%{transform:translate(-50%,-100%) scale(1.35);}}
   .journey-status{position:absolute;z-index:3;left:50%;top:16px;transform:translateX(-50%);width:max-content;max-width:88%;padding:9px 14px;border:3px solid #704018;border-radius:5px;background:linear-gradient(180deg,#fff5b6,#f0bd53);box-shadow:3px 3px 0 #063a66;color:#12385b;font-family:"Trebuchet MS",system-ui,sans-serif;font-weight:900;text-align:center;text-shadow:1px 1px 0 #fffde6;}
   /* Scoped by id so these always outrank the `.participant-mode button` pirate skin. */
   #journeyIslandButtons .journey-island-button{position:absolute;z-index:4;width:24%;aspect-ratio:1.25;transform:translate(-50%,-50%);margin:0;padding:0;border:2px solid transparent;border-radius:50%;background:transparent;box-shadow:none;text-shadow:none;transition:none;touch-action:manipulation;}
@@ -59,6 +67,35 @@
   .journey-score-popup p{margin:0;font-size:16px;font-weight:700;}
   .journey-score-popup .journey-popup-close{position:absolute;right:7px;top:5px;margin:0;padding:0;width:30px;height:30px;border:0;border-radius:0;background:transparent;box-shadow:none;text-shadow:none;color:#12385b;font-size:28px;line-height:26px;}
   .journey-score-popup .journey-popup-close:hover,.journey-score-popup .journey-popup-close:focus-visible{background:rgba(112,64,24,.12);outline:2px solid #704018;outline-offset:1px;}
+  .cannon-fab{position:absolute;right:12px;bottom:12px;z-index:4;width:56px;height:56px;border-radius:50%;border:none;background:var(--navy);color:#fff;font-size:26px;cursor:pointer;box-shadow:0 4px 12px #0006;}
+  .cannon-fab[hidden]{display:none;}
+  .cannon-fab-count{position:absolute;right:-2px;top:-2px;min-width:22px;height:22px;border-radius:11px;background:var(--gold);color:var(--navy);font-size:12px;font-weight:800;line-height:22px;}
+  .cannon-panel{position:absolute;inset:8% 6%;z-index:6;background:#fff;border-radius:14px;padding:16px;overflow-y:auto;box-shadow:0 10px 40px #0009;}
+  .cannon-panel[hidden]{display:none;}
+  .cannon-ammo{font-size:17px;font-weight:800;margin:6px 0 12px;}
+  .cannon-targets-title{margin:16px 0 8px;}
+  .cannon-target{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #eee;}
+  .cannon-target-name{flex:0 0 96px;font-weight:700;}
+  .cannon-target-hp{flex:1;height:10px;border-radius:5px;background:var(--red);overflow:hidden;}
+  .cannon-target-hp-fill{display:block;height:100%;background:var(--green);}
+  .cannon-target-hp-text{flex:0 0 42px;font-size:12px;font-weight:700;text-align:right;}
+  .cannon-target.is-won{opacity:.55;}
+  .cannon-hint{font-size:13px;color:#8a909b;margin:8px 0 0;}
+  .cannon-video{position:fixed;inset:0;z-index:1200;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .cannon-video[hidden]{display:none;}
+  .cannon-video-stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative;}
+  .cannon-video-el{max-width:100%;max-height:100%;}
+  .cannon-video-caption{position:absolute;left:0;right:0;bottom:6%;text-align:center;color:#fff;font-size:22px;font-weight:800;text-shadow:0 2px 6px #000;padding:0 12px;}
+  .cannon-video-skip{position:fixed;right:14px;top:14px;z-index:1201;background:#ffffff22;color:#fff;border:1px solid #ffffff55;border-radius:8px;padding:8px 12px;font-weight:700;opacity:0;transition:opacity .4s;pointer-events:none;}
+  .cannon-video-skip.is-ready{opacity:1;pointer-events:auto;}
+  @media (orientation:portrait){
+    .cannon-video-stage{width:100vh;height:100vw;transform:rotate(90deg);}
+  }
+  .cannon-hit-prompt{position:fixed;inset:0;z-index:1150;background:#000000cc;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .cannon-hit-prompt[hidden]{display:none;}
+  .cannon-hit-card{background:#fff;border-radius:16px;padding:26px 22px;text-align:center;max-width:340px;width:100%;}
+  .cannon-hit-icon{font-size:64px;line-height:1;}
+  .cannon-hit-card h2{color:var(--red);margin:10px 0 4px;}
   body.map-clue-mode .topbar,body.map-clue-mode .wrap{position:relative;z-index:81;}
   body.map-clue-mode .topbar{background:rgba(10,47,79,.94);backdrop-filter:blur(2px);}
   body.map-clue-mode .wrap{min-height:calc(100vh - 64px);padding-top:28px;}
@@ -198,6 +235,9 @@
   .chest-card .c-grp{font-weight:800;color:var(--navy);margin-top:2px;font-size:15px;}
   .chest-card .c-sub{font-size:12px;color:#888;margin-top:2px;}
   .chest-card .c-score{font-weight:800;color:var(--gold);font-size:18px;margin-top:2px;}
+  .chest-card .c-hp{height:8px;border-radius:4px;background:var(--red);overflow:hidden;margin:6px 8px 2px;}
+  .chest-card .c-hp-fill{display:block;height:100%;background:var(--green);}
+  .chest-card .c-hp-text{font-size:11px;color:#888;text-align:center;}
   .chest-card.locked{opacity:.9;cursor:pointer;}
   .chest-card.ready{border-color:var(--gold);background:#fffaf0;cursor:pointer;animation:chestPulse 1.1s infinite;}
   .chest-card.ready:hover{transform:scale(1.05);}
@@ -256,6 +296,11 @@
   .setup-step{border-top:4px solid #dfe3ea;padding:9px 8px 0;color:#8a909b;font-size:12px;font-weight:800;}
   .setup-step.active{border-color:var(--gold);color:var(--navy);}
   .setup-step.done{border-color:var(--green);color:var(--green);}
+  .cannon-setup{margin-top:18px;border:2px dashed var(--gold);}
+  .cannon-toggle{display:flex;align-items:center;gap:8px;font-weight:700;}
+  .cannon-settings{margin:12px 0;}
+  .cannon-floor-note{font-size:12px;color:#8a909b;margin:6px 0 0;}
+  .cannon-block{border:1px solid #dfe3ea;border-radius:10px;padding:12px;margin:12px 0;}
   .step-number{display:block;font-size:18px;margin-bottom:2px;}
   .step-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid #eee;margin-top:20px;padding-top:16px;}
   .step-actions button{margin:0;}
@@ -272,6 +317,7 @@
   .table-wrap{overflow-x:auto;}
   .qr-grid{display:flex;flex-wrap:wrap;gap:4px;}
   .qr-print{background:#fff;}
+  .qr-print.cannon-qr{border:3px solid var(--red);background:#fff6f5;}
   .feature-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
   .feature-actions button{margin:0;}
   .worksheet-editor{margin-top:14px;padding:14px;background:#fff8df;border:2px solid var(--gold);border-radius:10px;}
@@ -494,6 +540,10 @@
       <source src="map idle pingpong.mp4" type="video/mp4">
     </video>
     <div class="journey-ship" id="journeyShip" aria-hidden="true"></div>
+    <div class="journey-ship-hp" id="journeyShipHp" hidden aria-live="polite">
+      <div class="journey-ship-hp-bar"><span class="journey-ship-hp-fill" id="journeyShipHpFill"></span></div>
+      <span class="journey-ship-hp-text" id="journeyShipHpText">100%</span>
+    </div>
     <div class="journey-status" id="journeyStatus">Sedia berlayar!</div>
     <div id="journeyIslandButtons" aria-label="Pilih pulau"></div>
     <section class="journey-score-popup" id="journeyScorePopup" role="dialog" aria-modal="true" aria-labelledby="journeyScoreTitle" hidden>
@@ -501,11 +551,39 @@
       <h2 id="journeyScoreTitle">Pulau</h2>
       <p id="journeyScoreText"></p>
     </section>
+    <button class="cannon-fab" id="cannonFab" type="button" hidden onclick="openCannonPanel()" aria-label="Buka panel meriam">
+      💣<span class="cannon-fab-count" id="cannonFabCount">0</span>
+    </button>
+    <section class="cannon-panel" id="cannonPanel" role="dialog" aria-modal="true" aria-labelledby="cannonPanelTitle" hidden>
+      <button class="journey-popup-close" type="button" onclick="closeCannonPanel()" aria-label="Tutup panel meriam" title="Tutup">&times;</button>
+      <h2 id="cannonPanelTitle">⚔️ Meriam</h2>
+      <p class="cannon-ammo" id="cannonAmmo"></p>
+      <button class="big secondary" id="cannonScanBtn" onclick="openCannonScanner()">📷 Scan QR Meriam</button>
+      <div id="cannonReader" style="display:none;"></div>
+      <div id="cannonMsg"></div>
+      <h3 class="cannon-targets-title">Pilih sasaran</h3>
+      <div class="cannon-targets" id="cannonTargets"></div>
+    </section>
   </div>
 </section>
 <audio id="journeyShipAudio" preload="auto">
   <source src="Kapal_berlayar_plain_cyan_backgr…_202607201223.mp4" type="video/mp4">
 </audio>
+<section class="cannon-video" id="cannonVideo" hidden aria-live="assertive">
+  <div class="cannon-video-stage">
+    <video class="cannon-video-el" id="cannonVideoEl" playsinline preload="auto"></video>
+    <div class="cannon-video-caption" id="cannonVideoCaption"></div>
+  </div>
+  <button class="cannon-video-skip" id="cannonVideoSkip" type="button" onclick="endCannonVideo()">Langkau ⏭</button>
+</section>
+<section class="cannon-hit-prompt" id="cannonHitPrompt" hidden role="dialog" aria-modal="true" aria-labelledby="cannonHitTitle">
+  <div class="cannon-hit-card">
+    <div class="cannon-hit-icon">💥</div>
+    <h2 id="cannonHitTitle">Kapal anda ditembak!</h2>
+    <p id="cannonHitFrom"></p>
+    <button class="big" onclick="watchPendingHit()">Ketuk untuk lihat</button>
+  </div>
+</section>
 <div class="wrap">
 
   <!-- LOGIN / ROLE SELECT -->
@@ -603,6 +681,22 @@
             <button id="btnRemoveStation" onclick="removeStation()">− Stesen</button>
           </div>
           <div id="stationsArea"></div>
+          <div class="card cannon-setup" id="cannonSetup">
+            <h3>⚔️ Meriam (Pilihan)</h3>
+            <p class="admin-panel-intro">Meriam membolehkan kumpulan menembak kumpulan lain. Setiap QR meriam memberi satu peluru kepada setiap kumpulan, sekali sahaja.</p>
+            <label class="cannon-toggle"><input type="checkbox" id="cannonEnabled" onchange="toggleCannonSetup()"> Aktifkan meriam untuk hunt ini</label>
+            <div id="cannonBody" hidden>
+              <div class="cannon-settings">
+                <label for="cannonDamage">Damage setiap tembakan (%)</label>
+                <input id="cannonDamage" type="number" min="1" max="50" step="1" value="10">
+                <p class="cannon-floor-note">HP minimum kekal <b>50%</b> — kumpulan tidak boleh dihapuskan sepenuhnya.</p>
+              </div>
+              <div id="cannonsArea"></div>
+              <div class="feature-actions">
+                <button type="button" class="secondary" id="btnAddCannon" onclick="addCannon()">＋ Tambah Meriam</button>
+              </div>
+            </div>
+          </div>
           <div class="feature-actions">
             <button class="secondary" onclick="pushConfig()">Simpan Treasure Hunt</button>
             <button onclick="testStation(1)">Uji Stesen 1</button>
@@ -631,7 +725,7 @@
       <section class="admin-panel" id="admin-panel-qr">
         <div class="card" id="printArea">
           <h3>QR Tersembunyi</h3>
-          <p class="admin-panel-intro">Jana QR untuk setiap stesen, kemudian cetak dan sorokkan di lokasi clue.</p>
+          <p class="admin-panel-intro">Jana QR untuk setiap stesen dan setiap meriam, kemudian cetak dan sorokkan di lokasi clue. QR meriam bertanda merah.</p>
           <div class="feature-actions">
             <button class="secondary" onclick="generateQRs()">Jana QR Stesen</button>
             <button onclick="printQRCodes()">Cetak QR: Satu QR Setiap Halaman</button>
@@ -674,7 +768,7 @@
         <div class="card">
           <h3>Dashboard Live</h3>
           <p class="admin-panel-intro">Pantau kemajuan semua kumpulan secara langsung sepanjang treasure hunt.</p>
-          <div class="table-wrap"><table id="dashTable"><thead><tr><th>Kump</th><th>Status</th><th>Perjalanan</th><th>Selesai</th><th>Kunci</th><th>Markah</th></tr></thead><tbody id="dashRows"></tbody></table></div>
+          <div class="table-wrap"><table id="dashTable"><thead><tr><th>Kump</th><th>Status</th><th>Perjalanan</th><th>Selesai</th><th>Kunci</th><th>HP</th><th>Markah</th></tr></thead><tbody id="dashRows"></tbody></table></div>
         </div>
       </section>
     </div>
@@ -921,22 +1015,52 @@ function updateConnectivityBadge(){
   if(syncingOfflineWrites){ badge.hidden=false; badge.textContent='🔄 Menyelaras…'; return; }
   badge.hidden=!isOffline();
   if(isOffline()) badge.textContent='📴 Luar Talian';
+  // The cannon panel is routinely opened offline, so connectivity returning is
+  // the moment it can finally load targets and enable firing.
+  const cannonPanel=document.getElementById('cannonPanel');
+  if(cannonPanel && !cannonPanel.hidden){
+    attachCannonProgressListener();
+    renderCannonPanel();
+  }
 }
 function cacheConfig(){
-  writeLocalJson(OfflineStore.CONFIG_CACHE_KEY,{huntId:currentHuntId,stations:stations||{},groups:groups||{},stationCount,ts:Date.now()});
+  writeLocalJson(OfflineStore.CONFIG_CACHE_KEY,{huntId:currentHuntId,stations:stations||{},groups:groups||{},cannon:cannonConfig,cannons:cannons||{},stationCount,ts:Date.now()});
 }
 function applyConfigCache(cfg){
   stations=(cfg&&cfg.stations)||{};
   groups=(cfg&&cfg.groups)||{};
+  cannonConfig={
+    enabled:!!(cfg&&cfg.cannon&&cfg.cannon.enabled),
+    damagePercent:CannonEngine.clampDamage(cfg&&cfg.cannon&&cfg.cannon.damagePercent)
+  };
+  cannons=(cfg&&cfg.cannons)||{};
   stationCount=StationLayout.clampStationCount((cfg&&cfg.stationCount) || Object.keys(stations).length);
   renderGroupLoginOptions();
   buildStationsUI(stations);
+  const enabledBox=document.getElementById('cannonEnabled');
+  if(enabledBox) enabledBox.checked=cannonConfig.enabled;
+  const damageBox=document.getElementById('cannonDamage');
+  if(damageBox) damageBox.value=cannonConfig.damagePercent;
+  const body=document.getElementById('cannonBody');
+  if(body) body.hidden=!cannonConfig.enabled;
+  buildCannonsUI(cannons);
 }
 function cachedSession(){ return readLocalJson(OfflineStore.SESSION_CACHE_KEY); }
 function firebaseOnceWithTimeout(ref, timeoutMs=5000){
   return new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>reject(new Error('Sambungan mengambil masa terlalu lama.')),timeoutMs);
     ref.once('value').then(value=>{ clearTimeout(timer); resolve(value); },error=>{ clearTimeout(timer); reject(error); });
+  });
+}
+// Firebase queues a write instead of rejecting it when the socket is down, so
+// the returned promise can simply never settle. Every other write in this app
+// is fire-and-forget with a .catch(), but firing a cannon has to await its
+// result, so it needs a deadline — otherwise an awaited write that never
+// settles strands the caller and everything after it.
+function firebaseWriteWithTimeout(promise, timeoutMs=6000){
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('timeout')),timeoutMs);
+    promise.then(value=>{ clearTimeout(timer); resolve(value); },error=>{ clearTimeout(timer); reject(error); });
   });
 }
 function clearCachedProgress(gid){ if(gid) removeLocalValue(progressCacheKey(gid)); }
@@ -956,7 +1080,7 @@ function flushPendingWrites(){
   const queue=readLocalJson(OfflineStore.PENDING_KEY)||[];
   if(!db || isOffline() || syncingOfflineWrites || !queue.length) return Promise.resolve();
   syncingOfflineWrites=true; updateConnectivityBadge();
-  return Promise.all(queue.map(item=>db.ref(item.path).set(item.data)))
+  return Promise.all(queue.map(item=>db.ref(item.path).update(item.data)))
     .then(()=>removeLocalValue(OfflineStore.PENDING_KEY))
     .catch(()=>{})
     .finally(()=>{ syncingOfflineWrites=false; updateConnectivityBadge(); });
@@ -981,6 +1105,8 @@ function initConnectivity(){
 // Session lifecycle so the app is reusable across events: admin presses Mula to
 // start, Tamat to end. status: 'setup' (not started) | 'active' | 'ended'.
 let sessionInfo = {status:'setup'};
+let cannonConfig = {enabled:false, damagePercent:CannonEngine.DEFAULT_DAMAGE};
+let cannons = {};
 const PARTICIPANT_VIEW_IDS = new Set(['view-login','view-session','view-clue','view-game','view-result','view-chest']);
 
 const DAILY_INTRO_KEY = 'game_station_intro_last_seen';
@@ -1055,9 +1181,31 @@ function setJourneyShipFrame(frame){
 }
 function placeJourneyShip(point){
   const ship=document.getElementById('journeyShip');
+  const hp=document.getElementById('journeyShipHp');
+  if(hp){
+    hp.style.left=point.x+'%';
+    hp.style.top=(point.y-4)+'%';
+  }
   if(!ship) return;
   ship.style.left=point.x+'%';
   ship.style.top=point.y+'%';
+}
+function renderShipHp(){
+  const wrap=document.getElementById('journeyShipHp');
+  const fill=document.getElementById('journeyShipHpFill');
+  const text=document.getElementById('journeyShipHpText');
+  if(!wrap||!fill||!text) return;
+  const hp=CannonEngine.readHp(progress);
+  wrap.hidden=false;
+  fill.style.width=hp+'%';
+  text.textContent=hp+'%';
+}
+function flashShipHpHit(){
+  const wrap=document.getElementById('journeyShipHp');
+  if(!wrap) return;
+  wrap.classList.remove('is-hit');
+  void wrap.offsetWidth;            // restart the animation
+  wrap.classList.add('is-hit');
 }
 function setJourneyShipDirection(from,to){
   const ship=document.getElementById('journeyShip');
@@ -1121,6 +1269,11 @@ function hideJourneyMap(){
   if(popup) popup.hidden=true;
   stopJourneyShipAudio();
   document.body.classList.remove('map-clue-mode');
+  const shipHp=document.getElementById('journeyShipHp');
+  if(shipHp) shipHp.hidden=true;
+  closeCannonPanel();
+  const fab=document.getElementById('cannonFab');
+  if(fab) fab.hidden=true;
 }
 function renderJourneyIslandButtons(){
   const holder=document.getElementById('journeyIslandButtons');
@@ -1197,9 +1350,352 @@ function showJourneyMap(){
   closeJourneyScorePopup();
   placeJourneyShip(shipPoint);
   setJourneyShipFrame(0);
+  renderShipHp();
   if(status) status.textContent='Pilih pulau seterusnya atau pulau yang sudah selesai.';
   renderJourneyIslandButtons();
   playJourneyMapPingPong();
+  syncCannonFab();
+}
+let allProgress={};
+let cannonProgressRef=null;
+// Registered on progress/<gid> by showGoToBoard. Held here so logout() can
+// detach it — the hunt-root off() there cannot reach a child-path listener.
+let chestProgressRef=null;
+// Set for the duration of a single fireCannonAt() call. Firing spends ammo
+// via a Firebase transaction, which guards the *count*, but nothing stopped
+// a double-tap from starting two overlapping calls before the first one's
+// transaction resolved — both could pass the ammo check, and since the video
+// overlay/its resolver (cannonVideoDone) are singletons, the second call's
+// playCannonVideo() would silently strand the first call's await forever.
+let cannonShotInFlight=false;
+
+function cannonEnabled(){
+  return !!(cannonConfig && cannonConfig.enabled) && CannonEngine.isInBattle(progress);
+}
+function syncCannonFab(){
+  const fab=document.getElementById('cannonFab');
+  const count=document.getElementById('cannonFabCount');
+  if(!fab) return;
+  fab.hidden=!cannonEnabled();
+  if(count) count.textContent=String(CannonEngine.readAmmo(progress));
+}
+function openCannonPanel(){
+  const panel=document.getElementById('cannonPanel');
+  if(!panel || !cannonEnabled()) return;
+  panel.hidden=false;
+  setCannonMsg('','');
+  attachCannonProgressListener();
+  renderCannonPanel();
+}
+// Other groups' HP is only needed while this panel is open, so the listener
+// lives and dies with it rather than running through every station game.
+// Separate from openCannonPanel because the panel is expected to be opened
+// offline — the Scan button stays live while a group walks the grounds hunting
+// a cannon QR — and must come alive by itself when signal returns, rather than
+// stranding them with a dead panel and no hint to close and reopen it.
+function attachCannonProgressListener(){
+  if(isOffline() || cannonProgressRef) return;
+  cannonProgressRef=huntRef('progress');
+  cannonProgressRef.on('value',snap=>{ allProgress=snap.val()||{}; renderCannonPanel(); });
+}
+function closeCannonPanel(){
+  const panel=document.getElementById('cannonPanel');
+  if(panel) panel.hidden=true;
+  stopCannonScanner();
+  if(cannonProgressRef){ cannonProgressRef.off('value'); cannonProgressRef=null; }
+}
+function setCannonMsg(kind,text){
+  const box=document.getElementById('cannonMsg');
+  if(!box) return;
+  box.innerHTML=text ? `<div class="msg ${kind}">${escapeHtml(text)}</div>` : '';
+}
+function renderCannonPanel(){
+  const ammoBox=document.getElementById('cannonAmmo');
+  const list=document.getElementById('cannonTargets');
+  if(!ammoBox || !list) return;
+  const ammo=CannonEngine.readAmmo(progress);
+  const offline=isOffline();
+  ammoBox.innerHTML=ammo
+    ? `Peluru anda: ${'💣'.repeat(ammo)} <span>(${ammo})</span>`
+    : 'Peluru anda: <span>0</span><br><small class="cannon-hint">Cari QR meriam untuk dapat peluru.</small>';
+  const ids=Object.keys(groups||{}).filter(gid=>String(gid)!==String(currentGroupId));
+  const offlineHint=offline
+    ? '<p class="cannon-hint" id="cannonOfflineHint">📴 Perlu internet untuk menembak. Anda masih boleh scan QR meriam.</p>'
+    : '';
+  // Rebuilt wholesale (not appended) on every render, including the offline
+  // hint, so repeated renders — e.g. closing and reopening the panel offline,
+  // or a double-tapped fab — can never stack duplicate #cannonOfflineHint
+  // nodes the way a separate insertAdjacentHTML call would.
+  list.innerHTML=ids.map(gid=>{
+    const p=allProgress[gid]||{};
+    const hp=CannonEngine.readHp(p);
+    const inBattle=CannonEngine.isInBattle(p);
+    const canFire=inBattle && ammo>0 && !offline && !cannonShotInFlight;
+    const action=inBattle
+      ? `<button type="button" ${canFire?'':'disabled'} onclick="fireCannonAt('${gid}')" aria-label="Tembak Kumpulan ${gid}">🔥</button>`
+      : '<span class="cannon-target-hp-text">🏆 sudah buka peti</span>';
+    const bar=inBattle
+      ? `<div class="cannon-target-hp"><span class="cannon-target-hp-fill" style="width:${hp}%"></span></div><span class="cannon-target-hp-text">${hp}%</span>`
+      : '';
+    return `<div class="cannon-target${inBattle?'':' is-won'}" data-gid="${gid}">
+      <span class="cannon-target-name">Kumpulan ${gid}</span>${bar}${action}
+    </div>`;
+  }).join('') + offlineHint;
+}
+let cannonQrCode=null;
+function openCannonScanner(){
+  const reader=document.getElementById('cannonReader');
+  if(!reader) return;
+  reader.style.display='block';
+  cannonQrCode=new Html5Qrcode('cannonReader');
+  const onFound=text=>{
+    stopCannonScanner();
+    if(navigator.vibrate) navigator.vibrate(200);
+    redeemCannonPassword(text);
+  };
+  Html5Qrcode.getCameras().then(cams=>{
+    const camId=cams.length ? (cams.find(c=>/back|rear/i.test(c.label))||cams[cams.length-1]).id : null;
+    cannonQrCode.start(camId||{facingMode:'environment'},{fps:10,qrbox:220},onFound);
+  }).catch(()=>{ cannonQrCode.start({facingMode:'environment'},{fps:10,qrbox:220},onFound); });
+}
+function stopCannonScanner(){
+  const reader=document.getElementById('cannonReader');
+  if(reader) reader.style.display='none';
+  if(!cannonQrCode) return;
+  const scanner=cannonQrCode;
+  cannonQrCode=null;
+  try{ scanner.stop().catch(()=>{}); }catch(_){}
+}
+function redeemCannonPassword(raw){
+  const password=String(raw||'').trim().replace(/[^A-Za-z0-9]/g,'').slice(0,5);
+  const cid=CannonEngine.findByPassword(cannons,password);
+  if(!cid){
+    playGameSfx('wrong');
+    setCannonMsg('err','Ini bukan QR meriam. Cuba QR yang lain.');
+    return;
+  }
+  if(CannonEngine.hasClaimed(progress,cid)){
+    setCannonMsg('','Peluru meriam ini sudah anda ambil.');
+    return;
+  }
+  setCannonMsg('','');
+  closeCannonPanel();
+  window._cannonId=cid;
+  startGame(cid, cannons[cid]);
+}
+const CANNON_VIDEO_SRC = {fire:'assets/cannon/fire.mp4', hit:'assets/cannon/hit.mp4'};
+let cannonVideoDone=null;
+
+function playCannonVideo(kind, caption){
+  const overlay=document.getElementById('cannonVideo');
+  const video=document.getElementById('cannonVideoEl');
+  const text=document.getElementById('cannonVideoCaption');
+  const skip=document.getElementById('cannonVideoSkip');
+  if(!overlay||!video) return Promise.resolve();
+  if(text) text.textContent=caption||'';
+  overlay.hidden=false;
+  if(skip){
+    skip.classList.remove('is-ready');
+    window.setTimeout(()=>skip.classList.add('is-ready'),2000);
+  }
+  // Fullscreen and the orientation lock both need the user gesture that led
+  // here; failures are silent because the CSS fallback already rotates.
+  try{ overlay.requestFullscreen && overlay.requestFullscreen().catch(()=>{}); }catch(_){}
+  try{ screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(()=>{}); }catch(_){}
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    window.setTimeout(endCannonVideo,1200);
+    return new Promise(resolve=>{ cannonVideoDone=resolve; });
+  }
+  video.src=CANNON_VIDEO_SRC[kind]||CANNON_VIDEO_SRC.fire;
+  video.currentTime=0;
+  video.onended=endCannonVideo;
+  video.onerror=endCannonVideo;
+  video.play().catch(()=>endCannonVideo());
+  return new Promise(resolve=>{ cannonVideoDone=resolve; });
+}
+function endCannonVideo(){
+  const overlay=document.getElementById('cannonVideo');
+  const video=document.getElementById('cannonVideoEl');
+  if(video){ video.onended=null; video.onerror=null; try{ video.pause(); }catch(_){} video.removeAttribute('src'); }
+  if(overlay) overlay.hidden=true;
+  try{ document.fullscreenElement && document.exitFullscreen && document.exitFullscreen().catch(()=>{}); }catch(_){}
+  try{ screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); }catch(_){}
+  const resolve=cannonVideoDone;
+  cannonVideoDone=null;
+  resolve && resolve();
+}
+
+// ---------- RECEIVING A HIT ----------
+let cannonHitRef=null;
+let pendingHit=null;
+let showingHit=false;
+
+function watchCannonHits(){
+  if(!currentGroupId) return;
+  if(cannonHitRef) cannonHitRef.off('value');
+  cannonHitRef=huntRef('progress/'+currentGroupId+'/incoming');
+  cannonHitRef.on('value',snap=>{
+    pendingHit=CannonEngine.summarizeIncoming(snap.val());
+    maybeShowHitPrompt();
+  });
+}
+function stopWatchingCannonHits(){
+  if(cannonHitRef) cannonHitRef.off('value');
+  cannonHitRef=null;
+  pendingHit=null;
+}
+// A shot must never steal time from a station game: the timer is running and
+// the student is mid-answer. Hold it until they are back on a safe screen.
+function hitSafeToShow(){
+  const game=document.getElementById('view-game');
+  return !(game && game.classList.contains('active')) && !showingHit;
+}
+function clearPendingHits(ids){
+  const list=ids||(pendingHit&&pendingHit.ids)||[];
+  if(!list.length) return Promise.resolve();
+  const updates={};
+  list.forEach(id=>{ updates[id]=null; });
+  pendingHit=null;
+  return huntRef('progress/'+currentGroupId+'/incoming').update(updates).catch(()=>{});
+}
+function maybeShowHitPrompt(){
+  if(!pendingHit) return;
+  // Their marks are already announced and the damage is already counted, so
+  // replaying a battle animation over the celebration would only confuse.
+  // The prompt may already be visible (shown for this same hit before the
+  // group won — e.g. while waiting on the chest screen, still "in battle"),
+  // so it must be actively hidden here too, not just left for whoever last
+  // rendered it: a status change can arrive on a listener that fires after
+  // the one that already flipped prompt.hidden=false.
+  if(!CannonEngine.isInBattle(progress)){
+    const stale=document.getElementById('cannonHitPrompt');
+    if(stale) stale.hidden=true;
+    clearPendingHits();
+    return;
+  }
+  if(!hitSafeToShow()) return;
+  const prompt=document.getElementById('cannonHitPrompt');
+  const from=document.getElementById('cannonHitFrom');
+  if(!prompt) return;
+  if(from) from.textContent=pendingHit.count>1
+    ? `Anda ditembak ${pendingHit.count} kali! HP anda kini ${pendingHit.hpAfter}%.`
+    : `oleh Kumpulan ${pendingHit.from} — HP anda kini ${pendingHit.hpAfter}%.`;
+  prompt.hidden=false;
+}
+async function watchPendingHit(){
+  const hit=pendingHit;
+  const prompt=document.getElementById('cannonHitPrompt');
+  if(prompt) prompt.hidden=true;
+  if(!hit) return;
+  showingHit=true;
+  progress={...progress, hp:hit.hpAfter};
+  writeLocalJson(progressCacheKey(currentGroupId),progress);
+  renderShipHp();
+  const caption=hit.count>1
+    ? `Anda ditembak ${hit.count} kali! HP: ${hit.hpAfter}%`
+    : `Ditembak Kumpulan ${hit.from}! HP: ${hit.hpAfter}%`;
+  await playCannonVideo('hit',caption);
+  await clearPendingHits(hit.ids);
+  showingHit=false;
+  renderShipHp();
+  flashShipHpHit();
+  renderCannonPanel();
+  maybeShowHitPrompt();
+}
+
+async function fireCannonAt(targetGid){
+  // Guards the *firing state*, not the ammo count — the ammo transaction below
+  // already guards the count. Without this, a double-tap starts two overlapping
+  // calls before the first's transaction resolves; both can pass the ammo
+  // check, and since the video overlay's resolver (cannonVideoDone) is a
+  // single module-level variable, the second call's playCannonVideo()
+  // silently strands the first call's await forever.
+  if(cannonShotInFlight) return;
+  if(isOffline()){ setCannonMsg('err','Perlu internet untuk menembak.'); return; }
+  if(!CannonEngine.isInBattle(progress)){ setCannonMsg('err','Peti anda sudah dibuka — pertempuran tamat.'); return; }
+  const target=allProgress[targetGid];
+  if(!CannonEngine.isInBattle(target)){ setCannonMsg('err',`Kumpulan ${targetGid} sudah buka peti.`); return; }
+  const damage=CannonEngine.clampDamage(cannonConfig.damagePercent);
+  const ammoRef=huntRef('progress/'+currentGroupId+'/ammo');
+  cannonShotInFlight=true;
+  try{
+    let spend;
+    try{
+      spend=await firebaseWriteWithTimeout(ammoRef.transaction(current=>{
+        const have=CannonEngine.readAmmo({ammo:current});
+        return have<1 ? undefined : have-1;    // undefined aborts the transaction
+      }));
+    }catch(_spendErr){
+      // The write never settled, so we do not know whether Firebase will
+      // eventually commit it. Leave the local count alone and let the child
+      // retry: if the queued write does land later, the panel's own listener
+      // corrects the count, and a retry in the meantime simply aborts on an
+      // empty magazine rather than spending a second cannonball.
+      setCannonMsg('err','Tembakan gagal — cuba lagi.');
+      return;
+    }
+    if(!spend.committed){ setCannonMsg('err','Tiada peluru meriam.'); renderCannonPanel(); return; }
+    // Mirror what Firebase actually committed, not a parallel guess recomputed
+    // from the (possibly stale) local `progress` cache.
+    progress={...progress, ammo:CannonEngine.readAmmo({ammo:spend.snapshot.val()})};
+    syncCannonFab();
+    renderCannonPanel();
+
+    let hpAfter=null;
+    try{
+      // Scoped to only the Firebase writes that must succeed together for the
+      // shot to have "landed" — the hp transaction and the incoming push.
+      // playCannonVideo() below is deliberately outside this try: by the time
+      // it runs, the hit has already landed and is visible to the victim, so
+      // a video-playback failure must never be treated as "the shot failed"
+      // and trigger a refund for a shot that really connected.
+      // Runs on the whole progress node rather than just hp, because the abort
+      // condition the design calls for — "do not shoot a group that already
+      // opened its chest" — lives in a sibling field the hp node cannot see.
+      // Checking the shooter's cached copy beforehand is not enough: a chest
+      // opened in the moment between that read and this write would otherwise
+      // take damage its already-frozen final score can never reflect.
+      const hit=await firebaseWriteWithTimeout(huntRef('progress/'+targetGid)
+        .transaction(current=>{
+          if(current && current.status==='won') return undefined;   // aborts
+          return {...(current||{}), hp:CannonEngine.applyDamage(current&&current.hp, damage)};
+        }));
+      // The updater aborts for exactly one reason, so an uncommitted result
+      // means the target opened their chest between the shooter's cached read
+      // and this write. Worth saying plainly — "tembakan gagal" would leave a
+      // child thinking the app broke.
+      if(!hit.committed) throw new Error('won');
+      hpAfter=CannonEngine.readHp(hit.snapshot.val());
+      await firebaseWriteWithTimeout(huntRef('progress/'+targetGid+'/incoming')
+        .push({from:String(currentGroupId), ts:Date.now(), damage, hpAfter}));
+    }catch(hitErr){
+      // The refund is itself a network write and can itself fail. If it
+      // throws, the ammo stays spent in Firebase with nothing landed for it —
+      // exactly what a child must not be left with — so contain the failure:
+      // the child still gets a message and a fresh panel even though the
+      // local ammo count may now be stale until the next sync.
+      try{
+        const refund=await firebaseWriteWithTimeout(ammoRef.transaction(current=>CannonEngine.readAmmo({ammo:current})+1));
+        if(refund.committed) progress={...progress, ammo:CannonEngine.readAmmo({ammo:refund.snapshot.val()})};
+      }catch(_refundErr){}
+      syncCannonFab();
+      setCannonMsg('err', hitErr && hitErr.message==='won'
+        ? `Kumpulan ${targetGid} sudah buka peti — peluru dipulangkan.`
+        : 'Tembakan gagal — peluru dipulangkan.');
+      renderCannonPanel();
+      return;
+    }
+    await playCannonVideo('fire',`Tembakan tepat! Kumpulan ${targetGid} → ${hpAfter}%`);
+    setCannonMsg('ok',`Kumpulan ${targetGid} kena tembak. HP mereka kini ${hpAfter}%.`);
+    renderCannonPanel();
+  } finally {
+    cannonShotInFlight=false;
+    // The in-flight flag only affects rendering (disabling the fire buttons);
+    // flipping it back without a matching render would leave a just-fired
+    // target's button looking disabled until some unrelated write happens to
+    // trigger the panel's live listener.
+    renderCannonPanel();
+  }
 }
 function selectJourneyIsland(position){
   if(journeyMoving || !document.getElementById('journeyScorePopup')?.hidden) return;
@@ -1484,6 +1980,11 @@ function showNoActiveHunt(){
     if(card) card.innerHTML='<div style="font-size:64px;">⌛</div><h2>Belum Ada Treasure Hunt Aktif</h2><p>Guru belum memulakan Treasure Hunt. Halaman ini akan bersedia secara automatik apabila sesi dimulakan.</p>';
     return;
   }
+  // Same reasoning as logout(): this drops a group back to the login screen
+  // without going through it, so a chest-screen listener left attached would
+  // keep writing the previous group's status and hp into the global.
+  if(chestProgressRef){ chestProgressRef.off('value'); chestProgressRef=null; }
+  stopWatchingCannonHits();
   show('view-login');
   const msg=document.getElementById('groupLoginMsg');
   if(msg) msg.innerHTML='<div class="msg">Belum ada Treasure Hunt aktif. Tunggu guru tekan Mula.</div>';
@@ -1791,8 +2292,14 @@ function logout(){
   if(timerInterval) clearInterval(timerInterval);
   if(html5QrCode){ html5QrCode.stop().catch(()=>{}); }
   huntRef().off('value');
+  stopWatchingCannonHits();
+  // Registered on progress/<gid>, so the hunt-root off() above never reaches
+  // it. Left attached, it would keep firing after the next group logs in on
+  // this phone and overwrite their progress with the previous group's.
+  if(chestProgressRef){ chestProgressRef.off('value'); chestProgressRef=null; }
   document.body.classList.remove('board-mode');
   currentGroupId = null;
+  progress = {};
   clearSession();
   document.getElementById('topTitle').innerText='🎯 Game Station';
   document.getElementById('timer').style.display='none';
@@ -1913,16 +2420,16 @@ function worksheetQuestionsFromRaw(raw){
 function escapeHtml(value){
   return String(value==null?'':value).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
-function getWorksheetQuestionsFromEditor(i){
-  const rows=document.querySelectorAll(`#worksheet_editor_${i} .worksheet-question-row`);
+function getWorksheetQuestionsFromEditor(key){
+  const rows=document.querySelectorAll(`#worksheet_editor_${key} .worksheet-question-row`);
   const questions=Array.from(rows).map(row=>({
     answer:(row.querySelector('.worksheet-answer')?.value||'').trim(),
     image:safeWorksheetImage(row.querySelector('.worksheet-image-data')?.value)
   }));
   return questions.length ? questions : [{answer:'',image:''}];
 }
-function setWorksheetImageValue(i,index,image,status){
-  const row=document.querySelector(`#worksheet_editor_${i} .worksheet-question-row[data-question-index="${index}"]`);
+function setWorksheetImageValue(key,index,image,status){
+  const row=document.querySelector(`#worksheet_editor_${key} .worksheet-question-row[data-question-index="${index}"]`);
   if(!row) return;
   const safe=safeWorksheetImage(image);
   const data=row.querySelector('.worksheet-image-data');
@@ -1939,8 +2446,8 @@ function setWorksheetImageValue(i,index,image,status){
   if(clear) clear.hidden=!safe;
   if(message) message.textContent=status || (safe?'Gambar sedia untuk dipaparkan kepada murid.':'Tiada gambar — soalan ini akan menggunakan lembaran bercetak.');
 }
-function setWorksheetImageStatus(i,index,status){
-  const message=document.querySelector(`#worksheet_editor_${i} .worksheet-question-row[data-question-index="${index}"] .worksheet-image-status`);
+function setWorksheetImageStatus(key,index,status){
+  const message=document.querySelector(`#worksheet_editor_${key} .worksheet-question-row[data-question-index="${index}"] .worksheet-image-status`);
   if(message) message.textContent=status;
 }
 function worksheetCanvasDataUrl(canvas,quality){
@@ -1984,82 +2491,84 @@ async function prepareWorksheetImage(file){
   if(lastDataUrl && worksheetDataUrlBytes(lastDataUrl)<=WORKSHEET_IMAGE_MAX_BYTES) return lastDataUrl;
   throw new Error('Gambar masih terlalu besar selepas dikecilkan. Cuba crop gambar dahulu.');
 }
-async function setWorksheetImageFromFile(i,index,file){
+async function setWorksheetImageFromFile(key,index,file){
   if(!file) return;
-  const row=document.querySelector(`#worksheet_editor_${i} .worksheet-question-row[data-question-index="${index}"]`);
+  const row=document.querySelector(`#worksheet_editor_${key} .worksheet-question-row[data-question-index="${index}"]`);
   if(!row) return;
   const previous=safeWorksheetImage(row.querySelector('.worksheet-image-data')?.value);
   const job=`${Date.now()}-${Math.random()}`;
   row.dataset.imageJob=job;
-  setWorksheetImageStatus(i,index,'Memproses gambar…');
+  setWorksheetImageStatus(key,index,'Memproses gambar…');
   try{
     const image=await prepareWorksheetImage(file);
-    const current=document.querySelector(`#worksheet_editor_${i} .worksheet-question-row[data-question-index="${index}"]`);
+    const current=document.querySelector(`#worksheet_editor_${key} .worksheet-question-row[data-question-index="${index}"]`);
     if(!current || current.dataset.imageJob!==job) return;
-    setWorksheetImageValue(i,index,image,'Gambar sedia untuk dipaparkan kepada murid.');
+    setWorksheetImageValue(key,index,image,'Gambar sedia untuk dipaparkan kepada murid.');
   }catch(error){
-    const current=document.querySelector(`#worksheet_editor_${i} .worksheet-question-row[data-question-index="${index}"]`);
+    const current=document.querySelector(`#worksheet_editor_${key} .worksheet-question-row[data-question-index="${index}"]`);
     if(!current || current.dataset.imageJob!==job) return;
-    setWorksheetImageValue(i,index,previous,error.message||'Gambar tidak dapat diproses.');
+    setWorksheetImageValue(key,index,previous,error.message||'Gambar tidak dapat diproses.');
   }
 }
-function pasteWorksheetImage(event,i,index){
+function pasteWorksheetImage(event,key,index){
   const items=Array.from((event.clipboardData&&event.clipboardData.items)||[]);
   const item=items.find(candidate=>candidate.kind==='file' && String(candidate.type||'').startsWith('image/'));
   const file=item&&item.getAsFile();
   event.preventDefault();
   if(!file){
-    setWorksheetImageStatus(i,index,'Clipboard tidak mengandungi gambar PNG, JPG atau WebP.');
+    setWorksheetImageStatus(key,index,'Clipboard tidak mengandungi gambar PNG, JPG atau WebP.');
     return;
   }
-  setWorksheetImageFromFile(i,index,file);
+  setWorksheetImageFromFile(key,index,file);
 }
-function clearWorksheetImage(i,index){
-  const row=document.querySelector(`#worksheet_editor_${i} .worksheet-question-row[data-question-index="${index}"]`);
+function clearWorksheetImage(key,index){
+  const row=document.querySelector(`#worksheet_editor_${key} .worksheet-question-row[data-question-index="${index}"]`);
   if(row) delete row.dataset.imageJob;
-  setWorksheetImageValue(i,index,'','Gambar dibuang. Soalan ini akan menggunakan lembaran bercetak.');
+  setWorksheetImageValue(key,index,'','Gambar dibuang. Soalan ini akan menggunakan lembaran bercetak.');
 }
-function renderWorksheetEditor(i,questions){
-  const editor=document.getElementById('worksheet_editor_'+i);
+function renderWorksheetEditor(key,questions){
+  const editor=document.getElementById('worksheet_editor_'+key);
   if(!editor) return;
   const normalized=questions.map(question=>({
     answer:String(question&&question.answer||''),
     image:safeWorksheetImage(question&&question.image)
   }));
-  const rows=normalized.map((question,index)=>`<div class="worksheet-question-row" data-question-index="${index}" onpaste="pasteWorksheetImage(event,${i},${index})">
+  const rows=normalized.map((question,index)=>`<div class="worksheet-question-row" data-question-index="${index}" onpaste="pasteWorksheetImage(event,'${key}',${index})">
     <label>Soalan ${index+1} — jawapan betul</label>
-    <div class="worksheet-answer-line"><input class="worksheet-answer" value="${escapeHtml(question.answer)}" placeholder="Contoh: 23440 atau sabun" autocomplete="off">${normalized.length>1?`<button type="button" class="worksheet-remove" onclick="removeWorksheetQuestion(${i},${index})" aria-label="Buang Soalan ${index+1}">Buang</button>`:''}</div>
+    <div class="worksheet-answer-line"><input class="worksheet-answer" value="${escapeHtml(question.answer)}" placeholder="Contoh: 23440 atau sabun" autocomplete="off">${normalized.length>1?`<button type="button" class="worksheet-remove" onclick="removeWorksheetQuestion('${key}',${index})" aria-label="Buang Soalan ${index+1}">Buang</button>`:''}</div>
     <div class="worksheet-image-editor">
       <div class="worksheet-image-preview-wrap" hidden><img class="worksheet-image-preview" alt="Preview Gambar Soalan ${index+1}"></div>
       <div class="worksheet-image-tools">
-        <label class="worksheet-image-pick">📎 Pilih gambar<input class="worksheet-image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden onchange="setWorksheetImageFromFile(${i},${index},this.files[0]);this.value=''"></label>
+        <label class="worksheet-image-pick">📎 Pilih gambar<input class="worksheet-image-input" type="file" accept="image/png,image/jpeg,image/webp" hidden onchange="setWorksheetImageFromFile('${key}',${index},this.files[0]);this.value=''"></label>
         <div class="worksheet-image-paste" role="button" tabindex="0" contenteditable="true" spellcheck="false" aria-label="Paste gambar Soalan ${index+1}">📋 Klik, kemudian Ctrl+V</div>
-        <button type="button" class="worksheet-image-clear" hidden onclick="clearWorksheetImage(${i},${index})">Buang gambar</button>
+        <button type="button" class="worksheet-image-clear" hidden onclick="clearWorksheetImage('${key}',${index})">Buang gambar</button>
       </div>
       <input class="worksheet-image-data" type="hidden">
       <small class="worksheet-image-status" role="status"></small>
     </div>
   </div>`).join('');
-  editor.innerHTML=`<p class="worksheet-help">Masukkan jawapan betul dan, jika mahu, attach atau paste gambar bagi setiap soalan. Gambar akan dipaparkan terus kepada murid di stesen.</p>${rows}<button type="button" class="secondary worksheet-add" onclick="addWorksheetQuestion(${i})">+ Tambah Soalan</button>`;
-  normalized.forEach((question,index)=>setWorksheetImageValue(i,index,question.image));
+  editor.innerHTML=`<p class="worksheet-help">Masukkan jawapan betul dan, jika mahu, attach atau paste gambar bagi setiap soalan. Gambar akan dipaparkan terus kepada murid di stesen.</p>${rows}<button type="button" class="secondary worksheet-add" onclick="addWorksheetQuestion('${key}')">+ Tambah Soalan</button>`;
+  normalized.forEach((question,index)=>setWorksheetImageValue(key,index,question.image));
 }
-function addWorksheetQuestion(i){
-  const questions=getWorksheetQuestionsFromEditor(i);
+function addWorksheetQuestion(key){
+  const questions=getWorksheetQuestionsFromEditor(key);
   questions.push({answer:'',image:''});
-  renderWorksheetEditor(i,questions);
+  renderWorksheetEditor(key,questions);
 }
-function removeWorksheetQuestion(i,index){
-  const questions=getWorksheetQuestionsFromEditor(i);
+function removeWorksheetQuestion(key,index){
+  const questions=getWorksheetQuestionsFromEditor(key);
   questions.splice(index,1);
-  renderWorksheetEditor(i,questions.length?questions:[{answer:'',image:''}]);
+  renderWorksheetEditor(key,questions.length?questions:[{answer:'',image:''}]);
 }
-function toggleWorksheetEditor(i){
-  const gameType=document.getElementById('st_gametype_'+i).value;
+function toggleWorksheetEditor(key){
+  const select=document.getElementById('st_gametype_'+key);
+  if(!select) return;
+  const gameType=select.value;
   const isWorksheet=gameType==='lembaran_kerja';
   const isRun=gameType==='jejak_lari';
-  const editor=document.getElementById('worksheet_editor_'+i);
-  const runEditor=document.getElementById('run_editor_'+i);
-  const rawField=document.getElementById('game_data_field_'+i);
+  const editor=document.getElementById('worksheet_editor_'+key);
+  const runEditor=document.getElementById('run_editor_'+key);
+  const rawField=document.getElementById('game_data_field_'+key);
   if(editor) editor.style.display=isWorksheet?'block':'none';
   if(runEditor) runEditor.style.display=isRun?'block':'none';
   if(rawField) rawField.style.display='none';
@@ -2093,7 +2602,8 @@ function syncStationSetupLock(){
   if(lock) lock.innerHTML=locked
     ? '<div class="msg">🔒 Sesi sedang aktif — bilangan stesen dikunci. Tekan Tamat sebelum mengubah.</div>' : '';
   updateStationButtons();
-  if(panel) panel.querySelectorAll('.station-block input, .station-block select, .station-block button').forEach(el=>{ el.disabled=locked; });
+  if(panel) panel.querySelectorAll('.station-block input, .station-block select, .station-block button, .cannon-block input, .cannon-block select, .cannon-block button, #cannonEnabled, #cannonDamage').forEach(el=>{ el.disabled=locked; });
+  updateCannonButtons();
 }
 function buildStationsUI(existing){
   const area = document.getElementById('stationsArea');
@@ -2108,7 +2618,7 @@ function buildStationsUI(existing){
       <label>Nama Stesen</label><input id="st_name_${i}" value="${s.name||''}" placeholder="cth: Stesen Sifir">
       <label>Lokasi (teks clue)</label><input id="st_loc_${i}" value="${s.location||''}" placeholder="cth: Tempat membaca buku">
       <label>Password Stesen (tepat 5 huruf atau digit)</label><input id="st_pass_${i}" value="${stationPassword}" maxlength="5" pattern="[A-Za-z0-9]{5}" placeholder="cth: 14542 atau sabun" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5)">
-      <label>Jenis Game</label><select id="st_gametype_${i}" onchange="toggleWorksheetEditor(${i})">${opts}</select>
+      <label>Jenis Game</label><select id="st_gametype_${i}" onchange="toggleWorksheetEditor('${i}')">${opts}</select>
       <div id="game_data_field_${i}"><label>Data Game (JSON)</label><input id="st_gamedata_${i}" value='${(s.gameDataRaw||"{}").replace(/'/g,"&apos;")}'></div>
       <div class="worksheet-editor" id="worksheet_editor_${i}"></div>
       <div class="run-editor" id="run_editor_${i}">
@@ -2121,6 +2631,139 @@ function buildStationsUI(existing){
     toggleWorksheetEditor(i);
   }
   syncStationSetupLock();
+}
+function toggleCannonSetup(){
+  const on=!!document.getElementById('cannonEnabled')?.checked;
+  const body=document.getElementById('cannonBody');
+  if(body) body.hidden=!on;
+  updateCannonButtons();
+}
+function updateCannonButtons(){
+  const locked=!!(sessionInfo && sessionInfo.status==='active');
+  const add=document.getElementById('btnAddCannon');
+  if(add) add.disabled=locked || document.querySelectorAll('.cannon-block').length>=CannonEngine.MAX_CANNONS;
+}
+function buildCannonsUI(existing){
+  const area=document.getElementById('cannonsArea');
+  if(!area) return;
+  area.innerHTML='';
+  Object.keys(existing||{}).slice(0,CannonEngine.MAX_CANNONS).forEach(cid=>{
+    area.insertAdjacentHTML('beforeend', cannonBlockHtml(cid, existing[cid]||{}));
+    renderWorksheetEditor(cid, worksheetQuestionsFromRaw(existing[cid]&&existing[cid].gameDataRaw));
+    toggleWorksheetEditor(cid);
+  });
+  updateCannonButtons();
+}
+function cannonBlockHtml(cid, cannon){
+  const password=isValidStationPassword(cannon.password)?cannon.password:generateStationPassword();
+  const opts=GAME_TYPES.map(g=>`<option value="${g.id}" ${cannon.gameType===g.id?'selected':''}>${g.name}</option>`).join('');
+  return `
+    <div class="cannon-block" data-cannon-id="${cid}">
+      <h4>Meriam ${cid.replace('c','')}</h4>
+      <label>Nama Meriam</label><input id="cn_name_${cid}" value="${escapeHtml(cannon.name||'')}" placeholder="cth: Meriam Kubu Batu">
+      <label>Password Meriam (tepat 5 huruf atau digit)</label>
+      <input id="cn_pass_${cid}" value="${password}" maxlength="5" pattern="[A-Za-z0-9]{5}" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5)">
+      <label>Jenis Soalan</label><select id="st_gametype_${cid}" onchange="toggleWorksheetEditor('${cid}')">${opts}</select>
+      <div id="game_data_field_${cid}"><label>Data Game (JSON)</label><input id="st_gamedata_${cid}" value='${String(cannon.gameDataRaw||"{}").replace(/'/g,"&apos;")}'></div>
+      <div class="worksheet-editor" id="worksheet_editor_${cid}"></div>
+      <div class="run-editor" id="run_editor_${cid}">
+        <label>Jarak Sasaran (km)</label>
+        <input id="st_targetkm_${cid}" type="number" min="0.1" step="0.1" value="${RunTracker.parseTargetKm(cannon.gameDataRaw)}">
+      </div>
+      <div class="feature-actions">
+        <button type="button" class="secondary" onclick="testCannon('${cid}')">▶️ Uji Soalan Meriam Ini</button>
+        <button type="button" onclick="removeCannon('${cid}')">🗑 Buang</button>
+      </div>
+    </div>`;
+}
+function addCannon(){
+  if(sessionInfo && sessionInfo.status==='active') return;
+  const current=collectCannons();
+  const ids=Object.keys(current);
+  if(ids.length>=CannonEngine.MAX_CANNONS) return;
+  let next=1;
+  while(current['c'+next]) next++;
+  current['c'+next]={id:'c'+next,name:'',password:generateStationPassword(),gameType:GAME_TYPES[0].id,gameDataRaw:'{}'};
+  buildCannonsUI(current);
+}
+function removeCannon(cid){
+  if(sessionInfo && sessionInfo.status==='active') return;
+  const current=collectCannons();
+  delete current[cid];
+  buildCannonsUI(current);
+}
+function collectCannonConfig(){
+  return {
+    enabled:!!document.getElementById('cannonEnabled')?.checked,
+    damagePercent:CannonEngine.clampDamage(document.getElementById('cannonDamage')?.value)
+  };
+}
+function collectCannons(){
+  const out={};
+  document.querySelectorAll('.cannon-block').forEach(block=>{
+    const cid=block.dataset.cannonId;
+    const gameType=document.getElementById('st_gametype_'+cid).value;
+    out[cid]={
+      id:cid,
+      name:document.getElementById('cn_name_'+cid).value,
+      password:document.getElementById('cn_pass_'+cid).value.trim(),
+      gameType,
+      gameDataRaw:stationGameDataRaw(cid, gameType)
+    };
+  });
+  return out;
+}
+function validateCannons(stationConfig, cannonConfigValue, cannonList){
+  if(!cannonConfigValue.enabled) return true;
+  const ids=Object.keys(cannonList);
+  if(!ids.length){
+    alert('Meriam diaktifkan tetapi belum ada QR meriam. Tambah sekurang-kurangnya satu meriam atau matikan meriam.');
+    return false;
+  }
+  const badPassword=ids.filter(cid=>!isValidStationPassword(cannonList[cid].password));
+  if(badPassword.length){
+    alert(`Password Meriam ${badPassword.join(', ')} mesti tepat 5 huruf atau digit.`);
+    return false;
+  }
+  const conflicts=CannonEngine.passwordConflicts(stationConfig, cannonList);
+  if(conflicts.length){
+    alert(`Password bertindih: ${conflicts.map(c=>`${c.a} dan ${c.b} kedua-duanya guna ${c.password}`).join('; ')}. Tukar salah satu.`);
+    return false;
+  }
+  const worksheets=ids.filter(cid=>cannonList[cid].gameType==='lembaran_kerja'
+    && worksheetQuestionsFromRaw(cannonList[cid].gameDataRaw).some(q=>!q.answer));
+  if(worksheets.length){
+    alert(`Isi jawapan betul bagi semua soalan Lembaran Kerja di Meriam ${worksheets.join(', ')}.`);
+    return false;
+  }
+  // Without this, pushConfig's Promise.all commits stations, groups and
+  // progress while the database rules reject the oversized config/cannons.
+  // The teacher sees a raw Firebase error, the hunt looks saved, and the
+  // cannons are silently missing — with retrying failing identically.
+  const tooLarge=ids.filter(cid=>String(cannonList[cid].gameDataRaw||'').length>WORKSHEET_DATA_MAX_CHARS);
+  if(tooLarge.length){
+    alert(`Jumlah gambar terlalu besar di Meriam ${tooLarge.join(', ')}. Buang beberapa gambar atau gunakan gambar yang telah dicrop.`);
+    return false;
+  }
+  return true;
+}
+function testCannon(cid){
+  const gameType=document.getElementById('st_gametype_'+cid).value;
+  const st={
+    id:cid,
+    name:document.getElementById('cn_name_'+cid).value || ('Meriam '+cid.replace('c','')),
+    location:'',
+    password:document.getElementById('cn_pass_'+cid).value,
+    timeLimitMin:10,
+    gameType,
+    gameDataRaw:stationGameDataRaw(cid, gameType)
+  };
+  if(!isValidStationPassword(st.password)){
+    alert('Password meriam mesti tepat 5 huruf atau digit sebelum diuji.');
+    return;
+  }
+  window._testMode=true;
+  startGame(st.id, st);
 }
 function stationGameDataRaw(i, gameType){
   if(gameType==='lembaran_kerja') return JSON.stringify({questions:getWorksheetQuestionsFromEditor(i)});
@@ -2225,7 +2868,10 @@ function reindexGroupsForCount(existingGroups, count){
 }
 function pushConfig(){
   const st = collectStations();
+  const cn = collectCannonConfig();
+  const cnList = cn.enabled ? collectCannons() : {};
   if(!validateStationPasswords(st) || !validateWorksheetStations(st)) return;
+  if(!validateCannons(st, cn, cnList)) return;
   const name=String(document.getElementById('huntName')?.value||'').trim();
   if((isHuntDraft || currentHuntId) && !name){
     document.getElementById('pushStatus').innerHTML='<div class="msg err">Masukkan nama Treasure Hunt terlebih dahulu.</div>';
@@ -2252,12 +2898,14 @@ function pushConfig(){
     metadata,
     huntRef('config/stations').set(st),
     huntRef('config/groups').set(gr),
+    huntRef('config/cannon').set(cn),
+    huntRef('config/cannons').set(cnList),
     huntRef('session').set({status:'setup'}),
     huntRef('progress').set(prog)
   ]).then(()=>{
     currentHuntCreatedAt=createdAt;
     isHuntDraft=false;
-    stations=st; groups=gr; stationCount=N; sessionInfo={status:'setup'};
+    stations=st; groups=gr; cannonConfig=cn; cannons=cnList; stationCount=N; sessionInfo={status:'setup'};
     cacheConfig();
     renderGroupLoginOptions();
     let listHtml = '<h4>Password Login Kumpulan (beri kepada setiap kumpulan)</h4><table><tr><th>Kumpulan</th><th>Password</th><th>Mula di Stesen</th></tr>';
@@ -2373,16 +3021,26 @@ function printLoginPasswords(){
 }
 function generateQRs(){
   const st = collectStations();
+  const cn = collectCannonConfig();
+  const cnList = cn.enabled ? collectCannons() : {};
   if(!validateStationPasswords(st) || !validateWorksheetStations(st)) return;
-  stations = st;
+  if(!validateCannons(st, cn, cnList)) return;
+  stations = st; cannonConfig = cn; cannons = cnList;
   const out = document.getElementById('qrOutput');
   out.innerHTML='';
   Object.values(st).forEach(s=>{
     const div=document.createElement('div');
     div.className='qr-print';
-    div.innerHTML=`<div style="font-weight:700;">Stesen ${s.id}: ${s.name}</div><div id="qr_${s.id}"></div><div style="font-size:11px;color:#888;">Sorok di: ${s.location}</div>`;
+    div.innerHTML=`<div style="font-weight:700;">Stesen ${s.id}: ${escapeHtml(s.name)}</div><div id="qr_${s.id}"></div><div style="font-size:11px;color:#888;">Sorok di: ${escapeHtml(s.location)}</div>`;
     out.appendChild(div);
     setTimeout(()=>new QRCode(document.getElementById('qr_'+s.id), {text:s.password, width:130, height:130}), 0);
+  });
+  Object.values(cnList).forEach(c=>{
+    const div=document.createElement('div');
+    div.className='qr-print cannon-qr';
+    div.innerHTML=`<div style="font-weight:700;">⚔️ ${escapeHtml(c.name||('Meriam '+c.id.replace('c','')))}</div><div id="qr_${c.id}"></div><div style="font-size:11px;color:#888;">QR meriam — setiap kumpulan boleh ambil satu peluru sekali sahaja.</div>`;
+    out.appendChild(div);
+    setTimeout(()=>new QRCode(document.getElementById('qr_'+c.id), {text:c.password, width:130, height:130}), 0);
   });
 }
 function printQRCodes(){
@@ -2405,7 +3063,8 @@ function watchDashboard(){
       const p = prog[gid]||{currentIndex:0,keys:[],totalScore:0,status:'idle'};
       const currentIndex=Number(p.currentIndex)||0;
       const curSt = p.status==='won' ? '🏆 Menang' : StationLayout.isJourneyDone(currentIndex, currentStationCount()) ? `📦 Selesai ${currentStationCount()} Pulau` : `Pulau ${currentIndex+1}: ${stations[g.order[currentIndex]]?.name || '-'}`;
-      rows.innerHTML += `<tr><td>${gid}</td><td><span class="badge ${p.status==='idle'?'idle':'done'}">${p.status}</span></td><td>${curSt}</td><td>${p.currentIndex||0}/${currentStationCount()}</td><td>${'🔑'.repeat((p.keys||[]).length)}</td><td>${p.totalScore||0}</td></tr>`;
+      const hp=CannonEngine.readHp(p);
+      rows.innerHTML += `<tr><td>${gid}</td><td><span class="badge ${p.status==='idle'?'idle':'done'}">${p.status}</span></td><td>${curSt}</td><td>${p.currentIndex||0}/${currentStationCount()}</td><td>${'🔑'.repeat((p.keys||[]).length)}</td><td>${hp}%</td><td>${CannonEngine.effectiveScore(p.totalScore||0,p.hp)}</td></tr>`;
     });
   });
 }
@@ -2416,6 +3075,10 @@ function loadGroupProgress(){
   const useProgress=p=>{
     const safe=p || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
     progress=safe;
+    // After the global, never before: the listener fires immediately, and
+    // maybeShowHitPrompt gates on progress.status. A stale 'won' left by a
+    // previous login would make it discard a genuine hit unplayed.
+    watchCannonHits();
     writeLocalJson(progressCacheKey(currentGroupId),safe);
     if(safe.status==='won' || StationLayout.isJourneyDone(safe.currentIndex||0, currentStationCount())){ showGoToBoard(); return; }
     showClueScreen();
@@ -2426,6 +3089,7 @@ function loadGroupProgress(){
   huntRef('progress/'+currentGroupId).once('value').then(snap=>{
     const p = snap.val() || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
     progress = p;
+    watchCannonHits();
     if(p.status==='won' || StationLayout.isJourneyDone(p.currentIndex||0, currentStationCount())){ showGoToBoard(); return; }
     writeLocalJson(progressCacheKey(currentGroupId),p);
     showClueScreen();
@@ -2542,6 +3206,7 @@ function showTestResult(onTime, score, timeTakenSec){
 
 // ---------- GAME ----------
 function startGame(stId, testSt){
+  if(!(window._cannonId && stId===window._cannonId)) window._cannonId=null;
   cancelBsDrag();
   if(sifirQInterval) clearInterval(sifirQInterval);
   sifirQInterval=null;
@@ -3964,6 +4629,8 @@ function finishGame(forceOk,suppressSfx){
   submitCompletion(onTime, score, timeTakenSec);
 }
 function submitCompletion(onTime, score, timeTakenSec){
+  // Every game type funnels here, including the six that skip finishGame.
+  if(window._cannonId){ finishCannonQuestion(onTime, score); return; }
   const stId = window._curStId;
   const next=OfflineStore.advanceProgress(progress,{
     stId, score, onTime, timeTakenSec, stationCount:currentStationCount(), now:Date.now()
@@ -3972,11 +4639,62 @@ function submitCompletion(onTime, score, timeTakenSec){
   const path=huntPath('progress/'+currentGroupId);
   writeLocalJson(progressCacheKey(currentGroupId),next);
   const done=StationLayout.isJourneyDone(next.currentIndex, currentStationCount());
+  // HP, ammo and the hit inbox belong to the shooter and the server. This phone's
+  // copy goes stale the moment somebody shoots it, so writing those fields back
+  // would undo damage that has already landed.
+  const payload=CannonEngine.stripCannonFields(next);
   // Complete the station immediately. Firebase is only a sync target, never a
   // dependency for the student journey once the group has logged in.
-  if(isOffline()) queuePendingWrite(path,next);
-  else db.ref(path).update(next).catch(()=>queuePendingWrite(path,next));
+  if(isOffline()) queueProgressMerge(path,payload);
+  else db.ref(path).update(payload).catch(()=>queueProgressMerge(path,payload));
   showResult(onTime,score,done);
+}
+// The offline queue de-dupes by path, so a queued cannon award and a queued
+// station completion at the same progress path would otherwise clobber each
+// other. Merge onto whatever is already queued for that path instead of
+// replacing it outright.
+function queueProgressMerge(path, data){
+  const queue=readLocalJson(OfflineStore.PENDING_KEY)||[];
+  const existing=queue.find(item=>item && item.path===path);
+  queuePendingWrite(path, {...(existing&&existing.data||{}), ...data});
+}
+// A cannon question awards a cannonball, never marks — otherwise cannon QRs
+// become a way to farm score without walking to a station.
+function finishCannonQuestion(onTime, score){
+  const cid=window._cannonId;
+  window._cannonId=null;
+  clearInterval(timerInterval);
+  document.getElementById('timer').style.display='none';
+  const perfect=CannonEngine.isPerfect(cannons[cid]&&cannons[cid].gameType, score, onTime);
+  const award=perfect ? CannonEngine.claimBullet(progress,cid,Date.now()) : null;
+  if(award){
+    progress={...progress, ...award};
+    writeLocalJson(progressCacheKey(currentGroupId),progress);
+    const path=huntPath('progress/'+currentGroupId);
+    if(isOffline()) queueProgressMerge(path,{ammo:award.ammo,claimed:award.claimed});
+    else db.ref(path).update({ammo:award.ammo,claimed:award.claimed})
+      .catch(()=>queueProgressMerge(path,{ammo:award.ammo,claimed:award.claimed}));
+  }
+  playGameSfx(perfect?'correct':'wrong');
+  // Unlike showResult() (which calls show('view-result')), this route used to
+  // leave #view-game marked active underneath the map it shows next —
+  // showClueScreen()/showJourneyMap() only unhide the map overlay, they never
+  // switch the active .view. hitSafeToShow() reads #view-game's active class
+  // as its "still mid-game" signal, so without this the maybeShowHitPrompt()
+  // call below would stay silently blocked forever, even though the question
+  // has genuinely ended.
+  show('view-clue');
+  showClueScreen();
+  openCannonPanel();
+  setCannonMsg(perfect?'ok':'err', perfect
+    ? `🎉 Tepat! Anda dapat 1 peluru meriam. Jumlah peluru: ${CannonEngine.readAmmo(progress)}`
+    : 'Belum tepat — cuba lagi. Scan semula QR meriam ini.');
+  syncCannonFab();
+  // A cannon question is its own "the game just ended" route (it never goes
+  // through showResult()), so a hit held while it was live must be flushed
+  // here too — otherwise it stays hidden until some unrelated event happens
+  // to re-trigger the listener, and the HP bar stays stale meanwhile.
+  maybeShowHitPrompt();
 }
 function showResult(onTime, score, done){
   show('view-result');
@@ -3991,6 +4709,7 @@ function showResult(onTime, score, done){
     <p>Markah stesen ini: <b>${score}</b></p>
     ${nextHtml}
   </div>`;
+  maybeShowHitPrompt();
 }
 
 // ---------- GROUP FINALE (phone): run to the Smart Board ----------
@@ -4000,8 +4719,23 @@ function showGoToBoard(){
   show('view-chest');
   document.getElementById('timer').style.display='none';
   const card = document.getElementById('chestCard');
-  huntRef('progress/'+currentGroupId).on('value', snap=>{
+  if(chestProgressRef) chestProgressRef.off('value');
+  chestProgressRef = huntRef('progress/'+currentGroupId);
+  chestProgressRef.on('value', snap=>{
     const p = snap.val()||{};
+    // Take only what this screen needs, never the whole snapshot. The global
+    // may legitimately be *ahead* of the server — a queued offline station
+    // completion lives there first — and overwriting it would regress the
+    // journey, which watchPendingHit would then persist to the local cache.
+    // Status and hp are the two fields this screen genuinely depends on:
+    // maybeShowHitPrompt() gates on CannonEngine.isInBattle(progress), the
+    // global rather than this local snapshot, so without the status the flip
+    // to 'won' would never reach it and a held hit would play its video over
+    // the celebration instead of being silently discarded.
+    // Guarded: an empty snapshot would otherwise write undefined into both,
+    // which reads back as "in battle, full health" and silently un-wins them.
+    if(p.status!=null) progress = {...progress, status:p.status};
+    if(p.hp!=null) progress = {...progress, hp:p.hp};
     if(p.status==='won'){
       card.innerHTML = `
         <div style="font-size:70px;">🎉📦✨</div>
@@ -4017,6 +4751,7 @@ function showGoToBoard(){
         <h2 style="color:var(--gold);margin:0;">Lari ke SMART BOARD!</h2>
         <p style="font-size:16px;">Pergi ke <b>tempat mula</b> dan tekan <b>peti Kumpulan ${currentGroupId}</b> di skrin besar untuk membuka peti &amp; mengira markah akhir anda.</p>`;
     }
+    maybeShowHitPrompt();
   });
 }
 
@@ -4068,14 +4803,18 @@ function renderSmartBoard(grps, prog){
   const chestsHtml = ids.map(gid=>{
     const p = prog[gid]||{currentIndex:0,keys:[],status:'idle'};
     const keys=Math.min((p.keys||[]).length, N);
+    const hp=CannonEngine.readHp(p);
+    const hpHtml=hp<CannonEngine.MAX_HP
+      ? `<div class="c-hp"><span class="c-hp-fill" style="width:${hp}%"></span></div><div class="c-hp-text">HP ${hp}%</div>`
+      : '';
     const id=`chest-card-${gid}`;
     if(p.status==='won'){
-      return `<div class="chest-card won" id="${id}">${chestVis(0,true,N)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-score">${p.finalScore} mkh</div><div class="c-sub">#${rankOf[gid]} · buka ke-${p.finishOrder}</div></div>`;
+      return `<div class="chest-card won" id="${id}">${chestVis(0,true,N)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-score">${p.finalScore} mkh</div>${hpHtml}<div class="c-sub">#${rankOf[gid]} · buka ke-${p.finishOrder}</div></div>`;
     }
     if(StationLayout.isJourneyDone(p.currentIndex||0, N)){
-      return `<div class="chest-card ready" id="${id}" onclick="openChestOnBoard('${gid}')">${chestVis(N,false,N)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-sub" style="color:var(--gold);font-weight:800;">SEDIA! Tekan</div></div>`;
+      return `<div class="chest-card ready" id="${id}" onclick="openChestOnBoard('${gid}')">${chestVis(N,false,N)}<div class="c-grp">Kumpulan ${gid}</div>${hpHtml}<div class="c-sub" style="color:var(--gold);font-weight:800;">SEDIA! Tekan</div></div>`;
     }
-    return `<div class="chest-card locked" id="${id}" onclick="openChestOnBoard('${gid}')">${chestVis(keys,false,N)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-sub">${keys}/${N} kunci</div></div>`;
+    return `<div class="chest-card locked" id="${id}" onclick="openChestOnBoard('${gid}')">${chestVis(keys,false,N)}<div class="c-grp">Kumpulan ${gid}</div>${hpHtml}<div class="c-sub">${keys}/${N} kunci · ${CannonEngine.effectiveScore(p.totalScore||0,p.hp)} mkh</div></div>`;
   }).join('');
   document.getElementById('boardWrap').innerHTML = `
     <div class="board-head">
@@ -4145,7 +4884,7 @@ function openChestOnBoard(gid){
         const prog = all.val()||{};
         const order = Object.values(prog).filter(x=>x&&x.status==='won').length + 1;
         const bonus = CHEST_BONUS[Math.min(order-1, CHEST_BONUS.length-1)];
-        const finalScore = (p.totalScore||0) + bonus;
+        const finalScore = CannonEngine.finalScore(p.totalScore||0, p.hp, bonus);
         huntRef('progress/'+gid).update({status:'won', finishOrder:order, finishBonus:bonus, finalScore, openedAt:Date.now()})
           .then(()=>{
             showChestWinCelebration(gid,finalScore,()=>{

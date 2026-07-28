@@ -1,10 +1,12 @@
-const CACHE_NAME = 'gs-shell-v9';
+const CACHE_NAME = 'gs-shell-v10';
 const LOCAL_ASSETS = [
   './', 'index.html',
   'tangram/engine.js', 'tangram/shapes.js', 'tangram/ui.js',
   'run/tracker.js', 'groups/roster.js', 'stations/layout.js',
   'sifir/engine.js', 'crossword/engine.js', 'battleship/engine.js', 'offline/store.js',
+  'cannon/engine.js',
   'assets/ship/ship-sail-sheet.png', 'assets/chest/chest_sheet.png', 'assets/chest/chest_open.mp3',
+  'assets/cannon/fire.mp4', 'assets/cannon/hit.mp4',
   'Pixel_art_game_intro_animation_202607201130.mp4', 'map idle pingpong.mp4',
   'Kapal_berlayar_plain_cyan_backgr…_202607201223.mp4'
 ];
