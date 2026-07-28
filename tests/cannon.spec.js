@@ -63,6 +63,19 @@ async function openHuntSetup(page) {
   await page.locator('#adminTabSelect').selectOption('setup');
 }
 
+// Logs in as admin and opens the Smart Board straight from the hunt list, via
+// the "Peti Harta Karun" button (openHuntTreasure -> showSmartBoard). This
+// stays on the same page load (no navigation), so the fake Firebase installed
+// by openApp's addInitScript keeps whatever state has accumulated so far —
+// unlike a second page.goto(INDEX + '?board'), which would re-run the init
+// script and silently reseed window.__db from the original seed.
+async function openHuntTreasureBoard(page) {
+  await page.locator('#adminAccessBtn').click();
+  await page.locator('#adminPin').fill('1234');
+  await page.getByRole('button', { name: 'Masuk Admin' }).click();
+  await page.locator('.group-card', { hasText: 'Ujian Meriam' }).getByRole('button', { name: 'Peti Harta Karun' }).click();
+}
+
 test('admin can enable cannons, add one, and save it to config', async ({ page }) => {
   await openApp(page, seedHunt());
   await openHuntSetup(page);
@@ -148,4 +161,73 @@ test('disabled cannons produce no cannon QR, even with a populated cannons map',
 
   await expect(page.locator('#qrOutput .qr-print.cannon-qr')).toHaveCount(0);
   await expect(page.locator('#qrOutput .qr-print')).toHaveCount(3);
+});
+
+test('a damaged group scores totalScore x HP plus an undamaged bonus', async ({ page }) => {
+  await openApp(page, seedHunt({
+    progress: {
+      1: { currentIndex: 3, status: 'ready_chest', keys: [1, 2, 3], totalScore: 300, hp: 70, completedStations: {} },
+      2: { currentIndex: 0, status: 'idle', keys: [], totalScore: 0, completedStations: {} },
+      3: { currentIndex: 0, status: 'idle', keys: [], totalScore: 0, completedStations: {} }
+    }
+  }));
+  await openHuntTreasureBoard(page);
+  await page.locator('#chest-card-1').click();
+  await expect(page.locator('#boardToast')).toContainText('Markah akhir 260');   // 300*0.7 + 50
+
+  const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(saved.finalScore).toBe(260);
+  expect(saved.finishBonus).toBe(50);
+});
+
+test('a hunt with no hp field scores exactly as before', async ({ page }) => {
+  await openApp(page, seedHunt({
+    progress: {
+      1: { currentIndex: 3, status: 'ready_chest', keys: [1, 2, 3], totalScore: 300, completedStations: {} },
+      2: { currentIndex: 0, status: 'idle', keys: [], totalScore: 0, completedStations: {} },
+      3: { currentIndex: 0, status: 'idle', keys: [], totalScore: 0, completedStations: {} }
+    }
+  }));
+  await openHuntTreasureBoard(page);
+  await page.locator('#chest-card-1').click();
+  // The chest-open write only lands after playChestOpen's ~1.7s animation
+  // finishes, so wait for the toast (which fires in the same callback as the
+  // write) before reading window.__db — otherwise the read races the write.
+  await expect(page.locator('#boardToast')).toContainText('Markah akhir');
+  const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(saved.finalScore).toBe(350);
+});
+
+test('finishing a station never writes hp, ammo, claimed or incoming', async ({ page }) => {
+  await openApp(page, seedHunt());
+  // currentGroupId, currentHuntId, progress and gameState are declared with
+  // `let` at the top of index.html's script, so they are script-scope global
+  // bindings, not properties of `window`. Assigning window.currentGroupId (as
+  // an earlier draft of this test did) would silently create an unrelated
+  // property and leave the real binding untouched, so submitCompletion below
+  // would resolve an empty currentGroupId/huntPath. Bare assignment inside
+  // page.evaluate resolves against the same global lexical scope the app's
+  // functions close over, so it reaches the real bindings.
+  await page.evaluate(() => {
+    currentGroupId = '1';
+    currentHuntId = 'h1';
+    // showResult() (called at the end of submitCompletion) reads
+    // groups[currentGroupId]; a real session would have this populated via
+    // group login, which this test bypasses, so seed the minimum needed to
+    // avoid a TypeError on undefined.
+    groups = {};
+    progress = {
+      currentIndex: 0, status: 'idle', keys: [], totalScore: 0, completedStations: {},
+      hp: 100, ammo: 2, claimed: { c1: 1 }, incoming: { k1: { from: '2' } }
+    };
+    window._curStId = 1;
+    gameState = { type: 'quiz' };
+    submitCompletion(true, 80, 30);
+  });
+  const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(saved.totalScore).toBe(80);
+  expect(saved).not.toHaveProperty('hp');
+  expect(saved).not.toHaveProperty('ammo');
+  expect(saved).not.toHaveProperty('claimed');
+  expect(saved).not.toHaveProperty('incoming');
 });

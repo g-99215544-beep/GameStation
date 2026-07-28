@@ -199,6 +199,9 @@
   .chest-card .c-grp{font-weight:800;color:var(--navy);margin-top:2px;font-size:15px;}
   .chest-card .c-sub{font-size:12px;color:#888;margin-top:2px;}
   .chest-card .c-score{font-weight:800;color:var(--gold);font-size:18px;margin-top:2px;}
+  .c-hp{height:8px;border-radius:4px;background:var(--red);overflow:hidden;margin:6px 8px 2px;}
+  .c-hp-fill{display:block;height:100%;background:var(--green);}
+  .c-hp-text{font-size:11px;color:#ffffffcc;text-align:center;}
   .chest-card.locked{opacity:.9;cursor:pointer;}
   .chest-card.ready{border-color:var(--gold);background:#fffaf0;cursor:pointer;animation:chestPulse 1.1s infinite;}
   .chest-card.ready:hover{transform:scale(1.05);}
@@ -697,7 +700,7 @@
         <div class="card">
           <h3>Dashboard Live</h3>
           <p class="admin-panel-intro">Pantau kemajuan semua kumpulan secara langsung sepanjang treasure hunt.</p>
-          <div class="table-wrap"><table id="dashTable"><thead><tr><th>Kump</th><th>Status</th><th>Perjalanan</th><th>Selesai</th><th>Kunci</th><th>Markah</th></tr></thead><tbody id="dashRows"></tbody></table></div>
+          <div class="table-wrap"><table id="dashTable"><thead><tr><th>Kump</th><th>Status</th><th>Perjalanan</th><th>Selesai</th><th>Kunci</th><th>HP</th><th>Markah</th></tr></thead><tbody id="dashRows"></tbody></table></div>
         </div>
       </section>
     </div>
@@ -991,7 +994,7 @@ function flushPendingWrites(){
   const queue=readLocalJson(OfflineStore.PENDING_KEY)||[];
   if(!db || isOffline() || syncingOfflineWrites || !queue.length) return Promise.resolve();
   syncingOfflineWrites=true; updateConnectivityBadge();
-  return Promise.all(queue.map(item=>db.ref(item.path).set(item.data)))
+  return Promise.all(queue.map(item=>db.ref(item.path).update(item.data)))
     .then(()=>removeLocalValue(OfflineStore.PENDING_KEY))
     .catch(()=>{})
     .finally(()=>{ syncingOfflineWrites=false; updateConnectivityBadge(); });
@@ -2584,7 +2587,8 @@ function watchDashboard(){
       const p = prog[gid]||{currentIndex:0,keys:[],totalScore:0,status:'idle'};
       const currentIndex=Number(p.currentIndex)||0;
       const curSt = p.status==='won' ? '🏆 Menang' : StationLayout.isJourneyDone(currentIndex, currentStationCount()) ? `📦 Selesai ${currentStationCount()} Pulau` : `Pulau ${currentIndex+1}: ${stations[g.order[currentIndex]]?.name || '-'}`;
-      rows.innerHTML += `<tr><td>${gid}</td><td><span class="badge ${p.status==='idle'?'idle':'done'}">${p.status}</span></td><td>${curSt}</td><td>${p.currentIndex||0}/${currentStationCount()}</td><td>${'🔑'.repeat((p.keys||[]).length)}</td><td>${p.totalScore||0}</td></tr>`;
+      const hp=CannonEngine.readHp(p);
+      rows.innerHTML += `<tr><td>${gid}</td><td><span class="badge ${p.status==='idle'?'idle':'done'}">${p.status}</span></td><td>${curSt}</td><td>${p.currentIndex||0}/${currentStationCount()}</td><td>${'🔑'.repeat((p.keys||[]).length)}</td><td>${hp}%</td><td>${CannonEngine.effectiveScore(p.totalScore||0,p.hp)}</td></tr>`;
     });
   });
 }
@@ -4151,10 +4155,14 @@ function submitCompletion(onTime, score, timeTakenSec){
   const path=huntPath('progress/'+currentGroupId);
   writeLocalJson(progressCacheKey(currentGroupId),next);
   const done=StationLayout.isJourneyDone(next.currentIndex, currentStationCount());
+  // HP, ammo and the hit inbox belong to the shooter and the server. This phone's
+  // copy goes stale the moment somebody shoots it, so writing those fields back
+  // would undo damage that has already landed.
+  const payload=CannonEngine.stripCannonFields(next);
   // Complete the station immediately. Firebase is only a sync target, never a
   // dependency for the student journey once the group has logged in.
-  if(isOffline()) queuePendingWrite(path,next);
-  else db.ref(path).update(next).catch(()=>queuePendingWrite(path,next));
+  if(isOffline()) queuePendingWrite(path,payload);
+  else db.ref(path).update(payload).catch(()=>queuePendingWrite(path,payload));
   showResult(onTime,score,done);
 }
 function showResult(onTime, score, done){
@@ -4247,14 +4255,18 @@ function renderSmartBoard(grps, prog){
   const chestsHtml = ids.map(gid=>{
     const p = prog[gid]||{currentIndex:0,keys:[],status:'idle'};
     const keys=Math.min((p.keys||[]).length, N);
+    const hp=CannonEngine.readHp(p);
+    const hpHtml=hp<CannonEngine.MAX_HP
+      ? `<div class="c-hp"><span class="c-hp-fill" style="width:${hp}%"></span></div><div class="c-hp-text">HP ${hp}%</div>`
+      : '';
     const id=`chest-card-${gid}`;
     if(p.status==='won'){
-      return `<div class="chest-card won" id="${id}">${chestVis(0,true,N)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-score">${p.finalScore} mkh</div><div class="c-sub">#${rankOf[gid]} · buka ke-${p.finishOrder}</div></div>`;
+      return `<div class="chest-card won" id="${id}">${chestVis(0,true,N)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-score">${p.finalScore} mkh</div>${hpHtml}<div class="c-sub">#${rankOf[gid]} · buka ke-${p.finishOrder}</div></div>`;
     }
     if(StationLayout.isJourneyDone(p.currentIndex||0, N)){
-      return `<div class="chest-card ready" id="${id}" onclick="openChestOnBoard('${gid}')">${chestVis(N,false,N)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-sub" style="color:var(--gold);font-weight:800;">SEDIA! Tekan</div></div>`;
+      return `<div class="chest-card ready" id="${id}" onclick="openChestOnBoard('${gid}')">${chestVis(N,false,N)}<div class="c-grp">Kumpulan ${gid}</div>${hpHtml}<div class="c-sub" style="color:var(--gold);font-weight:800;">SEDIA! Tekan</div></div>`;
     }
-    return `<div class="chest-card locked" id="${id}" onclick="openChestOnBoard('${gid}')">${chestVis(keys,false,N)}<div class="c-grp">Kumpulan ${gid}</div><div class="c-sub">${keys}/${N} kunci</div></div>`;
+    return `<div class="chest-card locked" id="${id}" onclick="openChestOnBoard('${gid}')">${chestVis(keys,false,N)}<div class="c-grp">Kumpulan ${gid}</div>${hpHtml}<div class="c-sub">${keys}/${N} kunci · ${CannonEngine.effectiveScore(p.totalScore||0,p.hp)} mkh</div></div>`;
   }).join('');
   document.getElementById('boardWrap').innerHTML = `
     <div class="board-head">
@@ -4324,7 +4336,7 @@ function openChestOnBoard(gid){
         const prog = all.val()||{};
         const order = Object.values(prog).filter(x=>x&&x.status==='won').length + 1;
         const bonus = CHEST_BONUS[Math.min(order-1, CHEST_BONUS.length-1)];
-        const finalScore = (p.totalScore||0) + bonus;
+        const finalScore = CannonEngine.finalScore(p.totalScore||0, p.hp, bonus);
         huntRef('progress/'+gid).update({status:'won', finishOrder:order, finishBonus:bonus, finalScore, openedAt:Date.now()})
           .then(()=>{
             showChestWinCelebration(gid,finalScore,()=>{
