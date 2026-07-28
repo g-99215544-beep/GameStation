@@ -134,3 +134,18 @@ test('cannon QRs are generated in their own labelled section', async ({ page }) 
   await expect(cannonCard).toContainText('Meriam Kubu Batu');
   await expect(cannonCard).toContainText('satu peluru');
 });
+
+test('disabled cannons produce no cannon QR, even with a populated cannons map', async ({ page }) => {
+  await openApp(page, seedHunt({
+    config: {
+      cannon: { enabled: false, damagePercent: 10 },
+      cannons: { c1: { id: 'c1', name: 'Meriam Kubu Batu', password: 'QQQQQ', gameType: 'lembaran_kerja', gameDataRaw: '{"questions":[{"answer":"9","image":""}]}' } }
+    }
+  }));
+  await openHuntSetup(page);
+  await page.locator('#adminTabSelect').selectOption('qr');
+  await page.getByRole('button', { name: 'Jana QR Stesen' }).click();
+
+  await expect(page.locator('#qrOutput .qr-print.cannon-qr')).toHaveCount(0);
+  await expect(page.locator('#qrOutput .qr-print')).toHaveCount(3);
+});
