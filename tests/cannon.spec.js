@@ -666,8 +666,10 @@ test('a failed hit transaction refunds the spent ammo', async ({ page }) => {
 // boundary between its read and its write, so two calls issued together would
 // both read the pre-damage value and the second write would clobber the
 // first — one hit silently lost. This test exercises the same ref+transaction
-// call fireCannonAt's hp step makes (huntRef('progress/<gid>/hp').transaction(...)),
-// issued twice without awaiting between them, standing in for two different
+// call fireCannonAt's damage step makes (huntRef('progress/<gid>').transaction(...)
+// — the whole node, because the updater must also see `status` to abort on a
+// group that already opened its chest), issued twice without awaiting between
+// them, standing in for two different
 // groups' shots landing on the same victim at once — something a single
 // logged-in page (and this fake Firebase's per-page __db) cannot represent by
 // driving two independent shooters through the real UI.
@@ -676,11 +678,16 @@ test('two damage transactions issued together against the same target both land'
   await loginAsGroup(page, 1);
 
   const result = await page.evaluate(async () => {
-    const hpRef = huntRef('progress/2/hp');   // group 2 seeded at hp:90
+    const nodeRef = huntRef('progress/2');    // group 2 seeded at hp:90
     const damage = CannonEngine.clampDamage(cannonConfig.damagePercent); // 10
+    // Byte-for-byte the updater fireCannonAt uses, so this test moves with it.
+    const applyShot = current => {
+      if (current && current.status === 'won') return undefined;
+      return { ...(current || {}), hp: CannonEngine.applyDamage(current && current.hp, damage) };
+    };
     const [a, b] = await Promise.all([
-      hpRef.transaction(current => CannonEngine.applyDamage(current, damage)),
-      hpRef.transaction(current => CannonEngine.applyDamage(current, damage))
+      nodeRef.transaction(applyShot),
+      nodeRef.transaction(applyShot)
     ]);
     return { aCommitted: a.committed, bCommitted: b.committed };
   });
@@ -1126,17 +1133,28 @@ test('a target that opened its chest mid-shot aborts the transaction and keeps t
   await page.locator('#cannonFab').click();
   await expect(page.locator('.cannon-target[data-gid="2"] button')).toBeEnabled();
 
-  // The shooter's cached view still says group 2 is in battle: its listener is
-  // detached before the flip is written straight into the store, exactly the
-  // window between the Smart Board opening the chest and this phone hearing it.
+  // The shooter's cached view must still say group 2 is in battle — that stale
+  // window, between the Smart Board opening the chest and this phone hearing
+  // about it, is the whole point of moving the abort into the transaction.
+  //
+  // The deep copy is essential and not incidental: the fake shim's
+  // snapshot.val() hands back the live store object rather than a clone (see
+  // tests/helpers/fake-firebase.js), so `allProgress` is an *alias* of __db.
+  // Without the copy, flipping the store below also flips the cached view, and
+  // fireCannonAt bails at its pre-flight guard having never reached the
+  // transaction — the test would then pass just as happily against code with
+  // no transaction-level abort at all.
   await page.evaluate(() => {
     if (cannonProgressRef) cannonProgressRef.off('value');
+    allProgress = JSON.parse(JSON.stringify(allProgress));
     window.__db.gamestation2026.hunts.h1.progress[2].status = 'won';
     window.__db.gamestation2026.hunts.h1.progress[2].finalScore = 270;
   });
 
   await page.evaluate(() => fireCannonAt('2'));
+  // Reaches the transaction, which aborts, refunds, and names the real reason.
   await expect(page.locator('#cannonMsg')).toContainText('sudah buka peti');
+  await expect(page.locator('#cannonMsg')).toContainText('dipulangkan');
   await expect(page.locator('#cannonVideo')).toBeHidden();
 
   const db = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);

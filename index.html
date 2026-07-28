@@ -1660,11 +1660,15 @@ async function fireCannonAt(targetGid){
           if(current && current.status==='won') return undefined;   // aborts
           return {...(current||{}), hp:CannonEngine.applyDamage(current&&current.hp, damage)};
         }));
-      if(!hit.committed) throw new Error('hp');
+      // The updater aborts for exactly one reason, so an uncommitted result
+      // means the target opened their chest between the shooter's cached read
+      // and this write. Worth saying plainly — "tembakan gagal" would leave a
+      // child thinking the app broke.
+      if(!hit.committed) throw new Error('won');
       hpAfter=CannonEngine.readHp(hit.snapshot.val());
       await firebaseWriteWithTimeout(huntRef('progress/'+targetGid+'/incoming')
         .push({from:String(currentGroupId), ts:Date.now(), damage, hpAfter}));
-    }catch(_){
+    }catch(hitErr){
       // The refund is itself a network write and can itself fail. If it
       // throws, the ammo stays spent in Firebase with nothing landed for it —
       // exactly what a child must not be left with — so contain the failure:
@@ -1675,7 +1679,9 @@ async function fireCannonAt(targetGid){
         if(refund.committed) progress={...progress, ammo:CannonEngine.readAmmo({ammo:refund.snapshot.val()})};
       }catch(_refundErr){}
       syncCannonFab();
-      setCannonMsg('err','Tembakan gagal — peluru dipulangkan.');
+      setCannonMsg('err', hitErr && hitErr.message==='won'
+        ? `Kumpulan ${targetGid} sudah buka peti — peluru dipulangkan.`
+        : 'Tembakan gagal — peluru dipulangkan.');
       renderCannonPanel();
       return;
     }
@@ -1974,6 +1980,11 @@ function showNoActiveHunt(){
     if(card) card.innerHTML='<div style="font-size:64px;">⌛</div><h2>Belum Ada Treasure Hunt Aktif</h2><p>Guru belum memulakan Treasure Hunt. Halaman ini akan bersedia secara automatik apabila sesi dimulakan.</p>';
     return;
   }
+  // Same reasoning as logout(): this drops a group back to the login screen
+  // without going through it, so a chest-screen listener left attached would
+  // keep writing the previous group's status and hp into the global.
+  if(chestProgressRef){ chestProgressRef.off('value'); chestProgressRef=null; }
+  stopWatchingCannonHits();
   show('view-login');
   const msg=document.getElementById('groupLoginMsg');
   if(msg) msg.innerHTML='<div class="msg">Belum ada Treasure Hunt aktif. Tunggu guru tekan Mula.</div>';
@@ -4721,7 +4732,10 @@ function showGoToBoard(){
     // global rather than this local snapshot, so without the status the flip
     // to 'won' would never reach it and a held hit would play its video over
     // the celebration instead of being silently discarded.
-    progress = {...progress, status:p.status, hp:p.hp};
+    // Guarded: an empty snapshot would otherwise write undefined into both,
+    // which reads back as "in battle, full health" and silently un-wins them.
+    if(p.status!=null) progress = {...progress, status:p.status};
+    if(p.hp!=null) progress = {...progress, hp:p.hp};
     if(p.status==='won'){
       card.innerHTML = `
         <div style="font-size:70px;">🎉📦✨</div>
