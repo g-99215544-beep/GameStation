@@ -21,6 +21,22 @@
         },
         "groups": {
           "$gid": { ".validate": "newData.hasChildren(['loginPassword'])", "$other": { ".validate": true } }
+        },
+        "cannon": {
+          "enabled":       { ".validate": "newData.isBoolean()" },
+          "damagePercent": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 50" },
+          "$other":        { ".validate": false }
+        },
+        "cannons": {
+          "$cid": {
+            ".validate": "newData.hasChildren(['gameType','password'])",
+            "id":          { ".validate": "newData.isString() && newData.val().length <= 8" },
+            "name":        { ".validate": "newData.isString() && newData.val().length <= 120" },
+            "password":    { ".validate": "newData.isString() && newData.val().matches(/^[A-Za-z0-9]{5}$/)" },
+            "gameType":    { ".validate": "newData.isString() && newData.val().length <= 40" },
+            "gameDataRaw": { ".validate": "newData.isString() && newData.val().length <= 7800000" },
+            "$other":      { ".validate": true }
+          }
         }
       },
 
@@ -29,6 +45,18 @@
           "currentIndex": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 6" },
           "totalScore":   { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 10000" },
           "status":       { ".validate": "newData.isString() && newData.val().length <= 20" },
+          "hp":           { ".validate": "newData.isNumber() && newData.val() >= 50 && newData.val() <= 100" },
+          "ammo":         { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99" },
+          "incoming": {
+            "$hitId": {
+              ".validate": "newData.hasChildren(['from','ts'])",
+              "from":    { ".validate": "newData.isString() && newData.val().length <= 8" },
+              "ts":      { ".validate": "newData.isNumber()" },
+              "damage":  { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 50" },
+              "hpAfter": { ".validate": "newData.isNumber() && newData.val() >= 50 && newData.val() <= 100" },
+              "$other":  { ".validate": false }
+            }
+          },
           "$other":       { ".validate": true }
         }
       }
