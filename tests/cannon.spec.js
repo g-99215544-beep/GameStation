@@ -780,6 +780,16 @@ test('a hit waiting in the inbox prompts, plays, then clears', async ({ page }) 
 
   await expect(page.locator('#cannonVideo')).toBeVisible();
   await expect(page.locator('#cannonVideoCaption')).toContainText('80%');
+
+  // Load-bearing assertion: the record must still be in Firebase while the
+  // video is up and unskipped — proving the delete genuinely waits for
+  // playback to finish, not just that it eventually happens. An
+  // implementation that acknowledged the hit before playing the video would
+  // reach the same end state and pass without this check.
+  const midPlay = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(midPlay.incoming).toBeDefined();
+  expect(midPlay.incoming.k9).toBeTruthy();
+
   await page.locator('#cannonVideoSkip').click();
 
   const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
@@ -799,6 +809,13 @@ test('several waiting hits collapse into one video', async ({ page }) => {
   await expect(page.locator('#cannonHitPrompt')).toContainText('2 kali');
   await page.getByRole('button', { name: 'Ketuk untuk lihat' }).click();
   await expect(page.locator('#cannonVideoCaption')).toContainText('70%');
+
+  // Same load-bearing check as the single-hit test: both records are still
+  // present while the combined video is up, unskipped.
+  const midPlay = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(midPlay.incoming).toBeDefined();
+  expect(Object.keys(midPlay.incoming).sort()).toEqual(['k1', 'k2']);
+
   await page.locator('#cannonVideoSkip').click();
   const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
   expect(saved.incoming).toBeUndefined();
@@ -853,4 +870,77 @@ test('unwatched hits are discarded once the chest is opened', async ({ page }) =
   await expect.poll(async () =>
     page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1].incoming)
   ).toBeUndefined();
+});
+
+// Review follow-up (finding 1): showGoToBoard()'s listener only reads its
+// snapshot into a local `const p`, never into the global `progress`. Since
+// maybeShowHitPrompt() gates on CannonEngine.isInBattle(progress) — the
+// global — a chest opened live (by the Smart Board) while the group is
+// sitting on the chest screen used to never flip that global to 'won', so a
+// hit already waiting there would play its video over the celebration
+// instead of being discarded. Unlike the already-won-at-load test above,
+// this drives the transition live: the group is not yet won when the hit
+// lands (still genuinely "in battle", so the prompt legitimately appears —
+// that part is correct, pre-existing behaviour), and only then is the chest
+// opened, the way openChestOnBoard() would (a plain progress/<gid> update to
+// status:'won').
+test('a chest opened live while a hit is waiting discards it without playing', async ({ page }) => {
+  const seed = seedHunt(cannonHunt());
+  seed.gamestation2026.hunts.h1.progress[1] = {
+    currentIndex: 3, status: 'idle', keys: [1, 2, 3], totalScore: 300, hp: 70, completedStations: {}
+  };
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+  await expect(page.locator('#view-chest')).toHaveClass(/active/);
+
+  await page.evaluate(() => {
+    huntRef('progress/1/incoming').push({ from: '2', ts: 500, damage: 10, hpAfter: 70 });
+  });
+  await expect(page.locator('#cannonHitPrompt')).toBeVisible();
+
+  // The Smart Board opens the chest while the prompt is still up, unwatched.
+  await page.evaluate(() => {
+    huntRef('progress/1').update({ status: 'won', finalScore: 260, finishBonus: 50, finishOrder: 1 });
+  });
+
+  // The hit must never play over the celebration: the prompt is dismissed
+  // (not left dangling open) and the inbox is cleared, exactly as an
+  // already-won-at-load hit is discarded.
+  await expect(page.locator('#cannonHitPrompt')).toBeHidden();
+  await expect(page.locator('#cannonVideo')).toBeHidden();
+  const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(saved.incoming).toBeUndefined();
+});
+
+// Review follow-up (finding 2): finishCannonQuestion() is a second "the game
+// just ended" route — a cannon ammo question runs inside #view-game with a
+// live timer, exactly like a station, so hitSafeToShow() correctly holds a
+// hit while it's live. But unlike showResult(), it used to return without
+// ever calling maybeShowHitPrompt(), so a hit landing mid-question stayed
+// hidden (and the HP bar stayed stale) until some unrelated event happened
+// to re-trigger the listener.
+test('a hit landing during a cannon question is flushed once the question ends', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+  await page.evaluate(() => redeemCannonPassword('QQQQQ'));
+  await expect(page.locator('#view-game')).toHaveClass(/active/);
+
+  // Same fake-firebase over-notification workaround as the station-game
+  // test above: the simulated opponent shot below is a write to an unrelated
+  // path, but the fake's notify() re-fires every listener regardless, and
+  // watchActiveHunt()'s long-lived listener would otherwise re-enter
+  // tryRestoreSession() -> showJourneyMap() and silently swallow the click
+  // that follows. Not a production concern — see that test's own comment.
+  await page.evaluate(() => { if (activeHuntWatcherRef) activeHuntWatcherRef.off('value'); });
+
+  await page.evaluate(() => {
+    window.__db.gamestation2026.hunts.h1.progress[1].hp = 90;
+    huntRef('progress/1/incoming').push({ from: '2', ts: 700, damage: 10, hpAfter: 90 });
+  });
+  await expect(page.locator('#cannonHitPrompt')).toBeHidden();
+
+  await page.locator('#worksheetAnswer').fill('9');
+  await page.getByRole('button', { name: 'Semak Jawapan' }).click();
+  await expect(page.locator('#cannonHitPrompt')).toBeVisible();
 });

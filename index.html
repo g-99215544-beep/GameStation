@@ -1536,7 +1536,17 @@ function maybeShowHitPrompt(){
   if(!pendingHit) return;
   // Their marks are already announced and the damage is already counted, so
   // replaying a battle animation over the celebration would only confuse.
-  if(!CannonEngine.isInBattle(progress)){ clearPendingHits(); return; }
+  // The prompt may already be visible (shown for this same hit before the
+  // group won — e.g. while waiting on the chest screen, still "in battle"),
+  // so it must be actively hidden here too, not just left for whoever last
+  // rendered it: a status change can arrive on a listener that fires after
+  // the one that already flipped prompt.hidden=false.
+  if(!CannonEngine.isInBattle(progress)){
+    const stale=document.getElementById('cannonHitPrompt');
+    if(stale) stale.hidden=true;
+    clearPendingHits();
+    return;
+  }
   if(!hitSafeToShow()) return;
   const prompt=document.getElementById('cannonHitPrompt');
   const from=document.getElementById('cannonHitFrom');
@@ -4592,12 +4602,25 @@ function finishCannonQuestion(onTime, score){
       .catch(()=>queueProgressMerge(path,{ammo:award.ammo,claimed:award.claimed}));
   }
   playGameSfx(perfect?'correct':'wrong');
+  // Unlike showResult() (which calls show('view-result')), this route used to
+  // leave #view-game marked active underneath the map it shows next —
+  // showClueScreen()/showJourneyMap() only unhide the map overlay, they never
+  // switch the active .view. hitSafeToShow() reads #view-game's active class
+  // as its "still mid-game" signal, so without this the maybeShowHitPrompt()
+  // call below would stay silently blocked forever, even though the question
+  // has genuinely ended.
+  show('view-clue');
   showClueScreen();
   openCannonPanel();
   setCannonMsg(perfect?'ok':'err', perfect
     ? `🎉 Tepat! Anda dapat 1 peluru meriam. Jumlah peluru: ${CannonEngine.readAmmo(progress)}`
     : 'Belum tepat — cuba lagi. Scan semula QR meriam ini.');
   syncCannonFab();
+  // A cannon question is its own "the game just ended" route (it never goes
+  // through showResult()), so a hit held while it was live must be flushed
+  // here too — otherwise it stays hidden until some unrelated event happens
+  // to re-trigger the listener, and the HP bar stays stale meanwhile.
+  maybeShowHitPrompt();
 }
 function showResult(onTime, score, done){
   show('view-result');
@@ -4624,6 +4647,13 @@ function showGoToBoard(){
   const card = document.getElementById('chestCard');
   huntRef('progress/'+currentGroupId).on('value', snap=>{
     const p = snap.val()||{};
+    // Keep the global in sync with what's live on the chest screen: if the
+    // Smart Board opens this group's chest while they're sitting here,
+    // maybeShowHitPrompt() below gates on CannonEngine.isInBattle(progress)
+    // — the global, not this local snapshot — so without this the status
+    // flip to 'won' would never reach it and a held/new hit would still play
+    // its video over the celebration instead of being silently discarded.
+    progress = p;
     if(p.status==='won'){
       card.innerHTML = `
         <div style="font-size:70px;">🎉📦✨</div>
