@@ -1015,6 +1015,13 @@ function updateConnectivityBadge(){
   if(syncingOfflineWrites){ badge.hidden=false; badge.textContent='🔄 Menyelaras…'; return; }
   badge.hidden=!isOffline();
   if(isOffline()) badge.textContent='📴 Luar Talian';
+  // The cannon panel is routinely opened offline, so connectivity returning is
+  // the moment it can finally load targets and enable firing.
+  const cannonPanel=document.getElementById('cannonPanel');
+  if(cannonPanel && !cannonPanel.hidden){
+    attachCannonProgressListener();
+    renderCannonPanel();
+  }
 }
 function cacheConfig(){
   writeLocalJson(OfflineStore.CONFIG_CACHE_KEY,{huntId:currentHuntId,stations:stations||{},groups:groups||{},cannon:cannonConfig,cannons:cannons||{},stationCount,ts:Date.now()});
@@ -1043,6 +1050,17 @@ function firebaseOnceWithTimeout(ref, timeoutMs=5000){
   return new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>reject(new Error('Sambungan mengambil masa terlalu lama.')),timeoutMs);
     ref.once('value').then(value=>{ clearTimeout(timer); resolve(value); },error=>{ clearTimeout(timer); reject(error); });
+  });
+}
+// Firebase queues a write instead of rejecting it when the socket is down, so
+// the returned promise can simply never settle. Every other write in this app
+// is fire-and-forget with a .catch(), but firing a cannon has to await its
+// result, so it needs a deadline — otherwise an awaited write that never
+// settles strands the caller and everything after it.
+function firebaseWriteWithTimeout(promise, timeoutMs=6000){
+  return new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('timeout')),timeoutMs);
+    promise.then(value=>{ clearTimeout(timer); resolve(value); },error=>{ clearTimeout(timer); reject(error); });
   });
 }
 function clearCachedProgress(gid){ if(gid) removeLocalValue(progressCacheKey(gid)); }
@@ -1340,6 +1358,9 @@ function showJourneyMap(){
 }
 let allProgress={};
 let cannonProgressRef=null;
+// Registered on progress/<gid> by showGoToBoard. Held here so logout() can
+// detach it — the hunt-root off() there cannot reach a child-path listener.
+let chestProgressRef=null;
 // Set for the duration of a single fireCannonAt() call. Firing spends ammo
 // via a Firebase transaction, which guards the *count*, but nothing stopped
 // a double-tap from starting two overlapping calls before the first one's
@@ -1363,14 +1384,19 @@ function openCannonPanel(){
   if(!panel || !cannonEnabled()) return;
   panel.hidden=false;
   setCannonMsg('','');
-  // Other groups' HP is only needed while this panel is open, so the listener
-  // lives and dies with it rather than running through every station game.
-  if(!isOffline()){
-    if(cannonProgressRef) cannonProgressRef.off('value');
-    cannonProgressRef=huntRef('progress');
-    cannonProgressRef.on('value',snap=>{ allProgress=snap.val()||{}; renderCannonPanel(); });
-  }
+  attachCannonProgressListener();
   renderCannonPanel();
+}
+// Other groups' HP is only needed while this panel is open, so the listener
+// lives and dies with it rather than running through every station game.
+// Separate from openCannonPanel because the panel is expected to be opened
+// offline — the Scan button stays live while a group walks the grounds hunting
+// a cannon QR — and must come alive by itself when signal returns, rather than
+// stranding them with a dead panel and no hint to close and reopen it.
+function attachCannonProgressListener(){
+  if(isOffline() || cannonProgressRef) return;
+  cannonProgressRef=huntRef('progress');
+  cannonProgressRef.on('value',snap=>{ allProgress=snap.val()||{}; renderCannonPanel(); });
 }
 function closeCannonPanel(){
   const panel=document.getElementById('cannonPanel');
@@ -1593,10 +1619,21 @@ async function fireCannonAt(targetGid){
   const ammoRef=huntRef('progress/'+currentGroupId+'/ammo');
   cannonShotInFlight=true;
   try{
-    const spend=await ammoRef.transaction(current=>{
-      const have=CannonEngine.readAmmo({ammo:current});
-      return have<1 ? undefined : have-1;      // undefined aborts the transaction
-    });
+    let spend;
+    try{
+      spend=await firebaseWriteWithTimeout(ammoRef.transaction(current=>{
+        const have=CannonEngine.readAmmo({ammo:current});
+        return have<1 ? undefined : have-1;    // undefined aborts the transaction
+      }));
+    }catch(_spendErr){
+      // The write never settled, so we do not know whether Firebase will
+      // eventually commit it. Leave the local count alone and let the child
+      // retry: if the queued write does land later, the panel's own listener
+      // corrects the count, and a retry in the meantime simply aborts on an
+      // empty magazine rather than spending a second cannonball.
+      setCannonMsg('err','Tembakan gagal — cuba lagi.');
+      return;
+    }
     if(!spend.committed){ setCannonMsg('err','Tiada peluru meriam.'); renderCannonPanel(); return; }
     // Mirror what Firebase actually committed, not a parallel guess recomputed
     // from the (possibly stale) local `progress` cache.
@@ -1612,12 +1649,21 @@ async function fireCannonAt(targetGid){
       // it runs, the hit has already landed and is visible to the victim, so
       // a video-playback failure must never be treated as "the shot failed"
       // and trigger a refund for a shot that really connected.
-      const hit=await huntRef('progress/'+targetGid+'/hp')
-        .transaction(current=>CannonEngine.applyDamage(current,damage));
+      // Runs on the whole progress node rather than just hp, because the abort
+      // condition the design calls for — "do not shoot a group that already
+      // opened its chest" — lives in a sibling field the hp node cannot see.
+      // Checking the shooter's cached copy beforehand is not enough: a chest
+      // opened in the moment between that read and this write would otherwise
+      // take damage its already-frozen final score can never reflect.
+      const hit=await firebaseWriteWithTimeout(huntRef('progress/'+targetGid)
+        .transaction(current=>{
+          if(current && current.status==='won') return undefined;   // aborts
+          return {...(current||{}), hp:CannonEngine.applyDamage(current&&current.hp, damage)};
+        }));
       if(!hit.committed) throw new Error('hp');
-      hpAfter=hit.snapshot.val();
-      await huntRef('progress/'+targetGid+'/incoming')
-        .push({from:String(currentGroupId), ts:Date.now(), damage, hpAfter});
+      hpAfter=CannonEngine.readHp(hit.snapshot.val());
+      await firebaseWriteWithTimeout(huntRef('progress/'+targetGid+'/incoming')
+        .push({from:String(currentGroupId), ts:Date.now(), damage, hpAfter}));
     }catch(_){
       // The refund is itself a network write and can itself fail. If it
       // throws, the ammo stays spent in Firebase with nothing landed for it —
@@ -1625,7 +1671,7 @@ async function fireCannonAt(targetGid){
       // the child still gets a message and a fresh panel even though the
       // local ammo count may now be stale until the next sync.
       try{
-        const refund=await ammoRef.transaction(current=>CannonEngine.readAmmo({ammo:current})+1);
+        const refund=await firebaseWriteWithTimeout(ammoRef.transaction(current=>CannonEngine.readAmmo({ammo:current})+1));
         if(refund.committed) progress={...progress, ammo:CannonEngine.readAmmo({ammo:refund.snapshot.val()})};
       }catch(_refundErr){}
       syncCannonFab();
@@ -2236,8 +2282,13 @@ function logout(){
   if(html5QrCode){ html5QrCode.stop().catch(()=>{}); }
   huntRef().off('value');
   stopWatchingCannonHits();
+  // Registered on progress/<gid>, so the hunt-root off() above never reaches
+  // it. Left attached, it would keep firing after the next group logs in on
+  // this phone and overwrite their progress with the previous group's.
+  if(chestProgressRef){ chestProgressRef.off('value'); chestProgressRef=null; }
   document.body.classList.remove('board-mode');
   currentGroupId = null;
+  progress = {};
   clearSession();
   document.getElementById('topTitle').innerText='🎯 Game Station';
   document.getElementById('timer').style.display='none';
@@ -2674,6 +2725,15 @@ function validateCannons(stationConfig, cannonConfigValue, cannonList){
     alert(`Isi jawapan betul bagi semua soalan Lembaran Kerja di Meriam ${worksheets.join(', ')}.`);
     return false;
   }
+  // Without this, pushConfig's Promise.all commits stations, groups and
+  // progress while the database rules reject the oversized config/cannons.
+  // The teacher sees a raw Firebase error, the hunt looks saved, and the
+  // cannons are silently missing — with retrying failing identically.
+  const tooLarge=ids.filter(cid=>String(cannonList[cid].gameDataRaw||'').length>WORKSHEET_DATA_MAX_CHARS);
+  if(tooLarge.length){
+    alert(`Jumlah gambar terlalu besar di Meriam ${tooLarge.join(', ')}. Buang beberapa gambar atau gunakan gambar yang telah dicrop.`);
+    return false;
+  }
   return true;
 }
 function testCannon(cid){
@@ -3002,9 +3062,12 @@ function watchDashboard(){
 function loadGroupProgress(){
   const cached=readLocalJson(progressCacheKey(currentGroupId));
   const useProgress=p=>{
-    watchCannonHits();
     const safe=p || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
     progress=safe;
+    // After the global, never before: the listener fires immediately, and
+    // maybeShowHitPrompt gates on progress.status. A stale 'won' left by a
+    // previous login would make it discard a genuine hit unplayed.
+    watchCannonHits();
     writeLocalJson(progressCacheKey(currentGroupId),safe);
     if(safe.status==='won' || StationLayout.isJourneyDone(safe.currentIndex||0, currentStationCount())){ showGoToBoard(); return; }
     showClueScreen();
@@ -4645,15 +4708,20 @@ function showGoToBoard(){
   show('view-chest');
   document.getElementById('timer').style.display='none';
   const card = document.getElementById('chestCard');
-  huntRef('progress/'+currentGroupId).on('value', snap=>{
+  if(chestProgressRef) chestProgressRef.off('value');
+  chestProgressRef = huntRef('progress/'+currentGroupId);
+  chestProgressRef.on('value', snap=>{
     const p = snap.val()||{};
-    // Keep the global in sync with what's live on the chest screen: if the
-    // Smart Board opens this group's chest while they're sitting here,
-    // maybeShowHitPrompt() below gates on CannonEngine.isInBattle(progress)
-    // — the global, not this local snapshot — so without this the status
-    // flip to 'won' would never reach it and a held/new hit would still play
-    // its video over the celebration instead of being silently discarded.
-    progress = p;
+    // Take only what this screen needs, never the whole snapshot. The global
+    // may legitimately be *ahead* of the server — a queued offline station
+    // completion lives there first — and overwriting it would regress the
+    // journey, which watchPendingHit would then persist to the local cache.
+    // Status and hp are the two fields this screen genuinely depends on:
+    // maybeShowHitPrompt() gates on CannonEngine.isInBattle(progress), the
+    // global rather than this local snapshot, so without the status the flip
+    // to 'won' would never reach it and a held hit would play its video over
+    // the celebration instead of being silently discarded.
+    progress = {...progress, status:p.status, hp:p.hp};
     if(p.status==='won'){
       card.innerHTML = `
         <div style="font-size:70px;">🎉📦✨</div>

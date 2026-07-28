@@ -626,15 +626,18 @@ test('a failed hit transaction refunds the spent ammo', async ({ page }) => {
   await loginAsGroup(page, 1);
   await page.locator('#cannonFab').click();
 
-  // Force the victim's hp transaction to abort (as if two shots collided and
-  // Firebase rejected this one) so fireCannonAt's catch block has to run its
-  // refund path. Only the /progress/2/hp ref is patched — the ammo ref keeps
-  // using the real fake-firebase transaction so the refund itself is genuine.
+  // Force the victim's damage transaction to abort (as if two shots collided
+  // and Firebase rejected this one) so fireCannonAt's catch block has to run
+  // its refund path. Only the victim's own progress node is patched — the ammo
+  // ref keeps using the real fake-firebase transaction so the refund is
+  // genuine. The transaction runs on /progress/2 rather than /progress/2/hp
+  // because it also has to see `status` to abort on a group that already
+  // opened its chest.
   await page.evaluate(() => {
     const realRef = db.ref.bind(db);
     db.ref = path => {
       const target = realRef(path);
-      if (String(path).endsWith('/progress/2/hp')) {
+      if (String(path).endsWith('/progress/2')) {
         return Object.assign({}, target, {
           transaction: () => Promise.resolve({ committed: false, snapshot: { val: () => null } })
         });
@@ -919,6 +922,230 @@ test('a chest opened live while a hit is waiting discards it without playing', a
 // ever calling maybeShowHitPrompt(), so a hit landing mid-question stayed
 // hidden (and the HP bar stayed stale) until some unrelated event happened
 // to re-trigger the listener.
+// Final review, important 3: openCannonPanel() attaches its progress listener
+// only when online, and nothing ever attached it later. A group that opened the
+// panel while offline — the documented, expected case, since the Scan button is
+// meant to stay live while they walk the school grounds hunting a cannon QR —
+// was left with a dead panel after signal returned: the offline hint still up,
+// every fire button disabled, and every target at 100% because `allProgress`
+// had never been populated. Nothing on screen told them to close and reopen.
+test('the cannon panel becomes usable when the network returns while it is open', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.evaluate(() => { browserOnline = false; updateConnectivityBadge(); });
+  await page.locator('#cannonFab').click();
+
+  await expect(page.locator('#cannonOfflineHint')).toHaveCount(1);
+  await expect(page.locator('.cannon-target[data-gid="2"] button')).toBeDisabled();
+  // No listener ran, so every target renders at the readHp() default.
+  await expect(page.locator('.cannon-target[data-gid="2"] .cannon-target-hp-text')).toHaveText('100%');
+
+  // Signal returns. The panel is never closed and reopened.
+  await page.evaluate(() => { browserOnline = true; updateConnectivityBadge(); });
+
+  await expect(page.locator('#cannonOfflineHint')).toHaveCount(0);
+  await expect(page.locator('.cannon-target[data-gid="2"] button')).toBeEnabled();
+  // Real HP now, proving the listener attached and populated allProgress —
+  // and group 3's won state is visible again, so it can no longer be shot.
+  await expect(page.locator('.cannon-target[data-gid="2"] .cannon-target-hp-text')).toHaveText('90%');
+  await expect(page.locator('.cannon-target[data-gid="3"]')).toContainText('sudah buka peti');
+
+  // And the shot actually lands.
+  await page.locator('.cannon-target[data-gid="2"] button').click();
+  await expect(page.locator('#cannonVideo')).toBeVisible();
+  await page.locator('#cannonVideoSkip').click();
+  const db = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);
+  expect(db[2].hp).toBe(80);
+  expect(db[1].ammo).toBe(0);
+});
+
+// Final review, critical 1: isOffline() reports *online* until Firebase has
+// connected at least once, so on school WiFi with a dead uplink fireCannonAt
+// passes its offline guard and awaits a Firebase write that Firebase simply
+// queues — a promise that never settles. Nothing after it ever ran, including
+// the `finally` that clears cannonShotInFlight, so every later shot returned at
+// the in-flight guard and every 🔥 rendered disabled: the cannon was dead on
+// that phone until the page was reloaded, even after the network came back.
+// Same technique as the abort test above, with a promise that never settles.
+test('a Firebase write that never settles releases the fire button instead of killing it', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+
+  await page.evaluate(() => {
+    window.__realRef = db.ref.bind(db);
+    db.ref = path => {
+      const target = window.__realRef(path);
+      if (String(path).endsWith('/progress/1/ammo')) {
+        return Object.assign({}, target, { transaction: () => new Promise(() => {}) });
+      }
+      return target;
+    };
+  });
+
+  await page.locator('.cannon-target[data-gid="2"] button').click();
+  // The timeout is ~6s of real time, so this deliberately outwaits the default.
+  await expect(page.locator('#cannonMsg')).toContainText('cuba lagi', { timeout: 15000 });
+
+  // The button is alive again — this is the whole point: the finally ran.
+  await expect(page.locator('.cannon-target[data-gid="2"] button')).toBeEnabled();
+  let db = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);
+  expect(db[2].hp).toBe(90);                 // nothing landed
+  expect(db[2].incoming).toBeUndefined();
+
+  // Network behaves again: the very next tap must fire for real, with no reload.
+  await page.evaluate(() => { db.ref = window.__realRef; });
+  await page.locator('.cannon-target[data-gid="2"] button').click();
+  await expect(page.locator('#cannonVideo')).toBeVisible();
+  await page.locator('#cannonVideoSkip').click();
+  db = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);
+  expect(db[2].hp).toBe(80);
+  expect(db[1].ammo).toBe(0);
+});
+
+// Final review, critical 2: showGoToBoard() attaches a listener on
+// progress/<gid> and used to assign the whole snapshot into the global
+// `progress`. logout() detached only the hunt root, which never touches a
+// listener registered on a child path, and never reset the global — so after
+// group 3 finished and logged out, the next group logging in on that phone
+// inherited group 3's journey and wrote it back under their own id. Silent
+// cross-group marks corruption, invisible until the Smart Board.
+test('logging out detaches the chest-screen listener so the next group is not corrupted', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));   // group 3 is seeded 'won' with currentIndex 3
+  await loginAsGroup(page, 3);
+  await expect(page.locator('#view-chest')).toHaveClass(/active/);
+
+  await page.evaluate(() => logout());
+  await expect(page.locator('#view-login')).toHaveClass(/active/);
+  await loginAsGroup(page, 2);
+
+  // Any write under group 3's progress fires a listener that should be gone.
+  await page.evaluate(() => huntRef('progress/3').update({ totalScore: 300 }));
+  const leaked = await page.evaluate(() => ({ index: progress.currentIndex, score: progress.totalScore, gid: currentGroupId }));
+  expect(leaked.gid).toBe('2');
+  expect(leaked.index).toBe(0);
+  expect(leaked.score).toBe(0);
+
+  // The damage this actually causes: group 2's next completion writes group
+  // 3's journey into progress/2.
+  await page.evaluate(() => {
+    window._curStId = 1;
+    gameState = { type: 'quiz', correct: 1, total: 1 };
+    submitCompletion(true, 100, 5);
+  });
+  const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[2]);
+  expect(saved.totalScore).toBe(100);
+  expect(saved.currentIndex).toBe(1);
+  expect(saved.status).not.toBe('won');
+});
+
+// Final review, critical 2 (second part): the chest screen needs the live
+// status flip and the live HP, and nothing else. Assigning the whole snapshot
+// also replaced a local `progress` that can be *ahead* of the server (queued
+// offline completions) with the server's older copy — which watchPendingHit()
+// then persists to the local cache, so a reload restarts the journey.
+test('the chest-screen listener refreshes only status and hp, never the whole journey', async ({ page }) => {
+  const seed = seedHunt(cannonHunt());
+  seed.gamestation2026.hunts.h1.progress[1] = {
+    currentIndex: 3, status: 'idle', keys: [1, 2, 3], totalScore: 300, hp: 70, completedStations: {}
+  };
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+  await expect(page.locator('#view-chest')).toHaveClass(/active/);
+
+  // Same fake-firebase over-notification artifact the two tests above work
+  // around: notify() re-fires every listener on any write, so the unrelated
+  // progress/1 update below would re-enter watchActiveHunt() ->
+  // tryRestoreSession() -> loadGroupProgress(), whose `progress = p` would
+  // overwrite the local copy this test exists to protect. A real Firebase
+  // connection never fires the active-hunt listener for a progress write.
+  await page.evaluate(() => { if (activeHuntWatcherRef) activeHuntWatcherRef.off('value'); });
+
+  // A local copy that is ahead of the server, as queued offline completions leave it.
+  await page.evaluate(() => {
+    progress = { ...progress, totalScore: 999, keys: [1, 2, 3, 4], completedStations: { 9: { score: 1 } } };
+    huntRef('progress/1').update({ hp: 60, status: 'won', finalScore: 260 });
+  });
+
+  const live = await page.evaluate(() => ({
+    score: progress.totalScore, keys: (progress.keys || []).length,
+    stations: Object.keys(progress.completedStations || {}).length,
+    hp: progress.hp, status: progress.status
+  }));
+  expect(live.score).toBe(999);        // the local journey survives
+  expect(live.keys).toBe(4);
+  expect(live.stations).toBe(1);
+  expect(live.hp).toBe(60);            // but status and hp are live
+  expect(live.status).toBe('won');
+});
+
+// Final review, important 4: validateWorksheetStations rejects an oversized
+// worksheet payload, but validateCannons never did. pushConfig issues all seven
+// writes in one Promise.all, so stations, groups and progress commit while
+// config/cannons is rejected by the database rules: the teacher sees a raw
+// Firebase error, the hunt looks saved, and the cannons are silently absent.
+test('an oversized cannon worksheet is refused before anything is written', async ({ page }) => {
+  await openApp(page, seedHunt());
+  await openHuntSetup(page);
+  await page.locator('#cannonEnabled').check();
+  await page.getByRole('button', { name: '＋ Tambah Meriam' }).click();
+  await page.locator('#worksheet_editor_c1 .worksheet-answer').first().fill('42');
+
+  // A pasted photo far past the limit. The hidden input is exactly where
+  // setWorksheetImageValue() puts a real paste, so getWorksheetQuestionsFromEditor
+  // collects it the same way.
+  await page.evaluate(() => {
+    document.querySelector('#worksheet_editor_c1 .worksheet-image-data').value =
+      'data:image/jpeg;base64,' + 'A'.repeat(WORKSHEET_DATA_MAX_CHARS);
+  });
+
+  const dialogMessage = new Promise(resolve => {
+    page.once('dialog', dialog => { resolve(dialog.message()); dialog.dismiss(); });
+  });
+  await page.getByRole('button', { name: 'Simpan Treasure Hunt' }).first().click();
+  const message = await dialogMessage;
+  expect(message).toContain('Meriam c1');
+  expect(message).toContain('terlalu besar');
+
+  // Nothing was written: the seven-write Promise.all never started.
+  const config = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.config);
+  expect(config.cannons).toBeUndefined();
+  expect(config.cannon).toBeUndefined();
+});
+
+// Final review, important 5: the design spec's firing step says to abort if the
+// victim's status is already 'won', but the hp transaction ran on
+// progress/<victim>/hp, which cannot see status — the only check was the
+// shooter's cached allProgress. A shot fired in the window before the shooter's
+// listener sees the flip used to land anyway: ammo spent, HP reduced, incoming
+// pushed, on a group whose finalScore is already frozen. The Smart Board then
+// shows a won card with a reduced HP bar beside a finalScore that ignores it.
+test('a target that opened its chest mid-shot aborts the transaction and keeps the ammo', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+  await expect(page.locator('.cannon-target[data-gid="2"] button')).toBeEnabled();
+
+  // The shooter's cached view still says group 2 is in battle: its listener is
+  // detached before the flip is written straight into the store, exactly the
+  // window between the Smart Board opening the chest and this phone hearing it.
+  await page.evaluate(() => {
+    if (cannonProgressRef) cannonProgressRef.off('value');
+    window.__db.gamestation2026.hunts.h1.progress[2].status = 'won';
+    window.__db.gamestation2026.hunts.h1.progress[2].finalScore = 270;
+  });
+
+  await page.evaluate(() => fireCannonAt('2'));
+  await expect(page.locator('#cannonMsg')).toContainText('sudah buka peti');
+  await expect(page.locator('#cannonVideo')).toBeHidden();
+
+  const db = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);
+  expect(db[2].hp).toBe(90);                 // untouched
+  expect(db[2].incoming).toBeUndefined();
+  expect(db[2].finalScore).toBe(270);        // their frozen marks still add up
+  expect(db[1].ammo).toBe(1);                // the cannonball is not wasted
+});
+
 test('a hit landing during a cannon question is flushed once the question ends', async ({ page }) => {
   await openApp(page, seedHunt(cannonHunt()));
   await loginAsGroup(page, 1);
