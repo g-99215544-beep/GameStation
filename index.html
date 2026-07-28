@@ -1379,9 +1379,47 @@ function renderCannonPanel(){
     </div>`;
   }).join('') + offlineHint;
 }
-// Filled in by Task 9.
-function openCannonScanner(){}
-function stopCannonScanner(){}
+let cannonQrCode=null;
+function openCannonScanner(){
+  const reader=document.getElementById('cannonReader');
+  if(!reader) return;
+  reader.style.display='block';
+  cannonQrCode=new Html5Qrcode('cannonReader');
+  const onFound=text=>{
+    stopCannonScanner();
+    if(navigator.vibrate) navigator.vibrate(200);
+    redeemCannonPassword(text);
+  };
+  Html5Qrcode.getCameras().then(cams=>{
+    const camId=cams.length ? (cams.find(c=>/back|rear/i.test(c.label))||cams[cams.length-1]).id : null;
+    cannonQrCode.start(camId||{facingMode:'environment'},{fps:10,qrbox:220},onFound);
+  }).catch(()=>{ cannonQrCode.start({facingMode:'environment'},{fps:10,qrbox:220},onFound); });
+}
+function stopCannonScanner(){
+  const reader=document.getElementById('cannonReader');
+  if(reader) reader.style.display='none';
+  if(!cannonQrCode) return;
+  const scanner=cannonQrCode;
+  cannonQrCode=null;
+  try{ scanner.stop().catch(()=>{}); }catch(_){}
+}
+function redeemCannonPassword(raw){
+  const password=String(raw||'').trim().replace(/[^A-Za-z0-9]/g,'').slice(0,5);
+  const cid=CannonEngine.findByPassword(cannons,password);
+  if(!cid){
+    playGameSfx('wrong');
+    setCannonMsg('err','Ini bukan QR meriam. Cuba QR yang lain.');
+    return;
+  }
+  if(CannonEngine.hasClaimed(progress,cid)){
+    setCannonMsg('','Peluru meriam ini sudah anda ambil.');
+    return;
+  }
+  setCannonMsg('','');
+  closeCannonPanel();
+  window._cannonId=cid;
+  startGame(cid, cannons[cid]);
+}
 // Filled in by Task 10.
 function fireCannonAt(_gid){}
 function selectJourneyIsland(position){
@@ -2868,6 +2906,7 @@ function showTestResult(onTime, score, timeTakenSec){
 
 // ---------- GAME ----------
 function startGame(stId, testSt){
+  if(!(window._cannonId && stId===window._cannonId)) window._cannonId=null;
   cancelBsDrag();
   if(sifirQInterval) clearInterval(sifirQInterval);
   sifirQInterval=null;
@@ -4290,6 +4329,8 @@ function finishGame(forceOk,suppressSfx){
   submitCompletion(onTime, score, timeTakenSec);
 }
 function submitCompletion(onTime, score, timeTakenSec){
+  // Every game type funnels here, including the six that skip finishGame.
+  if(window._cannonId){ finishCannonQuestion(onTime, score); return; }
   const stId = window._curStId;
   const next=OfflineStore.advanceProgress(progress,{
     stId, score, onTime, timeTakenSec, stationCount:currentStationCount(), now:Date.now()
@@ -4304,9 +4345,43 @@ function submitCompletion(onTime, score, timeTakenSec){
   const payload=CannonEngine.stripCannonFields(next);
   // Complete the station immediately. Firebase is only a sync target, never a
   // dependency for the student journey once the group has logged in.
-  if(isOffline()) queuePendingWrite(path,payload);
-  else db.ref(path).update(payload).catch(()=>queuePendingWrite(path,payload));
+  if(isOffline()) queueProgressMerge(path,payload);
+  else db.ref(path).update(payload).catch(()=>queueProgressMerge(path,payload));
   showResult(onTime,score,done);
+}
+// The offline queue de-dupes by path, so a queued cannon award and a queued
+// station completion at the same progress path would otherwise clobber each
+// other. Merge onto whatever is already queued for that path instead of
+// replacing it outright.
+function queueProgressMerge(path, data){
+  const queue=readLocalJson(OfflineStore.PENDING_KEY)||[];
+  const existing=queue.find(item=>item && item.path===path);
+  queuePendingWrite(path, {...(existing&&existing.data||{}), ...data});
+}
+// A cannon question awards a cannonball, never marks — otherwise cannon QRs
+// become a way to farm score without walking to a station.
+function finishCannonQuestion(onTime, score){
+  const cid=window._cannonId;
+  window._cannonId=null;
+  clearInterval(timerInterval);
+  document.getElementById('timer').style.display='none';
+  const perfect=CannonEngine.isPerfect(cannons[cid]&&cannons[cid].gameType, score, onTime);
+  const award=perfect ? CannonEngine.claimBullet(progress,cid,Date.now()) : null;
+  if(award){
+    progress={...progress, ...award};
+    writeLocalJson(progressCacheKey(currentGroupId),progress);
+    const path=huntPath('progress/'+currentGroupId);
+    if(isOffline()) queueProgressMerge(path,{ammo:award.ammo,claimed:award.claimed});
+    else db.ref(path).update({ammo:award.ammo,claimed:award.claimed})
+      .catch(()=>queueProgressMerge(path,{ammo:award.ammo,claimed:award.claimed}));
+  }
+  playGameSfx(perfect?'correct':'wrong');
+  showClueScreen();
+  openCannonPanel();
+  setCannonMsg(perfect?'ok':'err', perfect
+    ? `🎉 Tepat! Anda dapat 1 peluru meriam. Jumlah peluru: ${CannonEngine.readAmmo(progress)}`
+    : 'Belum tepat — cuba lagi. Scan semula QR meriam ini.');
+  syncCannonFab();
 }
 function showResult(onTime, score, done){
   show('view-result');

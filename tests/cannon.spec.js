@@ -370,6 +370,89 @@ test('offline, firing is blocked but scanning stays available', async ({ page })
   await expect(page.locator('#cannonPanel')).toContainText('Perlu internet untuk menembak');
 });
 
+test('a perfect cannon answer awards one cannonball and no marks', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+  await page.evaluate(() => redeemCannonPassword('QQQQQ'));
+
+  await expect(page.locator('#view-game')).toHaveClass(/active/);
+  await page.locator('#worksheetAnswer').fill('9');
+  await page.getByRole('button', { name: 'Semak Jawapan' }).click();
+
+  await expect(page.locator('#cannonMsg')).toContainText('peluru');
+  const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(saved.ammo).toBe(2);              // seeded with 1
+  expect(saved.claimed.c1).toBeGreaterThan(0);
+  expect(saved.totalScore).toBe(0);
+  expect(saved.currentIndex).toBe(0);
+  expect(saved.keys || []).toEqual([]);
+});
+
+test('an imperfect cannon answer awards nothing and allows a retry', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+  await page.evaluate(() => redeemCannonPassword('QQQQQ'));
+  await expect(page.locator('#view-game')).toHaveClass(/active/);
+
+  // Lembaran Kerja refuses to advance past a wrong answer, so a partial result
+  // can only arrive from a type that scores a percentage — drive the shared
+  // completion path directly with the score such a game would report.
+  await page.evaluate(() => {
+    window.gameState = { type: 'sudoku', correct: 3, total: 5 };
+    submitCompletion(true, 60, 40);
+  });
+
+  await expect(page.locator('#cannonMsg')).toContainText('cuba lagi');
+  const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(saved.ammo).toBe(1);              // unchanged
+  expect(saved.claimed).toBeUndefined();
+  expect(saved.totalScore).toBe(0);        // a cannon question never adds marks
+  expect(saved.currentIndex).toBe(0);
+});
+
+test('a cannon question of a type that bypasses finishGame never advances the journey', async ({ page }) => {
+  const seed = seedHunt(cannonHunt());
+  seed.gamestation2026.hunts.h1.config.cannons.c1.gameType = 'sudoku';
+  seed.gamestation2026.hunts.h1.config.cannons.c1.gameDataRaw = '{}';
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+  await page.evaluate(() => redeemCannonPassword('QQQQQ'));
+  // finishSudoku calls submitCompletion directly, skipping finishGame entirely.
+  await page.evaluate(() => {
+    window.gameState = { type: 'sudoku', correct: 3, total: 3 };
+    submitCompletion(true, 100, 50);
+  });
+
+  const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(saved.ammo).toBe(2);
+  expect(saved.currentIndex).toBe(0);
+  expect(saved.totalScore).toBe(0);
+  expect(saved.completedStations).toEqual({});
+});
+
+test('rescanning a redeemed cannon says so and does not award again', async ({ page }) => {
+  const seed = seedHunt(cannonHunt());
+  seed.gamestation2026.hunts.h1.progress[1].claimed = { c1: 111 };
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+  await page.evaluate(() => redeemCannonPassword('QQQQQ'));
+
+  await expect(page.locator('#cannonMsg')).toContainText('sudah anda ambil');
+  await expect(page.locator('#view-game')).not.toHaveClass(/active/);
+});
+
+test('an unknown password is rejected', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+  await page.evaluate(() => redeemCannonPassword('ZZZZZ'));
+  await expect(page.locator('#cannonMsg')).toContainText('bukan QR meriam');
+});
+
 test('the offline hint does not duplicate across repeated renders', async ({ page }) => {
   await openApp(page, seedHunt(cannonHunt()));
   await loginAsGroup(page, 1);
