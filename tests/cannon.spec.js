@@ -546,6 +546,114 @@ test('offline: a cannon award queued before a station completion at the same pat
   expect(saved.totalScore).toBe(100);
 });
 
+// Task 10: firing a cannonball. cannonHunt() (defined above) seeds group 1
+// with 1 ammo and group 2 at hp:90, damagePercent:10 — matches the brief's
+// CANNON_HUNT fixture, which does not exist in this file; cannonHunt() is
+// this file's established equivalent (see its own comment for why it must
+// stay a factory).
+test('firing spends a cannonball and damages the target', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+  await page.locator('.cannon-target[data-gid="2"] button').click();
+
+  await expect(page.locator('#cannonVideo')).toBeVisible();
+  await page.locator('#cannonVideoSkip').click();
+
+  const db = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);
+  expect(db[1].ammo).toBe(0);
+  expect(db[2].hp).toBe(80);                     // seeded at 90, damage 10
+  const inbox = Object.values(db[2].incoming);
+  expect(inbox).toHaveLength(1);
+  expect(inbox[0].from).toBe('1');
+  expect(inbox[0].damage).toBe(10);
+  expect(inbox[0].hpAfter).toBe(80);
+});
+
+test('damage never pushes a target below the 50% floor', async ({ page }) => {
+  const seed = seedHunt(cannonHunt());
+  seed.gamestation2026.hunts.h1.progress[1].ammo = 3;
+  seed.gamestation2026.hunts.h1.progress[2].hp = 55;
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+
+  for (let shot = 0; shot < 3; shot++) {
+    await page.locator('.cannon-target[data-gid="2"] button').click();
+    await page.locator('#cannonVideoSkip').click();
+  }
+  const db = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);
+  expect(db[2].hp).toBe(50);
+  expect(db[1].ammo).toBe(0);
+});
+
+test('firing without a cannonball is impossible', async ({ page }) => {
+  const seed = seedHunt(cannonHunt());
+  seed.gamestation2026.hunts.h1.progress[1].ammo = 0;
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+  await expect(page.locator('.cannon-target[data-gid="2"] button')).toBeDisabled();
+  await page.evaluate(() => fireCannonAt('2'));
+  const db = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);
+  expect(db[2].hp).toBe(90);
+  expect(db[2].incoming).toBeUndefined();
+});
+
+test('a won shooter cannot fire and a won target cannot be shot', async ({ page }) => {
+  // Group 3 is already 'won' in cannonHunt(); firing at it directly (bypassing
+  // the UI, which already hides its button per the earlier panel-listing test)
+  // must still be refused by fireCannonAt itself.
+  const seed = seedHunt(cannonHunt());
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+  await page.evaluate(() => fireCannonAt('3'));
+  let db = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);
+  expect(db[1].ammo).toBe(1);          // unspent
+  expect(db[3].incoming).toBeUndefined();
+
+  // Now the shooter itself has already won — even a valid target must be refused.
+  await page.evaluate(() => { progress = { ...progress, status: 'won' }; });
+  await page.evaluate(() => fireCannonAt('2'));
+  db = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);
+  expect(db[1].ammo).toBe(1);          // still unspent
+  expect(db[2].incoming).toBeUndefined();
+});
+
+test('a failed hit transaction refunds the spent ammo', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+
+  // Force the victim's hp transaction to abort (as if two shots collided and
+  // Firebase rejected this one) so fireCannonAt's catch block has to run its
+  // refund path. Only the /progress/2/hp ref is patched — the ammo ref keeps
+  // using the real fake-firebase transaction so the refund itself is genuine.
+  await page.evaluate(() => {
+    const realRef = db.ref.bind(db);
+    db.ref = path => {
+      const target = realRef(path);
+      if (String(path).endsWith('/progress/2/hp')) {
+        return Object.assign({}, target, {
+          transaction: () => Promise.resolve({ committed: false, snapshot: { val: () => null } })
+        });
+      }
+      return target;
+    };
+  });
+
+  await page.locator('.cannon-target[data-gid="2"] button').click();
+  await expect(page.locator('#cannonMsg')).toContainText('dipulangkan');
+
+  const db2 = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);
+  expect(db2[1].ammo).toBe(1);         // refunded back to the seeded 1
+  expect(db2[2].hp).toBe(90);          // untouched — the seeded value
+  expect(db2[2].incoming).toBeUndefined();
+  // The video overlay must never appear on a failed shot.
+  await expect(page.locator('#cannonVideo')).toBeHidden();
+});
+
 test('offline: a station completion queued before a cannon award at the same path are both flushed', async ({ page }) => {
   await openApp(page, seedHunt(cannonHunt()));
   await loginAsGroup(page, 1);

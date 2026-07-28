@@ -81,6 +81,16 @@
   .cannon-target-hp-text{flex:0 0 42px;font-size:12px;font-weight:700;text-align:right;}
   .cannon-target.is-won{opacity:.55;}
   .cannon-hint{font-size:13px;color:#8a909b;margin:8px 0 0;}
+  .cannon-video{position:fixed;inset:0;z-index:1200;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .cannon-video[hidden]{display:none;}
+  .cannon-video-stage{width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative;}
+  .cannon-video-el{max-width:100%;max-height:100%;}
+  .cannon-video-caption{position:absolute;left:0;right:0;bottom:6%;text-align:center;color:#fff;font-size:22px;font-weight:800;text-shadow:0 2px 6px #000;padding:0 12px;}
+  .cannon-video-skip{position:fixed;right:14px;top:14px;z-index:1201;background:#ffffff22;color:#fff;border:1px solid #ffffff55;border-radius:8px;padding:8px 12px;font-weight:700;opacity:0;transition:opacity .4s;pointer-events:none;}
+  .cannon-video-skip.is-ready{opacity:1;pointer-events:auto;}
+  @media (orientation:portrait){
+    .cannon-video-stage{width:100vh;height:100vw;transform:rotate(90deg);}
+  }
   body.map-clue-mode .topbar,body.map-clue-mode .wrap{position:relative;z-index:81;}
   body.map-clue-mode .topbar{background:rgba(10,47,79,.94);backdrop-filter:blur(2px);}
   body.map-clue-mode .wrap{min-height:calc(100vh - 64px);padding-top:28px;}
@@ -554,6 +564,13 @@
 <audio id="journeyShipAudio" preload="auto">
   <source src="Kapal_berlayar_plain_cyan_backgr…_202607201223.mp4" type="video/mp4">
 </audio>
+<section class="cannon-video" id="cannonVideo" hidden aria-live="assertive">
+  <div class="cannon-video-stage">
+    <video class="cannon-video-el" id="cannonVideoEl" playsinline preload="auto"></video>
+    <div class="cannon-video-caption" id="cannonVideoCaption"></div>
+  </div>
+  <button class="cannon-video-skip" id="cannonVideoSkip" type="button" onclick="endCannonVideo()">Langkau ⏭</button>
+</section>
 <div class="wrap">
 
   <!-- LOGIN / ROLE SELECT -->
@@ -1420,8 +1437,79 @@ function redeemCannonPassword(raw){
   window._cannonId=cid;
   startGame(cid, cannons[cid]);
 }
-// Filled in by Task 10.
-function fireCannonAt(_gid){}
+const CANNON_VIDEO_SRC = {fire:'assets/cannon/fire.mp4', hit:'assets/cannon/hit.mp4'};
+let cannonVideoDone=null;
+
+function playCannonVideo(kind, caption){
+  const overlay=document.getElementById('cannonVideo');
+  const video=document.getElementById('cannonVideoEl');
+  const text=document.getElementById('cannonVideoCaption');
+  const skip=document.getElementById('cannonVideoSkip');
+  if(!overlay||!video) return Promise.resolve();
+  if(text) text.textContent=caption||'';
+  overlay.hidden=false;
+  if(skip){
+    skip.classList.remove('is-ready');
+    window.setTimeout(()=>skip.classList.add('is-ready'),2000);
+  }
+  // Fullscreen and the orientation lock both need the user gesture that led
+  // here; failures are silent because the CSS fallback already rotates.
+  try{ overlay.requestFullscreen && overlay.requestFullscreen().catch(()=>{}); }catch(_){}
+  try{ screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(()=>{}); }catch(_){}
+  if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    window.setTimeout(endCannonVideo,1200);
+    return new Promise(resolve=>{ cannonVideoDone=resolve; });
+  }
+  video.src=CANNON_VIDEO_SRC[kind]||CANNON_VIDEO_SRC.fire;
+  video.currentTime=0;
+  video.onended=endCannonVideo;
+  video.onerror=endCannonVideo;
+  video.play().catch(()=>endCannonVideo());
+  return new Promise(resolve=>{ cannonVideoDone=resolve; });
+}
+function endCannonVideo(){
+  const overlay=document.getElementById('cannonVideo');
+  const video=document.getElementById('cannonVideoEl');
+  if(video){ video.onended=null; video.onerror=null; try{ video.pause(); }catch(_){} video.removeAttribute('src'); }
+  if(overlay) overlay.hidden=true;
+  try{ document.fullscreenElement && document.exitFullscreen && document.exitFullscreen().catch(()=>{}); }catch(_){}
+  try{ screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); }catch(_){}
+  const resolve=cannonVideoDone;
+  cannonVideoDone=null;
+  resolve && resolve();
+}
+async function fireCannonAt(targetGid){
+  if(isOffline()){ setCannonMsg('err','Perlu internet untuk menembak.'); return; }
+  if(!CannonEngine.isInBattle(progress)){ setCannonMsg('err','Peti anda sudah dibuka — pertempuran tamat.'); return; }
+  const target=allProgress[targetGid];
+  if(!CannonEngine.isInBattle(target)){ setCannonMsg('err',`Kumpulan ${targetGid} sudah buka peti.`); return; }
+  const damage=CannonEngine.clampDamage(cannonConfig.damagePercent);
+  const ammoRef=huntRef('progress/'+currentGroupId+'/ammo');
+  const spend=await ammoRef.transaction(current=>{
+    const have=CannonEngine.readAmmo({ammo:current});
+    return have<1 ? undefined : have-1;      // undefined aborts the transaction
+  });
+  if(!spend.committed){ setCannonMsg('err','Tiada peluru meriam.'); renderCannonPanel(); return; }
+  progress={...progress, ammo:CannonEngine.readAmmo(progress)-1};
+  syncCannonFab();
+  renderCannonPanel();
+  try{
+    const hit=await huntRef('progress/'+targetGid+'/hp')
+      .transaction(current=>CannonEngine.applyDamage(current,damage));
+    if(!hit.committed) throw new Error('hp');
+    const hpAfter=hit.snapshot.val();
+    await huntRef('progress/'+targetGid+'/incoming')
+      .push({from:String(currentGroupId), ts:Date.now(), damage, hpAfter});
+    await playCannonVideo('fire',`Tembakan tepat! Kumpulan ${targetGid} → ${hpAfter}%`);
+    setCannonMsg('ok',`Kumpulan ${targetGid} kena tembak. HP mereka kini ${hpAfter}%.`);
+  }catch(_){
+    await ammoRef.transaction(current=>CannonEngine.readAmmo({ammo:current})+1);
+    progress={...progress, ammo:CannonEngine.readAmmo(progress)+1};
+    syncCannonFab();
+    setCannonMsg('err','Tembakan gagal — peluru dipulangkan.');
+  }
+  renderCannonPanel();
+}
 function selectJourneyIsland(position){
   if(journeyMoving || !document.getElementById('journeyScorePopup')?.hidden) return;
   const currentIndex=Number(progress.currentIndex)||0;
