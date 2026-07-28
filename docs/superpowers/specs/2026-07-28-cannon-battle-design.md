@@ -230,10 +230,22 @@ Scan → match against `config/cannons` by password → if `claimed[cid]` exists
 show "Peluru meriam ini sudah anda ambil" → otherwise open the question through
 the existing `renderGame()` with a `_cannonMode` flag set.
 
-In `_cannonMode`, `finishGame()` routes to `finishCannonQuestion()` instead of
-`submitCompletion()`. Scoring 100% awards `ammo + 1` and sets `claimed[cid]`;
-anything less shows "Belum tepat — cuba lagi" and the group may rescan. Neither
-outcome touches `totalScore`, `currentIndex`, `keys` or `completedStations`.
+In `_cannonMode`, `submitCompletion()` routes to `finishCannonQuestion()`. A
+perfect answer awards `ammo + 1` and sets `claimed[cid]`; anything less shows
+"Belum tepat — cuba lagi" and the group may rescan. Neither outcome touches
+`totalScore`, `currentIndex`, `keys` or `completedStations`.
+
+`submitCompletion` is the hook, not `finishGame`: six game types — Sifir,
+Crossword, Battleship, Jejak Lari, Sudoku and Tangram — call `submitCompletion`
+directly and never pass through `finishGame`.
+
+"Perfect" is per game type, because the scoring scales differ. Lembaran Kerja,
+Sudoku, Crossword and Battleship are percentages, so the bar is 100. Tangram
+scores out of 200 (three shapes at 40 each, plus up to 80 for speed), so the bar
+is all three shapes with no speed requirement. Sifir and Jejak Lari derive their
+score from the time remaining and can almost never reach 100, so for those the
+bar is the game's own success flag plus a non-zero score — both score exactly 0
+when the student fails. The table lives in `CannonEngine.PASS_SCORE`.
 
 Offline, the write goes through `queuePendingWrite()` exactly as a station
 completion does, and the local progress cache is updated immediately.
@@ -378,6 +390,8 @@ feature does not change it.
 
 - `applyDamage` stops exactly at 50 and never goes below, for any damage value
   and any number of hits
+- `isPerfect` uses the right bar for every game type, including Tangram's 120
+  and Sifir's success flag
 - `effectiveScore` rounding, including `totalScore = 0` and `hp = 50`
 - `finalScore` leaves `finishBonus` undamaged
 - missing `hp` is treated as 100, so pre-feature hunts score unchanged
@@ -394,6 +408,8 @@ feature does not change it.
 - a duplicate cannon/station password is rejected with a named error
 - a student scans a cannon password, answers 100%, and gains one cannonball;
   `totalScore` is unchanged
+- a cannon question of a type that bypasses `finishGame` still never advances
+  the journey
 - rescanning a redeemed cannon shows the already-claimed message
 - the cannon panel lists other groups with HP and hides the student's own group
 - firing decrements ammo and reduces the target's HP by `damagePercent`
