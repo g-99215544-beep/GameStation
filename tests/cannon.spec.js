@@ -761,3 +761,96 @@ test('offline: a station completion queued before a cannon award at the same pat
   expect(saved.currentIndex).toBe(1);
   expect(saved.totalScore).toBe(100);
 });
+
+// Task 11: receiving a hit. cannonHunt() (defined above) is this file's
+// established equivalent of the brief's CANNON_HUNT fixture — see its own
+// comment for why it must stay a factory rather than a shared constant.
+test('a hit waiting in the inbox prompts, plays, then clears', async ({ page }) => {
+  const seed = seedHunt(cannonHunt());
+  seed.gamestation2026.hunts.h1.progress[1].hp = 80;
+  seed.gamestation2026.hunts.h1.progress[1].incoming = {
+    k9: { from: '2', ts: 500, damage: 10, hpAfter: 80 }
+  };
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+
+  await expect(page.locator('#cannonHitPrompt')).toBeVisible();
+  await expect(page.locator('#cannonHitFrom')).toContainText('Kumpulan 2');
+  await page.getByRole('button', { name: 'Ketuk untuk lihat' }).click();
+
+  await expect(page.locator('#cannonVideo')).toBeVisible();
+  await expect(page.locator('#cannonVideoCaption')).toContainText('80%');
+  await page.locator('#cannonVideoSkip').click();
+
+  const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(saved.incoming).toBeUndefined();
+  await expect(page.locator('#journeyShipHpText')).toHaveText('80%');
+});
+
+test('several waiting hits collapse into one video', async ({ page }) => {
+  const seed = seedHunt(cannonHunt());
+  seed.gamestation2026.hunts.h1.progress[1].hp = 70;
+  seed.gamestation2026.hunts.h1.progress[1].incoming = {
+    k1: { from: '2', ts: 500, damage: 10, hpAfter: 80 },
+    k2: { from: '3', ts: 600, damage: 10, hpAfter: 70 }
+  };
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+  await expect(page.locator('#cannonHitPrompt')).toContainText('2 kali');
+  await page.getByRole('button', { name: 'Ketuk untuk lihat' }).click();
+  await expect(page.locator('#cannonVideoCaption')).toContainText('70%');
+  await page.locator('#cannonVideoSkip').click();
+  const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(saved.incoming).toBeUndefined();
+});
+
+test('a hit landing during a station game waits until the game ends', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  // Reach the station-1 clue screen the way a student would: tap the island
+  // marker on the journey map (playStationJourney animates the ship there),
+  // then submit the password to enter the game itself.
+  await page.locator('[aria-label="Pergi ke Pulau 1"]').click();
+  await expect(page.locator('#view-clue')).toHaveClass(/active/, { timeout: 6000 });
+  await page.locator('#passInput').fill('PASS1');
+  await page.getByRole('button', { name: 'Sahkan Password' }).click();
+  await expect(page.locator('#view-game')).toHaveClass(/active/);
+
+  // The fake Firebase's notify() re-fires every registered listener on any
+  // write anywhere in the store (unlike real Firebase, which only refires a
+  // listener when its own ref's value changes) — see tests/helpers/fake-firebase.js.
+  // watchActiveHunt()'s long-lived listener on activeHuntId is one such
+  // listener; refiring it re-enters tryRestoreSession() -> loadGroupProgress()
+  // -> showJourneyMap(), which flips the (still-mounted, fixed, full-viewport)
+  // #journeyMap section back to visible behind the still-active #view-game and
+  // silently eats every subsequent click. That cascade is a fake-firebase
+  // over-notification artifact, not something a real Firebase connection would
+  // ever trigger from an unrelated progress/<gid>/incoming write, so it is
+  // switched off here rather than in index.html.
+  await page.evaluate(() => { if (activeHuntWatcherRef) activeHuntWatcherRef.off('value'); });
+
+  await page.evaluate(() => {
+    window.__db.gamestation2026.hunts.h1.progress[1].hp = 90;
+    huntRef('progress/1/incoming').push({ from: '2', ts: 700, damage: 10, hpAfter: 90 });
+  });
+  await expect(page.locator('#cannonHitPrompt')).toBeHidden();
+
+  await page.locator('#worksheetAnswer').fill('1');
+  await page.getByRole('button', { name: 'Semak Jawapan' }).click();
+  await expect(page.locator('#cannonHitPrompt')).toBeVisible();
+});
+
+test('unwatched hits are discarded once the chest is opened', async ({ page }) => {
+  const seed = seedHunt(cannonHunt());
+  seed.gamestation2026.hunts.h1.progress[1] = {
+    currentIndex: 3, status: 'won', keys: [1, 2, 3], totalScore: 300,
+    finalScore: 260, hp: 70, completedStations: {},
+    incoming: { k1: { from: '2', ts: 500, damage: 10, hpAfter: 70 } }
+  };
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+  await expect(page.locator('#cannonHitPrompt')).toBeHidden();
+  await expect.poll(async () =>
+    page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1].incoming)
+  ).toBeUndefined();
+});

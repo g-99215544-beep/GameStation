@@ -91,6 +91,11 @@
   @media (orientation:portrait){
     .cannon-video-stage{width:100vh;height:100vw;transform:rotate(90deg);}
   }
+  .cannon-hit-prompt{position:fixed;inset:0;z-index:1150;background:#000000cc;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .cannon-hit-prompt[hidden]{display:none;}
+  .cannon-hit-card{background:#fff;border-radius:16px;padding:26px 22px;text-align:center;max-width:340px;width:100%;}
+  .cannon-hit-icon{font-size:64px;line-height:1;}
+  .cannon-hit-card h2{color:var(--red);margin:10px 0 4px;}
   body.map-clue-mode .topbar,body.map-clue-mode .wrap{position:relative;z-index:81;}
   body.map-clue-mode .topbar{background:rgba(10,47,79,.94);backdrop-filter:blur(2px);}
   body.map-clue-mode .wrap{min-height:calc(100vh - 64px);padding-top:28px;}
@@ -570,6 +575,14 @@
     <div class="cannon-video-caption" id="cannonVideoCaption"></div>
   </div>
   <button class="cannon-video-skip" id="cannonVideoSkip" type="button" onclick="endCannonVideo()">Langkau ⏭</button>
+</section>
+<section class="cannon-hit-prompt" id="cannonHitPrompt" hidden role="dialog" aria-modal="true" aria-labelledby="cannonHitTitle">
+  <div class="cannon-hit-card">
+    <div class="cannon-hit-icon">💥</div>
+    <h2 id="cannonHitTitle">Kapal anda ditembak!</h2>
+    <p id="cannonHitFrom"></p>
+    <button class="big" onclick="watchPendingHit()">Ketuk untuk lihat</button>
+  </div>
 </section>
 <div class="wrap">
 
@@ -1485,6 +1498,75 @@ function endCannonVideo(){
   cannonVideoDone=null;
   resolve && resolve();
 }
+
+// ---------- RECEIVING A HIT ----------
+let cannonHitRef=null;
+let pendingHit=null;
+let showingHit=false;
+
+function watchCannonHits(){
+  if(!currentGroupId) return;
+  if(cannonHitRef) cannonHitRef.off('value');
+  cannonHitRef=huntRef('progress/'+currentGroupId+'/incoming');
+  cannonHitRef.on('value',snap=>{
+    pendingHit=CannonEngine.summarizeIncoming(snap.val());
+    maybeShowHitPrompt();
+  });
+}
+function stopWatchingCannonHits(){
+  if(cannonHitRef) cannonHitRef.off('value');
+  cannonHitRef=null;
+  pendingHit=null;
+}
+// A shot must never steal time from a station game: the timer is running and
+// the student is mid-answer. Hold it until they are back on a safe screen.
+function hitSafeToShow(){
+  const game=document.getElementById('view-game');
+  return !(game && game.classList.contains('active')) && !showingHit;
+}
+function clearPendingHits(ids){
+  const list=ids||(pendingHit&&pendingHit.ids)||[];
+  if(!list.length) return Promise.resolve();
+  const updates={};
+  list.forEach(id=>{ updates[id]=null; });
+  pendingHit=null;
+  return huntRef('progress/'+currentGroupId+'/incoming').update(updates).catch(()=>{});
+}
+function maybeShowHitPrompt(){
+  if(!pendingHit) return;
+  // Their marks are already announced and the damage is already counted, so
+  // replaying a battle animation over the celebration would only confuse.
+  if(!CannonEngine.isInBattle(progress)){ clearPendingHits(); return; }
+  if(!hitSafeToShow()) return;
+  const prompt=document.getElementById('cannonHitPrompt');
+  const from=document.getElementById('cannonHitFrom');
+  if(!prompt) return;
+  if(from) from.textContent=pendingHit.count>1
+    ? `Anda ditembak ${pendingHit.count} kali! HP anda kini ${pendingHit.hpAfter}%.`
+    : `oleh Kumpulan ${pendingHit.from} — HP anda kini ${pendingHit.hpAfter}%.`;
+  prompt.hidden=false;
+}
+async function watchPendingHit(){
+  const hit=pendingHit;
+  const prompt=document.getElementById('cannonHitPrompt');
+  if(prompt) prompt.hidden=true;
+  if(!hit) return;
+  showingHit=true;
+  progress={...progress, hp:hit.hpAfter};
+  writeLocalJson(progressCacheKey(currentGroupId),progress);
+  renderShipHp();
+  const caption=hit.count>1
+    ? `Anda ditembak ${hit.count} kali! HP: ${hit.hpAfter}%`
+    : `Ditembak Kumpulan ${hit.from}! HP: ${hit.hpAfter}%`;
+  await playCannonVideo('hit',caption);
+  await clearPendingHits(hit.ids);
+  showingHit=false;
+  renderShipHp();
+  flashShipHpHit();
+  renderCannonPanel();
+  maybeShowHitPrompt();
+}
+
 async function fireCannonAt(targetGid){
   // Guards the *firing state*, not the ammo count — the ammo transaction below
   // already guards the count. Without this, a double-tap starts two overlapping
@@ -2143,6 +2225,7 @@ function logout(){
   if(timerInterval) clearInterval(timerInterval);
   if(html5QrCode){ html5QrCode.stop().catch(()=>{}); }
   huntRef().off('value');
+  stopWatchingCannonHits();
   document.body.classList.remove('board-mode');
   currentGroupId = null;
   clearSession();
@@ -2909,6 +2992,7 @@ function watchDashboard(){
 function loadGroupProgress(){
   const cached=readLocalJson(progressCacheKey(currentGroupId));
   const useProgress=p=>{
+    watchCannonHits();
     const safe=p || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
     progress=safe;
     writeLocalJson(progressCacheKey(currentGroupId),safe);
@@ -2921,6 +3005,7 @@ function loadGroupProgress(){
   huntRef('progress/'+currentGroupId).once('value').then(snap=>{
     const p = snap.val() || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
     progress = p;
+    watchCannonHits();
     if(p.status==='won' || StationLayout.isJourneyDone(p.currentIndex||0, currentStationCount())){ showGoToBoard(); return; }
     writeLocalJson(progressCacheKey(currentGroupId),p);
     showClueScreen();
@@ -4527,6 +4612,7 @@ function showResult(onTime, score, done){
     <p>Markah stesen ini: <b>${score}</b></p>
     ${nextHtml}
   </div>`;
+  maybeShowHitPrompt();
 }
 
 // ---------- GROUP FINALE (phone): run to the Smart Board ----------
@@ -4553,6 +4639,7 @@ function showGoToBoard(){
         <h2 style="color:var(--gold);margin:0;">Lari ke SMART BOARD!</h2>
         <p style="font-size:16px;">Pergi ke <b>tempat mula</b> dan tekan <b>peti Kumpulan ${currentGroupId}</b> di skrin besar untuk membuka peti &amp; mengira markah akhir anda.</p>`;
     }
+    maybeShowHitPrompt();
   });
 }
 

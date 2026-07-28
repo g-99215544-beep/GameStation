@@ -44,9 +44,18 @@ module.exports = function installFakeFirebase(seed) {
         }
       },
       set: value => { write(parts, value); notify(); return Promise.resolve(); },
+      // Real Firebase treats a key set to null in an update() as a delete of
+      // that child, and — since it never stores empty container objects —
+      // removes the parent entirely once its last child is gone. Mirror both:
+      // merge non-null keys in, drop null-valued keys instead of storing the
+      // literal null, and prune the node if nothing is left.
       update: value => {
         const current = read(parts) || {};
-        write(parts, Object.assign({}, current, value));
+        const merged = Object.assign({}, current);
+        Object.keys(value || {}).forEach(key => {
+          if (value[key] === null) delete merged[key]; else merged[key] = value[key];
+        });
+        write(parts, Object.keys(merged).length ? merged : null);
         notify();
         return Promise.resolve();
       },
