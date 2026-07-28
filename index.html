@@ -257,6 +257,11 @@
   .setup-step{border-top:4px solid #dfe3ea;padding:9px 8px 0;color:#8a909b;font-size:12px;font-weight:800;}
   .setup-step.active{border-color:var(--gold);color:var(--navy);}
   .setup-step.done{border-color:var(--green);color:var(--green);}
+  .cannon-setup{margin-top:18px;border:2px dashed var(--gold);}
+  .cannon-toggle{display:flex;align-items:center;gap:8px;font-weight:700;}
+  .cannon-settings{margin:12px 0;}
+  .cannon-floor-note{font-size:12px;color:#8a909b;margin:6px 0 0;}
+  .cannon-block{border:1px solid #dfe3ea;border-radius:10px;padding:12px;margin:12px 0;}
   .step-number{display:block;font-size:18px;margin-bottom:2px;}
   .step-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid #eee;margin-top:20px;padding-top:16px;}
   .step-actions button{margin:0;}
@@ -604,6 +609,22 @@
             <button id="btnRemoveStation" onclick="removeStation()">− Stesen</button>
           </div>
           <div id="stationsArea"></div>
+          <div class="card cannon-setup" id="cannonSetup">
+            <h3>⚔️ Meriam (Pilihan)</h3>
+            <p class="admin-panel-intro">Meriam membolehkan kumpulan menembak kumpulan lain. Setiap QR meriam memberi satu peluru kepada setiap kumpulan, sekali sahaja.</p>
+            <label class="cannon-toggle"><input type="checkbox" id="cannonEnabled" onchange="toggleCannonSetup()"> Aktifkan meriam untuk hunt ini</label>
+            <div id="cannonBody" hidden>
+              <div class="cannon-settings">
+                <label for="cannonDamage">Damage setiap tembakan (%)</label>
+                <input id="cannonDamage" type="number" min="1" max="50" step="1" value="10">
+                <p class="cannon-floor-note">HP minimum kekal <b>50%</b> — kumpulan tidak boleh dihapuskan sepenuhnya.</p>
+              </div>
+              <div id="cannonsArea"></div>
+              <div class="feature-actions">
+                <button type="button" class="secondary" id="btnAddCannon" onclick="addCannon()">＋ Tambah Meriam</button>
+              </div>
+            </div>
+          </div>
           <div class="feature-actions">
             <button class="secondary" onclick="pushConfig()">Simpan Treasure Hunt</button>
             <button onclick="testStation(1)">Uji Stesen 1</button>
@@ -924,14 +945,26 @@ function updateConnectivityBadge(){
   if(isOffline()) badge.textContent='📴 Luar Talian';
 }
 function cacheConfig(){
-  writeLocalJson(OfflineStore.CONFIG_CACHE_KEY,{huntId:currentHuntId,stations:stations||{},groups:groups||{},stationCount,ts:Date.now()});
+  writeLocalJson(OfflineStore.CONFIG_CACHE_KEY,{huntId:currentHuntId,stations:stations||{},groups:groups||{},cannon:cannonConfig,cannons:cannons||{},stationCount,ts:Date.now()});
 }
 function applyConfigCache(cfg){
   stations=(cfg&&cfg.stations)||{};
   groups=(cfg&&cfg.groups)||{};
+  cannonConfig={
+    enabled:!!(cfg&&cfg.cannon&&cfg.cannon.enabled),
+    damagePercent:CannonEngine.clampDamage(cfg&&cfg.cannon&&cfg.cannon.damagePercent)
+  };
+  cannons=(cfg&&cfg.cannons)||{};
   stationCount=StationLayout.clampStationCount((cfg&&cfg.stationCount) || Object.keys(stations).length);
   renderGroupLoginOptions();
   buildStationsUI(stations);
+  const enabledBox=document.getElementById('cannonEnabled');
+  if(enabledBox) enabledBox.checked=cannonConfig.enabled;
+  const damageBox=document.getElementById('cannonDamage');
+  if(damageBox) damageBox.value=cannonConfig.damagePercent;
+  const body=document.getElementById('cannonBody');
+  if(body) body.hidden=!cannonConfig.enabled;
+  buildCannonsUI(cannons);
 }
 function cachedSession(){ return readLocalJson(OfflineStore.SESSION_CACHE_KEY); }
 function firebaseOnceWithTimeout(ref, timeoutMs=5000){
@@ -982,6 +1015,8 @@ function initConnectivity(){
 // Session lifecycle so the app is reusable across events: admin presses Mula to
 // start, Tamat to end. status: 'setup' (not started) | 'active' | 'ended'.
 let sessionInfo = {status:'setup'};
+let cannonConfig = {enabled:false, damagePercent:CannonEngine.DEFAULT_DAMAGE};
+let cannons = {};
 const PARTICIPANT_VIEW_IDS = new Set(['view-login','view-session','view-clue','view-game','view-result','view-chest']);
 
 const DAILY_INTRO_KEY = 'game_station_intro_last_seen';
@@ -2096,7 +2131,8 @@ function syncStationSetupLock(){
   if(lock) lock.innerHTML=locked
     ? '<div class="msg">🔒 Sesi sedang aktif — bilangan stesen dikunci. Tekan Tamat sebelum mengubah.</div>' : '';
   updateStationButtons();
-  if(panel) panel.querySelectorAll('.station-block input, .station-block select, .station-block button').forEach(el=>{ el.disabled=locked; });
+  if(panel) panel.querySelectorAll('.station-block input, .station-block select, .station-block button, .cannon-block input, .cannon-block select, .cannon-block button, #cannonEnabled, #cannonDamage').forEach(el=>{ el.disabled=locked; });
+  updateCannonButtons();
 }
 function buildStationsUI(existing){
   const area = document.getElementById('stationsArea');
@@ -2124,6 +2160,130 @@ function buildStationsUI(existing){
     toggleWorksheetEditor(i);
   }
   syncStationSetupLock();
+}
+function toggleCannonSetup(){
+  const on=!!document.getElementById('cannonEnabled')?.checked;
+  const body=document.getElementById('cannonBody');
+  if(body) body.hidden=!on;
+  updateCannonButtons();
+}
+function updateCannonButtons(){
+  const locked=!!(sessionInfo && sessionInfo.status==='active');
+  const add=document.getElementById('btnAddCannon');
+  if(add) add.disabled=locked || document.querySelectorAll('.cannon-block').length>=CannonEngine.MAX_CANNONS;
+}
+function buildCannonsUI(existing){
+  const area=document.getElementById('cannonsArea');
+  if(!area) return;
+  area.innerHTML='';
+  Object.keys(existing||{}).slice(0,CannonEngine.MAX_CANNONS).forEach(cid=>{
+    area.insertAdjacentHTML('beforeend', cannonBlockHtml(cid, existing[cid]||{}));
+    renderWorksheetEditor(cid, worksheetQuestionsFromRaw(existing[cid]&&existing[cid].gameDataRaw));
+    toggleWorksheetEditor(cid);
+  });
+  updateCannonButtons();
+}
+function cannonBlockHtml(cid, cannon){
+  const password=isValidStationPassword(cannon.password)?cannon.password:generateStationPassword();
+  const opts=GAME_TYPES.map(g=>`<option value="${g.id}" ${cannon.gameType===g.id?'selected':''}>${g.name}</option>`).join('');
+  return `
+    <div class="cannon-block" data-cannon-id="${cid}">
+      <h4>Meriam ${cid.replace('c','')}</h4>
+      <label>Nama Meriam</label><input id="cn_name_${cid}" value="${escapeHtml(cannon.name||'')}" placeholder="cth: Meriam Kubu Batu">
+      <label>Password Meriam (tepat 5 huruf atau digit)</label>
+      <input id="cn_pass_${cid}" value="${password}" maxlength="5" pattern="[A-Za-z0-9]{5}" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5)">
+      <label>Jenis Soalan</label><select id="st_gametype_${cid}" onchange="toggleWorksheetEditor('${cid}')">${opts}</select>
+      <div id="game_data_field_${cid}"><label>Data Game (JSON)</label><input id="st_gamedata_${cid}" value='${String(cannon.gameDataRaw||"{}").replace(/'/g,"&apos;")}'></div>
+      <div class="worksheet-editor" id="worksheet_editor_${cid}"></div>
+      <div class="run-editor" id="run_editor_${cid}">
+        <label>Jarak Sasaran (km)</label>
+        <input id="st_targetkm_${cid}" type="number" min="0.1" step="0.1" value="${RunTracker.parseTargetKm(cannon.gameDataRaw)}">
+      </div>
+      <div class="feature-actions">
+        <button type="button" class="secondary" onclick="testCannon('${cid}')">▶️ Uji Soalan Meriam Ini</button>
+        <button type="button" onclick="removeCannon('${cid}')">🗑 Buang</button>
+      </div>
+    </div>`;
+}
+function addCannon(){
+  if(sessionInfo && sessionInfo.status==='active') return;
+  const current=collectCannons();
+  const ids=Object.keys(current);
+  if(ids.length>=CannonEngine.MAX_CANNONS) return;
+  let next=1;
+  while(current['c'+next]) next++;
+  current['c'+next]={id:'c'+next,name:'',password:generateStationPassword(),gameType:GAME_TYPES[0].id,gameDataRaw:'{}'};
+  buildCannonsUI(current);
+}
+function removeCannon(cid){
+  if(sessionInfo && sessionInfo.status==='active') return;
+  const current=collectCannons();
+  delete current[cid];
+  buildCannonsUI(current);
+}
+function collectCannonConfig(){
+  return {
+    enabled:!!document.getElementById('cannonEnabled')?.checked,
+    damagePercent:CannonEngine.clampDamage(document.getElementById('cannonDamage')?.value)
+  };
+}
+function collectCannons(){
+  const out={};
+  document.querySelectorAll('.cannon-block').forEach(block=>{
+    const cid=block.dataset.cannonId;
+    const gameType=document.getElementById('st_gametype_'+cid).value;
+    out[cid]={
+      id:cid,
+      name:document.getElementById('cn_name_'+cid).value,
+      password:document.getElementById('cn_pass_'+cid).value.trim(),
+      gameType,
+      gameDataRaw:stationGameDataRaw(cid, gameType)
+    };
+  });
+  return out;
+}
+function validateCannons(stationConfig, cannonConfigValue, cannonList){
+  if(!cannonConfigValue.enabled) return true;
+  const ids=Object.keys(cannonList);
+  if(!ids.length){
+    alert('Meriam diaktifkan tetapi belum ada QR meriam. Tambah sekurang-kurangnya satu meriam atau matikan meriam.');
+    return false;
+  }
+  const badPassword=ids.filter(cid=>!isValidStationPassword(cannonList[cid].password));
+  if(badPassword.length){
+    alert(`Password Meriam ${badPassword.join(', ')} mesti tepat 5 huruf atau digit.`);
+    return false;
+  }
+  const conflicts=CannonEngine.passwordConflicts(stationConfig, cannonList);
+  if(conflicts.length){
+    alert(`Password bertindih: ${conflicts.map(c=>`${c.a} dan ${c.b} kedua-duanya guna ${c.password}`).join('; ')}. Tukar salah satu.`);
+    return false;
+  }
+  const worksheets=ids.filter(cid=>cannonList[cid].gameType==='lembaran_kerja'
+    && worksheetQuestionsFromRaw(cannonList[cid].gameDataRaw).some(q=>!q.answer));
+  if(worksheets.length){
+    alert(`Isi jawapan betul bagi semua soalan Lembaran Kerja di Meriam ${worksheets.join(', ')}.`);
+    return false;
+  }
+  return true;
+}
+function testCannon(cid){
+  const gameType=document.getElementById('st_gametype_'+cid).value;
+  const st={
+    id:cid,
+    name:document.getElementById('cn_name_'+cid).value || ('Meriam '+cid.replace('c','')),
+    location:'',
+    password:document.getElementById('cn_pass_'+cid).value,
+    timeLimitMin:10,
+    gameType,
+    gameDataRaw:stationGameDataRaw(cid, gameType)
+  };
+  if(!isValidStationPassword(st.password)){
+    alert('Password meriam mesti tepat 5 huruf atau digit sebelum diuji.');
+    return;
+  }
+  window._testMode=true;
+  startGame(st.id, st);
 }
 function stationGameDataRaw(i, gameType){
   if(gameType==='lembaran_kerja') return JSON.stringify({questions:getWorksheetQuestionsFromEditor(i)});
@@ -2228,7 +2388,10 @@ function reindexGroupsForCount(existingGroups, count){
 }
 function pushConfig(){
   const st = collectStations();
+  const cn = collectCannonConfig();
+  const cnList = cn.enabled ? collectCannons() : {};
   if(!validateStationPasswords(st) || !validateWorksheetStations(st)) return;
+  if(!validateCannons(st, cn, cnList)) return;
   const name=String(document.getElementById('huntName')?.value||'').trim();
   if((isHuntDraft || currentHuntId) && !name){
     document.getElementById('pushStatus').innerHTML='<div class="msg err">Masukkan nama Treasure Hunt terlebih dahulu.</div>';
@@ -2255,12 +2418,14 @@ function pushConfig(){
     metadata,
     huntRef('config/stations').set(st),
     huntRef('config/groups').set(gr),
+    huntRef('config/cannon').set(cn),
+    huntRef('config/cannons').set(cnList),
     huntRef('session').set({status:'setup'}),
     huntRef('progress').set(prog)
   ]).then(()=>{
     currentHuntCreatedAt=createdAt;
     isHuntDraft=false;
-    stations=st; groups=gr; stationCount=N; sessionInfo={status:'setup'};
+    stations=st; groups=gr; cannonConfig=cn; cannons=cnList; stationCount=N; sessionInfo={status:'setup'};
     cacheConfig();
     renderGroupLoginOptions();
     let listHtml = '<h4>Password Login Kumpulan (beri kepada setiap kumpulan)</h4><table><tr><th>Kumpulan</th><th>Password</th><th>Mula di Stesen</th></tr>';
