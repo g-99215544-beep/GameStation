@@ -67,6 +67,20 @@
   .journey-score-popup p{margin:0;font-size:16px;font-weight:700;}
   .journey-score-popup .journey-popup-close{position:absolute;right:7px;top:5px;margin:0;padding:0;width:30px;height:30px;border:0;border-radius:0;background:transparent;box-shadow:none;text-shadow:none;color:#12385b;font-size:28px;line-height:26px;}
   .journey-score-popup .journey-popup-close:hover,.journey-score-popup .journey-popup-close:focus-visible{background:rgba(112,64,24,.12);outline:2px solid #704018;outline-offset:1px;}
+  .cannon-fab{position:absolute;right:12px;bottom:12px;z-index:4;width:56px;height:56px;border-radius:50%;border:none;background:var(--navy);color:#fff;font-size:26px;cursor:pointer;box-shadow:0 4px 12px #0006;}
+  .cannon-fab[hidden]{display:none;}
+  .cannon-fab-count{position:absolute;right:-2px;top:-2px;min-width:22px;height:22px;border-radius:11px;background:var(--gold);color:var(--navy);font-size:12px;font-weight:800;line-height:22px;}
+  .cannon-panel{position:absolute;inset:8% 6%;z-index:6;background:#fff;border-radius:14px;padding:16px;overflow-y:auto;box-shadow:0 10px 40px #0009;}
+  .cannon-panel[hidden]{display:none;}
+  .cannon-ammo{font-size:17px;font-weight:800;margin:6px 0 12px;}
+  .cannon-targets-title{margin:16px 0 8px;}
+  .cannon-target{display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid #eee;}
+  .cannon-target-name{flex:0 0 96px;font-weight:700;}
+  .cannon-target-hp{flex:1;height:10px;border-radius:5px;background:var(--red);overflow:hidden;}
+  .cannon-target-hp-fill{display:block;height:100%;background:var(--green);}
+  .cannon-target-hp-text{flex:0 0 42px;font-size:12px;font-weight:700;text-align:right;}
+  .cannon-target.is-won{opacity:.55;}
+  .cannon-hint{font-size:13px;color:#8a909b;margin:8px 0 0;}
   body.map-clue-mode .topbar,body.map-clue-mode .wrap{position:relative;z-index:81;}
   body.map-clue-mode .topbar{background:rgba(10,47,79,.94);backdrop-filter:blur(2px);}
   body.map-clue-mode .wrap{min-height:calc(100vh - 64px);padding-top:28px;}
@@ -521,6 +535,19 @@
       <button class="journey-popup-close" type="button" onclick="closeJourneyScorePopup()" aria-label="Tutup maklumat markah" title="Tutup">&times;</button>
       <h2 id="journeyScoreTitle">Pulau</h2>
       <p id="journeyScoreText"></p>
+    </section>
+    <button class="cannon-fab" id="cannonFab" type="button" hidden onclick="openCannonPanel()" aria-label="Buka panel meriam">
+      💣<span class="cannon-fab-count" id="cannonFabCount">0</span>
+    </button>
+    <section class="cannon-panel" id="cannonPanel" role="dialog" aria-modal="true" aria-labelledby="cannonPanelTitle" hidden>
+      <button class="journey-popup-close" type="button" onclick="closeCannonPanel()" aria-label="Tutup panel meriam" title="Tutup">&times;</button>
+      <h2 id="cannonPanelTitle">⚔️ Meriam</h2>
+      <p class="cannon-ammo" id="cannonAmmo"></p>
+      <button class="big secondary" id="cannonScanBtn" onclick="openCannonScanner()">📷 Scan QR Meriam</button>
+      <div id="cannonReader" style="display:none;"></div>
+      <div id="cannonMsg"></div>
+      <h3 class="cannon-targets-title">Pilih sasaran</h3>
+      <div class="cannon-targets" id="cannonTargets"></div>
     </section>
   </div>
 </section>
@@ -1196,6 +1223,9 @@ function hideJourneyMap(){
   document.body.classList.remove('map-clue-mode');
   const shipHp=document.getElementById('journeyShipHp');
   if(shipHp) shipHp.hidden=true;
+  closeCannonPanel();
+  const fab=document.getElementById('cannonFab');
+  if(fab) fab.hidden=true;
 }
 function renderJourneyIslandButtons(){
   const holder=document.getElementById('journeyIslandButtons');
@@ -1276,7 +1306,79 @@ function showJourneyMap(){
   if(status) status.textContent='Pilih pulau seterusnya atau pulau yang sudah selesai.';
   renderJourneyIslandButtons();
   playJourneyMapPingPong();
+  syncCannonFab();
 }
+let allProgress={};
+let cannonProgressRef=null;
+
+function cannonEnabled(){
+  return !!(cannonConfig && cannonConfig.enabled) && CannonEngine.isInBattle(progress);
+}
+function syncCannonFab(){
+  const fab=document.getElementById('cannonFab');
+  const count=document.getElementById('cannonFabCount');
+  if(!fab) return;
+  fab.hidden=!cannonEnabled();
+  if(count) count.textContent=String(CannonEngine.readAmmo(progress));
+}
+function openCannonPanel(){
+  const panel=document.getElementById('cannonPanel');
+  if(!panel || !cannonEnabled()) return;
+  panel.hidden=false;
+  setCannonMsg('','');
+  // Other groups' HP is only needed while this panel is open, so the listener
+  // lives and dies with it rather than running through every station game.
+  if(!isOffline()){
+    if(cannonProgressRef) cannonProgressRef.off('value');
+    cannonProgressRef=huntRef('progress');
+    cannonProgressRef.on('value',snap=>{ allProgress=snap.val()||{}; renderCannonPanel(); });
+  }
+  renderCannonPanel();
+}
+function closeCannonPanel(){
+  const panel=document.getElementById('cannonPanel');
+  if(panel) panel.hidden=true;
+  stopCannonScanner();
+  if(cannonProgressRef){ cannonProgressRef.off('value'); cannonProgressRef=null; }
+}
+function setCannonMsg(kind,text){
+  const box=document.getElementById('cannonMsg');
+  if(!box) return;
+  box.innerHTML=text ? `<div class="msg ${kind}">${escapeHtml(text)}</div>` : '';
+}
+function renderCannonPanel(){
+  const ammoBox=document.getElementById('cannonAmmo');
+  const list=document.getElementById('cannonTargets');
+  if(!ammoBox || !list) return;
+  const ammo=CannonEngine.readAmmo(progress);
+  const offline=isOffline();
+  ammoBox.innerHTML=ammo
+    ? `Peluru anda: ${'💣'.repeat(ammo)} <span>(${ammo})</span>`
+    : 'Peluru anda: <span>0</span><br><small class="cannon-hint">Cari QR meriam untuk dapat peluru.</small>';
+  const ids=Object.keys(groups||{}).filter(gid=>String(gid)!==String(currentGroupId));
+  list.innerHTML=ids.map(gid=>{
+    const p=allProgress[gid]||{};
+    const hp=CannonEngine.readHp(p);
+    const inBattle=CannonEngine.isInBattle(p);
+    const canFire=inBattle && ammo>0 && !offline;
+    const action=inBattle
+      ? `<button type="button" ${canFire?'':'disabled'} onclick="fireCannonAt('${gid}')" aria-label="Tembak Kumpulan ${gid}">🔥</button>`
+      : '<span class="cannon-target-hp-text">🏆 sudah buka peti</span>';
+    const bar=inBattle
+      ? `<div class="cannon-target-hp"><span class="cannon-target-hp-fill" style="width:${hp}%"></span></div><span class="cannon-target-hp-text">${hp}%</span>`
+      : '';
+    return `<div class="cannon-target${inBattle?'':' is-won'}" data-gid="${gid}">
+      <span class="cannon-target-name">Kumpulan ${gid}</span>${bar}${action}
+    </div>`;
+  }).join('');
+  if(offline) list.insertAdjacentHTML('afterend','<p class="cannon-hint" id="cannonOfflineHint">📴 Perlu internet untuk menembak. Anda masih boleh scan QR meriam.</p>');
+  else document.getElementById('cannonOfflineHint')?.remove();
+}
+// Filled in by Task 9.
+function openCannonScanner(){}
+function stopCannonScanner(){}
+// Filled in by Task 10.
+function fireCannonAt(_gid){}
 function selectJourneyIsland(position){
   if(journeyMoving || !document.getElementById('journeyScorePopup')?.hidden) return;
   const currentIndex=Number(progress.currentIndex)||0;

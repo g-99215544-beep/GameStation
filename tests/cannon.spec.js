@@ -278,3 +278,94 @@ test('a group at full health shows a full green bar', async ({ page }) => {
   const width = await page.locator('#journeyShipHpFill').evaluate(el => el.style.width);
   expect(width).toBe('100%');
 });
+
+// cannonHunt() is a factory, not a shared constant object, and is passed
+// straight into seedHunt(overrides) (not nested under gamestation2026).
+// activeHuntId and session:{status:'active'} are required here (unlike the
+// brief's original draft, which omitted them) because loginAsGroup drives the
+// real #view-login form: watchActiveHunt() only populates `groups`/`stations`
+// when activeHuntId points at a real hunt, and an inactive session shows the
+// "waiting for session" screen instead of the journey map where #cannonFab
+// lives. See seedHunt's own comments above.
+//
+// This must stay a factory (fresh object graph per call), not a shared
+// constant: seedHunt() does `progress: overrides.progress || ...` — a bare
+// reference assignment, not a clone. A shared CANNON_HUNT constant would mean
+// every test's `seed.gamestation2026.hunts.h1.progress` is the *same* object,
+// so a test that mutates it (e.g. the "opened its chest" test overwriting
+// progress[1] to a won state) permanently corrupts it for every later test
+// that reuses the constant — which is exactly what happened here: with a
+// shared constant, the offline test below silently inherited a WON group 1
+// from the "opened its chest" test that runs immediately before it, so its
+// journey map (and #cannonFab) never rendered. A factory sidesteps this
+// entirely since each call builds brand-new nested objects.
+function cannonHunt() {
+  return {
+    activeHuntId: 'h1',
+    session: { status: 'active' },
+    config: {
+      cannon: { enabled: true, damagePercent: 10 },
+      cannons: { c1: { id: 'c1', name: 'Meriam A', password: 'QQQQQ', gameType: 'lembaran_kerja', gameDataRaw: '{"questions":[{"answer":"9","image":""}]}' } }
+    },
+    progress: {
+      1: { currentIndex: 0, status: 'idle', keys: [], totalScore: 0, completedStations: {}, ammo: 1 },
+      2: { currentIndex: 0, status: 'idle', keys: [], totalScore: 0, completedStations: {}, hp: 90 },
+      3: { currentIndex: 3, status: 'won', keys: [1, 2, 3], totalScore: 300, finalScore: 350, completedStations: {} }
+    }
+  };
+}
+
+test('the cannon panel lists other groups with HP and hides your own', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+
+  await expect(page.locator('#cannonPanel')).toBeVisible();
+  await expect(page.locator('#cannonAmmo')).toContainText('1');
+  await expect(page.locator('.cannon-target')).toHaveCount(2);
+  await expect(page.locator('.cannon-target[data-gid="1"]')).toHaveCount(0);
+  await expect(page.locator('.cannon-target[data-gid="2"] .cannon-target-hp-text')).toHaveText('90%');
+  await expect(page.locator('.cannon-target[data-gid="2"] button')).toBeEnabled();
+  await expect(page.locator('.cannon-target[data-gid="3"]')).toContainText('sudah buka peti');
+  await expect(page.locator('.cannon-target[data-gid="3"] button')).toHaveCount(0);
+});
+
+test('with no cannonballs the targets are shown but not firable', async ({ page }) => {
+  const seed = seedHunt(cannonHunt());
+  seed.gamestation2026.hunts.h1.progress[1].ammo = 0;
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+  await expect(page.locator('#cannonPanel')).toContainText('Cari QR meriam');
+  await expect(page.locator('.cannon-target[data-gid="2"] button')).toBeDisabled();
+});
+
+test('the cannon icon is absent when the teacher did not enable cannons', async ({ page }) => {
+  await openApp(page, seedHunt({ activeHuntId: 'h1', session: { status: 'active' } }));
+  await loginAsGroup(page, 1);
+  await expect(page.locator('#cannonFab')).toBeHidden();
+});
+
+test('a group that opened its chest cannot fire either', async ({ page }) => {
+  const seed = seedHunt(cannonHunt());
+  seed.gamestation2026.hunts.h1.progress[1] = {
+    currentIndex: 3, status: 'won', keys: [1, 2, 3], totalScore: 300, finalScore: 350, ammo: 2, completedStations: {}
+  };
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+  await expect(page.locator('#cannonFab')).toBeHidden();
+});
+
+test('offline, firing is blocked but scanning stays available', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  // browserOnline is a script-scope `let` in index.html, not a window property
+  // (see the comment on the "finishing a station" test above for why bare
+  // assignment inside page.evaluate is what actually reaches it). The brief's
+  // original draft set window.browserOnline, which isOffline() never reads.
+  await page.evaluate(() => { browserOnline = false; updateConnectivityBadge(); });
+  await page.locator('#cannonFab').click();
+  await expect(page.locator('.cannon-target[data-gid="2"] button')).toBeDisabled();
+  await expect(page.locator('#cannonScanBtn')).toBeEnabled();
+  await expect(page.locator('#cannonPanel')).toContainText('Perlu internet untuk menembak');
+});
