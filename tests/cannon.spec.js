@@ -654,6 +654,81 @@ test('a failed hit transaction refunds the spent ammo', async ({ page }) => {
   await expect(page.locator('#cannonVideo')).toBeHidden();
 });
 
+// Review follow-up: the fake-firebase transaction() in tests/helpers/fake-firebase.js
+// reads and writes synchronously with no await inside (see its own source) — so two
+// transaction() calls issued together against the *same* ref, without awaiting
+// between them, run strictly sequentially with no interleaving: exactly the
+// atomicity guarantee fireCannonAt's hp write depends on. A naive
+// `.once('value').then(v => ref.set(...))` reimplementation has a microtask
+// boundary between its read and its write, so two calls issued together would
+// both read the pre-damage value and the second write would clobber the
+// first — one hit silently lost. This test exercises the same ref+transaction
+// call fireCannonAt's hp step makes (huntRef('progress/<gid>/hp').transaction(...)),
+// issued twice without awaiting between them, standing in for two different
+// groups' shots landing on the same victim at once — something a single
+// logged-in page (and this fake Firebase's per-page __db) cannot represent by
+// driving two independent shooters through the real UI.
+test('two damage transactions issued together against the same target both land', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+
+  const result = await page.evaluate(async () => {
+    const hpRef = huntRef('progress/2/hp');   // group 2 seeded at hp:90
+    const damage = CannonEngine.clampDamage(cannonConfig.damagePercent); // 10
+    const [a, b] = await Promise.all([
+      hpRef.transaction(current => CannonEngine.applyDamage(current, damage)),
+      hpRef.transaction(current => CannonEngine.applyDamage(current, damage))
+    ]);
+    return { aCommitted: a.committed, bCommitted: b.committed };
+  });
+  expect(result.aCommitted).toBe(true);
+  expect(result.bCommitted).toBe(true);
+
+  // Both damage steps landed: 90 -> 80 -> 70. A read-then-write with a
+  // microtask gap between read and write would leave this at 80 (one hit lost).
+  const hp = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[2].hp);
+  expect(hp).toBe(70);
+});
+
+// Review follow-up, item 1: without a firing-state guard, a double-tapped fire
+// button starts two overlapping fireCannonAt() calls before the first one's
+// ammo transaction resolves. Both could pass the ammo check (the transaction
+// only protects the *count*, not the *firing state*), and since the video
+// overlay's resolver (cannonVideoDone) is a single module-level variable, the
+// second call's playCannonVideo() would silently strand the first call's
+// await forever — that shot's success message and re-render never happen even
+// though its Firebase writes already landed. This calls fireCannonAt('2')
+// twice in the same synchronous tick (bypassing Playwright's own
+// click-actionability wait, which would otherwise serialize two real
+// .click() calls once the button renders disabled) to reproduce the race
+// exactly as a double-tap would create it.
+test('a double-tap does not fire twice and does not hang the first shot', async ({ page }) => {
+  const seed = seedHunt(cannonHunt());
+  seed.gamestation2026.hunts.h1.progress[1].ammo = 2;   // enough for two shots if the guard failed
+  await openApp(page, seed);
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+
+  const bothDone = page.evaluate(() =>
+    Promise.all([fireCannonAt('2'), fireCannonAt('2')]).then(() => true)
+  );
+
+  // The one call that actually fires has to reach and clear its video before
+  // it can resolve; skip it so bothDone can settle.
+  await expect(page.locator('#cannonVideo')).toBeVisible();
+  await page.locator('#cannonVideoSkip').click();
+
+  // Neither call hangs — Promise.all resolves. (Without the in-flight guard,
+  // the second call's playCannonVideo() would overwrite cannonVideoDone and
+  // this await would exceed the test timeout.)
+  expect(await bothDone).toBe(true);
+
+  const db = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);
+  expect(db[1].ammo).toBe(1);      // only one shot actually fired, from the seeded 2
+  expect(db[2].hp).toBe(80);       // only one damage step landed
+  expect(Object.values(db[2].incoming || {})).toHaveLength(1);
+});
+
 test('offline: a station completion queued before a cannon award at the same path are both flushed', async ({ page }) => {
   await openApp(page, seedHunt(cannonHunt()));
   await loginAsGroup(page, 1);

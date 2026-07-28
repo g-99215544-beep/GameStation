@@ -1327,6 +1327,13 @@ function showJourneyMap(){
 }
 let allProgress={};
 let cannonProgressRef=null;
+// Set for the duration of a single fireCannonAt() call. Firing spends ammo
+// via a Firebase transaction, which guards the *count*, but nothing stopped
+// a double-tap from starting two overlapping calls before the first one's
+// transaction resolved — both could pass the ammo check, and since the video
+// overlay/its resolver (cannonVideoDone) are singletons, the second call's
+// playCannonVideo() would silently strand the first call's await forever.
+let cannonShotInFlight=false;
 
 function cannonEnabled(){
   return !!(cannonConfig && cannonConfig.enabled) && CannonEngine.isInBattle(progress);
@@ -1384,7 +1391,7 @@ function renderCannonPanel(){
     const p=allProgress[gid]||{};
     const hp=CannonEngine.readHp(p);
     const inBattle=CannonEngine.isInBattle(p);
-    const canFire=inBattle && ammo>0 && !offline;
+    const canFire=inBattle && ammo>0 && !offline && !cannonShotInFlight;
     const action=inBattle
       ? `<button type="button" ${canFire?'':'disabled'} onclick="fireCannonAt('${gid}')" aria-label="Tembak Kumpulan ${gid}">🔥</button>`
       : '<span class="cannon-target-hp-text">🏆 sudah buka peti</span>';
@@ -1479,36 +1486,72 @@ function endCannonVideo(){
   resolve && resolve();
 }
 async function fireCannonAt(targetGid){
+  // Guards the *firing state*, not the ammo count — the ammo transaction below
+  // already guards the count. Without this, a double-tap starts two overlapping
+  // calls before the first's transaction resolves; both can pass the ammo
+  // check, and since the video overlay's resolver (cannonVideoDone) is a
+  // single module-level variable, the second call's playCannonVideo()
+  // silently strands the first call's await forever.
+  if(cannonShotInFlight) return;
   if(isOffline()){ setCannonMsg('err','Perlu internet untuk menembak.'); return; }
   if(!CannonEngine.isInBattle(progress)){ setCannonMsg('err','Peti anda sudah dibuka — pertempuran tamat.'); return; }
   const target=allProgress[targetGid];
   if(!CannonEngine.isInBattle(target)){ setCannonMsg('err',`Kumpulan ${targetGid} sudah buka peti.`); return; }
   const damage=CannonEngine.clampDamage(cannonConfig.damagePercent);
   const ammoRef=huntRef('progress/'+currentGroupId+'/ammo');
-  const spend=await ammoRef.transaction(current=>{
-    const have=CannonEngine.readAmmo({ammo:current});
-    return have<1 ? undefined : have-1;      // undefined aborts the transaction
-  });
-  if(!spend.committed){ setCannonMsg('err','Tiada peluru meriam.'); renderCannonPanel(); return; }
-  progress={...progress, ammo:CannonEngine.readAmmo(progress)-1};
-  syncCannonFab();
-  renderCannonPanel();
+  cannonShotInFlight=true;
   try{
-    const hit=await huntRef('progress/'+targetGid+'/hp')
-      .transaction(current=>CannonEngine.applyDamage(current,damage));
-    if(!hit.committed) throw new Error('hp');
-    const hpAfter=hit.snapshot.val();
-    await huntRef('progress/'+targetGid+'/incoming')
-      .push({from:String(currentGroupId), ts:Date.now(), damage, hpAfter});
+    const spend=await ammoRef.transaction(current=>{
+      const have=CannonEngine.readAmmo({ammo:current});
+      return have<1 ? undefined : have-1;      // undefined aborts the transaction
+    });
+    if(!spend.committed){ setCannonMsg('err','Tiada peluru meriam.'); renderCannonPanel(); return; }
+    // Mirror what Firebase actually committed, not a parallel guess recomputed
+    // from the (possibly stale) local `progress` cache.
+    progress={...progress, ammo:CannonEngine.readAmmo({ammo:spend.snapshot.val()})};
+    syncCannonFab();
+    renderCannonPanel();
+
+    let hpAfter=null;
+    try{
+      // Scoped to only the Firebase writes that must succeed together for the
+      // shot to have "landed" — the hp transaction and the incoming push.
+      // playCannonVideo() below is deliberately outside this try: by the time
+      // it runs, the hit has already landed and is visible to the victim, so
+      // a video-playback failure must never be treated as "the shot failed"
+      // and trigger a refund for a shot that really connected.
+      const hit=await huntRef('progress/'+targetGid+'/hp')
+        .transaction(current=>CannonEngine.applyDamage(current,damage));
+      if(!hit.committed) throw new Error('hp');
+      hpAfter=hit.snapshot.val();
+      await huntRef('progress/'+targetGid+'/incoming')
+        .push({from:String(currentGroupId), ts:Date.now(), damage, hpAfter});
+    }catch(_){
+      // The refund is itself a network write and can itself fail. If it
+      // throws, the ammo stays spent in Firebase with nothing landed for it —
+      // exactly what a child must not be left with — so contain the failure:
+      // the child still gets a message and a fresh panel even though the
+      // local ammo count may now be stale until the next sync.
+      try{
+        const refund=await ammoRef.transaction(current=>CannonEngine.readAmmo({ammo:current})+1);
+        if(refund.committed) progress={...progress, ammo:CannonEngine.readAmmo({ammo:refund.snapshot.val()})};
+      }catch(_refundErr){}
+      syncCannonFab();
+      setCannonMsg('err','Tembakan gagal — peluru dipulangkan.');
+      renderCannonPanel();
+      return;
+    }
     await playCannonVideo('fire',`Tembakan tepat! Kumpulan ${targetGid} → ${hpAfter}%`);
     setCannonMsg('ok',`Kumpulan ${targetGid} kena tembak. HP mereka kini ${hpAfter}%.`);
-  }catch(_){
-    await ammoRef.transaction(current=>CannonEngine.readAmmo({ammo:current})+1);
-    progress={...progress, ammo:CannonEngine.readAmmo(progress)+1};
-    syncCannonFab();
-    setCannonMsg('err','Tembakan gagal — peluru dipulangkan.');
+    renderCannonPanel();
+  } finally {
+    cannonShotInFlight=false;
+    // The in-flight flag only affects rendering (disabling the fire buttons);
+    // flipping it back without a matching render would leave a just-fired
+    // target's button looking disabled until some unrelated write happens to
+    // trigger the panel's live listener.
+    renderCannonPanel();
   }
-  renderCannonPanel();
 }
 function selectJourneyIsland(position){
   if(journeyMoving || !document.getElementById('journeyScorePopup')?.hidden) return;
