@@ -412,6 +412,25 @@ test('an imperfect cannon answer awards nothing and allows a retry', async ({ pa
   expect(saved.currentIndex).toBe(0);
 });
 
+// Fills every blank input of the Sudoku stage currently on screen with that
+// stage's fixed solution, using real Playwright .fill() calls against the
+// live DOM (not a page.evaluate value assignment), so the click on "Semak
+// Stage N" that follows is checking genuine user-entered input.
+async function fillSudokuStage(page) {
+  const cells = await page.evaluate(() => {
+    const sudoku = gameState.sudoku;
+    const stage = sudoku.stages[sudoku.stageIndex];
+    const list = [];
+    stage.puzzle.forEach((row, r) => row.forEach((cell, c) => {
+      if (!cell) list.push({ id: `sudoku_${sudoku.stageIndex}_${r}_${c}`, value: String(stage.solution[r][c]) });
+    }));
+    return list;
+  });
+  for (const { id, value } of cells) {
+    await page.locator(`#${id}`).fill(value);
+  }
+}
+
 test('a cannon question of a type that bypasses finishGame never advances the journey', async ({ page }) => {
   const seed = seedHunt(cannonHunt());
   seed.gamestation2026.hunts.h1.config.cannons.c1.gameType = 'sudoku';
@@ -420,16 +439,27 @@ test('a cannon question of a type that bypasses finishGame never advances the jo
   await loginAsGroup(page, 1);
   await page.locator('#cannonFab').click();
   await page.evaluate(() => redeemCannonPassword('QQQQQ'));
-  // finishSudoku calls submitCompletion directly, skipping finishGame entirely.
-  await page.evaluate(() => {
-    window.gameState = { type: 'sudoku', correct: 3, total: 3 };
-    submitCompletion(true, 100, 50);
-  });
+  await expect(page.locator('#view-game')).toHaveClass(/active/);
+
+  // Play all three Sudoku stages to a real finish — filling every blank cell
+  // with the puzzle's fixed solution and pressing the actual "Semak Stage N"
+  // / "Teruskan ke Stage N" buttons a student would press — so it is
+  // finishSudoku() itself (which calls submitCompletion directly, never
+  // through finishGame) that reaches the hook, not a simulated call.
+  for (let stage = 1; stage <= 3; stage++) {
+    await fillSudokuStage(page);
+    await page.getByRole('button', { name: `Semak Stage ${stage}` }).click();
+    if (stage < 3) {
+      await page.getByRole('button', { name: `Teruskan ke Stage ${stage + 1}` }).click();
+    }
+  }
 
   const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
   expect(saved.ammo).toBe(2);
+  expect(saved.claimed.c1).toBeGreaterThan(0);
   expect(saved.currentIndex).toBe(0);
   expect(saved.totalScore).toBe(0);
+  expect(saved.keys || []).toEqual([]);
   expect(saved.completedStations).toEqual({});
 });
 
@@ -477,4 +507,74 @@ test('the offline hint does not duplicate across repeated renders', async ({ pag
   // find one even if duplicates existed).
   await page.evaluate(() => { browserOnline = true; updateConnectivityBadge(); renderCannonPanel(); });
   await expect(page.locator('#cannonOfflineHint')).toHaveCount(0);
+});
+
+// OfflineStore.enqueueWrite de-dupes the pending-write queue by path, and a
+// cannon award and a station completion both write to the same progress/<gid>
+// path. queueProgressMerge exists specifically so neither one silently
+// clobbers the other while queued — these two tests drive that scenario in
+// both possible orderings, since de-duplication-by-path is order-sensitive.
+test('offline: a cannon award queued before a station completion at the same path are both flushed', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.evaluate(() => { browserOnline = false; updateConnectivityBadge(); });
+
+  // Cannon award queued first.
+  await page.locator('#cannonFab').click();
+  await page.evaluate(() => redeemCannonPassword('QQQQQ'));
+  await page.locator('#worksheetAnswer').fill('9');
+  await page.getByRole('button', { name: 'Semak Jawapan' }).click();
+
+  // Station completion queued second, same progress/<gid> path.
+  await page.evaluate(() => {
+    window._curStId = 1;
+    gameState = { type: 'quiz', correct: 1, total: 1 };
+    submitCompletion(true, 100, 5);
+  });
+
+  // Still offline: exactly one queued write for this path, not two — proof
+  // the second enqueue merged onto the first instead of replacing it.
+  const queued = await page.evaluate(() => JSON.parse(localStorage.getItem(OfflineStore.PENDING_KEY)));
+  expect(queued).toHaveLength(1);
+
+  await page.evaluate(() => { browserOnline = true; updateConnectivityBadge(); return flushPendingWrites(); });
+
+  const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(saved.ammo).toBe(2);
+  expect(saved.claimed.c1).toBeGreaterThan(0);
+  expect(saved.currentIndex).toBe(1);
+  expect(saved.totalScore).toBe(100);
+});
+
+test('offline: a station completion queued before a cannon award at the same path are both flushed', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.evaluate(() => { browserOnline = false; updateConnectivityBadge(); });
+
+  // Station completion queued first. This drives submitCompletion's own
+  // showResult(), which hides the journey map (and #cannonFab with it), so
+  // the cannon redemption below calls redeemCannonPassword directly rather
+  // than clicking a fab that is no longer visible — the fab click is a
+  // convenience in the other tests, not something redeemCannonPassword needs.
+  await page.evaluate(() => {
+    window._curStId = 1;
+    gameState = { type: 'quiz', correct: 1, total: 1 };
+    submitCompletion(true, 100, 5);
+  });
+
+  // Cannon award queued second, same progress/<gid> path.
+  await page.evaluate(() => redeemCannonPassword('QQQQQ'));
+  await page.locator('#worksheetAnswer').fill('9');
+  await page.getByRole('button', { name: 'Semak Jawapan' }).click();
+
+  const queued = await page.evaluate(() => JSON.parse(localStorage.getItem(OfflineStore.PENDING_KEY)));
+  expect(queued).toHaveLength(1);
+
+  await page.evaluate(() => { browserOnline = true; updateConnectivityBadge(); return flushPendingWrites(); });
+
+  const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress[1]);
+  expect(saved.ammo).toBe(2);
+  expect(saved.claimed.c1).toBeGreaterThan(0);
+  expect(saved.currentIndex).toBe(1);
+  expect(saved.totalScore).toBe(100);
 });
