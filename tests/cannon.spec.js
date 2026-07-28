@@ -116,3 +116,21 @@ test('the seventh cannon is refused', async ({ page }) => {
   await expect(page.locator('.cannon-block')).toHaveCount(6);
   await expect(add).toBeDisabled();
 });
+
+test('cannon QRs are generated in their own labelled section', async ({ page }) => {
+  await openApp(page, seedHunt({
+    config: {
+      cannon: { enabled: true, damagePercent: 10 },
+      cannons: { c1: { id: 'c1', name: 'Meriam Kubu Batu', password: 'QQQQQ', gameType: 'lembaran_kerja', gameDataRaw: '{"questions":[{"answer":"9","image":""}]}' } }
+    }
+  }));
+  await openHuntSetup(page);
+  await page.locator('#adminTabSelect').selectOption('qr');
+  await page.getByRole('button', { name: 'Jana QR Stesen' }).click();
+
+  await expect(page.locator('#qrOutput .qr-print')).toHaveCount(4);   // 3 stations + 1 cannon
+  const cannonCard = page.locator('#qrOutput .qr-print.cannon-qr');
+  await expect(cannonCard).toHaveCount(1);
+  await expect(cannonCard).toContainText('Meriam Kubu Batu');
+  await expect(cannonCard).toContainText('satu peluru');
+});

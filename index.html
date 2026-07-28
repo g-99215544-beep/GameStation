@@ -278,6 +278,7 @@
   .table-wrap{overflow-x:auto;}
   .qr-grid{display:flex;flex-wrap:wrap;gap:4px;}
   .qr-print{background:#fff;}
+  .qr-print.cannon-qr{border:3px solid var(--red);background:#fff6f5;}
   .feature-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;}
   .feature-actions button{margin:0;}
   .worksheet-editor{margin-top:14px;padding:14px;background:#fff8df;border:2px solid var(--gold);border-radius:10px;}
@@ -653,7 +654,7 @@
       <section class="admin-panel" id="admin-panel-qr">
         <div class="card" id="printArea">
           <h3>QR Tersembunyi</h3>
-          <p class="admin-panel-intro">Jana QR untuk setiap stesen, kemudian cetak dan sorokkan di lokasi clue.</p>
+          <p class="admin-panel-intro">Jana QR untuk setiap stesen dan setiap meriam, kemudian cetak dan sorokkan di lokasi clue. QR meriam bertanda merah.</p>
           <div class="feature-actions">
             <button class="secondary" onclick="generateQRs()">Jana QR Stesen</button>
             <button onclick="printQRCodes()">Cetak QR: Satu QR Setiap Halaman</button>
@@ -2541,16 +2542,26 @@ function printLoginPasswords(){
 }
 function generateQRs(){
   const st = collectStations();
+  const cn = collectCannonConfig();
+  const cnList = cn.enabled ? collectCannons() : {};
   if(!validateStationPasswords(st) || !validateWorksheetStations(st)) return;
-  stations = st;
+  if(!validateCannons(st, cn, cnList)) return;
+  stations = st; cannonConfig = cn; cannons = cnList;
   const out = document.getElementById('qrOutput');
   out.innerHTML='';
   Object.values(st).forEach(s=>{
     const div=document.createElement('div');
     div.className='qr-print';
-    div.innerHTML=`<div style="font-weight:700;">Stesen ${s.id}: ${s.name}</div><div id="qr_${s.id}"></div><div style="font-size:11px;color:#888;">Sorok di: ${s.location}</div>`;
+    div.innerHTML=`<div style="font-weight:700;">Stesen ${s.id}: ${escapeHtml(s.name)}</div><div id="qr_${s.id}"></div><div style="font-size:11px;color:#888;">Sorok di: ${escapeHtml(s.location)}</div>`;
     out.appendChild(div);
     setTimeout(()=>new QRCode(document.getElementById('qr_'+s.id), {text:s.password, width:130, height:130}), 0);
+  });
+  Object.values(cnList).forEach(c=>{
+    const div=document.createElement('div');
+    div.className='qr-print cannon-qr';
+    div.innerHTML=`<div style="font-weight:700;">⚔️ ${escapeHtml(c.name||('Meriam '+c.id.replace('c','')))}</div><div id="qr_${c.id}"></div><div style="font-size:11px;color:#888;">QR meriam — setiap kumpulan boleh ambil satu peluru sekali sahaja.</div>`;
+    out.appendChild(div);
+    setTimeout(()=>new QRCode(document.getElementById('qr_'+c.id), {text:c.password, width:130, height:130}), 0);
   });
 }
 function printQRCodes(){
