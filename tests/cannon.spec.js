@@ -65,7 +65,7 @@ async function openApp(page, seed) {
 
 async function openHuntSetup(page) {
   await page.locator('#adminAccessBtn').click();
-  await page.locator('#adminPin').fill('1234');
+  await page.locator('#adminPin').fill('admin123');
   await page.getByRole('button', { name: 'Masuk Admin' }).click();
   await page.locator('.group-card', { hasText: 'Ujian Meriam' }).getByRole('button', { name: 'Edit' }).click();
   await page.locator('#adminTabSelect').selectOption('setup');
@@ -79,7 +79,7 @@ async function openHuntSetup(page) {
 // script and silently reseed window.__db from the original seed.
 async function openHuntTreasureBoard(page) {
   await page.locator('#adminAccessBtn').click();
-  await page.locator('#adminPin').fill('1234');
+  await page.locator('#adminPin').fill('admin123');
   await page.getByRole('button', { name: 'Masuk Admin' }).click();
   await page.locator('.group-card', { hasText: 'Ujian Meriam' }).getByRole('button', { name: 'Peti Harta Karun' }).click();
 }
