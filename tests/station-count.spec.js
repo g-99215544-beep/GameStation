@@ -25,10 +25,15 @@ async function seedPage(page, seed) {
   }, seed);
 }
 
+// The gameType must be one that still exists in GAME_TYPES. A removed type
+// (this used to seed 'quiz') leaves the station form's <select> falling back to
+// its first option, lembaran_kerja, whose validation then blocks pushConfig
+// before it writes anything — and the failure reads as "orders were not
+// regenerated" rather than "the seed is stale".
 function seedWith(stationCount, groups) {
   const stations = Object.fromEntries(Array.from({ length: stationCount }, (_, index) => {
     const id = index + 1;
-    return [id, { id, name: `Stesen ${id}`, location: 'x', password: '12345', gameType: 'quiz', gameDataRaw: '{}', timeLimitMin: 10 }];
+    return [id, { id, name: `Stesen ${id}`, location: 'x', password: '12345', gameType: 'sifir', gameDataRaw: '{}', timeLimitMin: 10 }];
   }));
   return { gamestation2026: { config: { stations, groups }, session: { status: 'setup' }, progress: {} } };
 }
