@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/png" href="assets/chest/chest_sheet.png">
 <title>Game Station</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -69,7 +70,15 @@
       <button class="journey-popup-close" type="button" onclick="closeCannonPanel()" aria-label="Tutup panel meriam" title="Tutup">&times;</button>
       <h2 id="cannonPanelTitle">⚔️ Meriam</h2>
       <p class="cannon-ammo" id="cannonAmmo"></p>
-      <button class="big secondary" id="cannonScanBtn" onclick="openCannonScanner()">📷 Scan QR Meriam</button>
+      <div class="cannon-redeem">
+        <label for="cannonPasswordInput">Password Meriam</label>
+        <div class="cannon-password-row">
+          <input id="cannonPasswordInput" maxlength="5" pattern="[A-Za-z0-9]{5}" autocomplete="off" placeholder="Contoh: ABC12" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5)" onkeydown="if(event.key==='Enter') submitCannonPassword()">
+          <button type="button" onclick="submitCannonPassword()">Sahkan</button>
+        </div>
+        <div class="password-or">atau</div>
+        <button type="button" class="big secondary" id="cannonScanBtn" onclick="openCannonScanner()">📷 Scan QR Meriam</button>
+      </div>
       <div id="cannonReader" style="display:none;"></div>
       <div id="cannonMsg"></div>
       <h3 class="cannon-targets-title">Pilih sasaran</h3>
@@ -209,12 +218,14 @@
           <div id="stationsArea"></div>
           <div class="card cannon-setup" id="cannonSetup">
             <h3>⚔️ Meriam (Pilihan)</h3>
-            <p class="admin-panel-intro">Meriam membolehkan kumpulan menembak kumpulan lain. Setiap QR meriam memberi satu peluru kepada setiap kumpulan, sekali sahaja.</p>
+            <p class="admin-panel-intro">Meriam membolehkan kumpulan menembak kumpulan lain. Setiap tugasan meriam memberi satu peluru kepada setiap kumpulan, sekali sahaja, melalui QR atau password.</p>
             <label class="cannon-toggle"><input type="checkbox" id="cannonEnabled" onchange="toggleCannonSetup()"> Aktifkan meriam untuk hunt ini</label>
             <div id="cannonBody" hidden>
               <div class="cannon-settings">
                 <label for="cannonDamage">Damage setiap tembakan (%)</label>
                 <input id="cannonDamage" type="number" min="1" max="50" step="1" value="10">
+                <label for="cannonStartingAmmo">Peluru permulaan setiap kumpulan</label>
+                <input id="cannonStartingAmmo" type="number" min="0" max="99" step="1" value="0" inputmode="numeric">
                 <p class="cannon-floor-note">HP minimum kekal <b>50%</b> — kumpulan tidak boleh dihapuskan sepenuhnya.</p>
               </div>
               <div id="cannonsArea"></div>

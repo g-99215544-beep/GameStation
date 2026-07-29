@@ -192,7 +192,7 @@ function endSession(){
 function newSession(){
   if(!confirm('Mula sesi BARU dengan murid baru?\n\nSemua progress & peti harta akan direset. Stesen & password login kekal.')) return;
   const prog={};
-  Object.keys(groups||{}).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
+  Object.keys(groups||{}).forEach(gid=>{ prog[gid]=freshGroupProgress(); });
   huntRef('progress').set(prog);
   huntRef('session').set({status:'setup'});
 }

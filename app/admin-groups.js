@@ -122,7 +122,7 @@ function saveGroupManager(){
   }
   const gr = buildGroupsFromDraft(groupDraft, groups);
   const prog = {};
-  Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
+  Object.keys(gr).forEach(gid=>{ prog[gid]=freshGroupProgress(); });
   if(isHuntDraft){
     groups=gr; renderGroupLoginOptions();
     if(msg) msg.innerHTML='<div class="msg ok">Kumpulan disimpan dalam draf. Tekan Simpan Treasure Hunt pada akhir setup.</div>';

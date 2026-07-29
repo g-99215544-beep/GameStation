@@ -2,7 +2,7 @@
 function loadGroupProgress(){
   const cached=readLocalJson(progressCacheKey(currentGroupId));
   const useProgress=p=>{
-    const safe=p || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
+    const safe=p || freshGroupProgress();
     progress=safe;
     // After the global, never before: the listener fires immediately, and
     // maybeShowHitPrompt gates on progress.status. A stale 'won' left by a
@@ -17,7 +17,7 @@ function loadGroupProgress(){
   if(cached){ useProgress(cached); return; }
   if(isOffline()) { useProgress(null); return; }
   huntRef('progress/'+currentGroupId).once('value').then(snap=>{
-    const p = snap.val() || {currentIndex:0,status:'idle',keys:[],totalScore:0,completedStations:{}};
+    const p = snap.val() || freshGroupProgress();
     progress = p;
     watchCannonHits();
     if(p.status==='won' || StationLayout.isJourneyDone(p.currentIndex||0, currentStationCount())){ showGoToBoard(); return; }

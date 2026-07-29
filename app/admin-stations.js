@@ -280,7 +280,7 @@ function syncStationSetupLock(){
   if(lock) lock.innerHTML=locked
     ? '<div class="msg">🔒 Sesi sedang aktif — bilangan stesen dikunci. Tekan Tamat sebelum mengubah.</div>' : '';
   updateStationButtons();
-  if(panel) panel.querySelectorAll('.station-block input, .station-block select, .station-block button, .cannon-block input, .cannon-block select, .cannon-block button, #cannonEnabled, #cannonDamage').forEach(el=>{ el.disabled=locked; });
+  if(panel) panel.querySelectorAll('.station-block input, .station-block select, .station-block button, .cannon-block input, .cannon-block select, .cannon-block button, #cannonEnabled, #cannonDamage, #cannonStartingAmmo').forEach(el=>{ el.disabled=locked; });
   updateCannonButtons();
 }
 function buildStationsUI(existing){
@@ -379,7 +379,8 @@ function removeCannon(cid){
 function collectCannonConfig(){
   return {
     enabled:!!document.getElementById('cannonEnabled')?.checked,
-    damagePercent:CannonEngine.clampDamage(document.getElementById('cannonDamage')?.value)
+    damagePercent:CannonEngine.clampDamage(document.getElementById('cannonDamage')?.value),
+    startingAmmo:CannonEngine.clampStartingAmmo(document.getElementById('cannonStartingAmmo')?.value)
   };
 }
 function collectCannons(){
@@ -401,7 +402,7 @@ function validateCannons(stationConfig, cannonConfigValue, cannonList){
   if(!cannonConfigValue.enabled) return true;
   const ids=Object.keys(cannonList);
   if(!ids.length){
-    alert('Meriam diaktifkan tetapi belum ada QR meriam. Tambah sekurang-kurangnya satu meriam atau matikan meriam.');
+    alert('Meriam diaktifkan tetapi belum ada tugasan meriam. Tambah sekurang-kurangnya satu meriam atau matikan meriam.');
     return false;
   }
   const badPassword=ids.filter(cid=>!isValidStationPassword(cannonList[cid].password));
@@ -599,7 +600,7 @@ function pushConfig(){
   const baseGroups=hasGroups ? groups : collectGroups(N);
   const gr=reindexGroupsForCount(baseGroups, N);
   const prog={};
-  Object.keys(gr).forEach(gid=>{ prog[gid]={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0}; });
+  Object.keys(gr).forEach(gid=>{ prog[gid]=freshGroupProgress(cn); });
   if(isHuntDraft && !currentHuntId) currentHuntId=rootRef('hunts').push().key;
   const now=Date.now();
   const createdAt=currentHuntCreatedAt||now;

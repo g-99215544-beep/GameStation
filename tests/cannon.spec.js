@@ -91,6 +91,7 @@ test('admin can enable cannons, add one, and save it to config', async ({ page }
   await page.locator('#cannonEnabled').check();
   await expect(page.locator('#cannonBody')).toBeVisible();
   await page.locator('#cannonDamage').fill('15');
+  await page.locator('#cannonStartingAmmo').fill('3');
   await page.getByRole('button', { name: '＋ Tambah Meriam' }).click();
 
   await page.locator('#cn_name_c1').fill('Meriam Kubu Batu');
@@ -104,10 +105,12 @@ test('admin can enable cannons, add one, and save it to config', async ({ page }
   await expect(page.locator('#admin-panel-setup #pushStatus')).toContainText('Config di-push');
 
   const saved = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.config);
-  expect(saved.cannon).toEqual({ enabled: true, damagePercent: 15 });
+  expect(saved.cannon).toEqual({ enabled: true, damagePercent: 15, startingAmmo: 3 });
   expect(saved.cannons.c1.name).toBe('Meriam Kubu Batu');
   expect(saved.cannons.c1.password).toMatch(/^[A-Za-z0-9]{5}$/);
   expect(JSON.parse(saved.cannons.c1.gameDataRaw).questions[0].answer).toBe('42');
+  const progress = await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress);
+  expect(Object.values(progress).map(group => group.ammo)).toEqual([3, 3, 3]);
 });
 
 test('a cannon password that collides with a station is rejected by name', async ({ page }) => {
@@ -336,7 +339,7 @@ test('with no cannonballs the targets are shown but not firable', async ({ page 
   await openApp(page, seed);
   await loginAsGroup(page, 1);
   await page.locator('#cannonFab').click();
-  await expect(page.locator('#cannonPanel')).toContainText('Cari QR meriam');
+  await expect(page.locator('#cannonPanel')).toContainText('Scan QR atau masukkan password meriam');
   await expect(page.locator('.cannon-target[data-gid="2"] button')).toBeDisabled();
 });
 
@@ -387,6 +390,41 @@ test('a perfect cannon answer awards one cannonball and no marks', async ({ page
   expect(saved.totalScore).toBe(0);
   expect(saved.currentIndex).toBe(0);
   expect(saved.keys || []).toEqual([]);
+});
+
+test('a group can key in a cannon password to start its task', async ({ page }) => {
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+
+  await page.locator('#cannonPasswordInput').fill('qqqqq');
+  await page.getByRole('button', { name: 'Sahkan', exact: true }).click();
+
+  await expect(page.locator('#view-game')).toHaveClass(/active/);
+  await expect(page.locator('#worksheetAnswer')).toBeVisible();
+});
+
+test('the QR and password choices fit inside the cannon panel on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page, seedHunt(cannonHunt()));
+  await loginAsGroup(page, 1);
+  await page.locator('#cannonFab').click();
+
+  const layout = await page.locator('.cannon-redeem').evaluate(redeem => {
+    const input = redeem.querySelector('#cannonPasswordInput').getBoundingClientRect();
+    const button = redeem.querySelector('.cannon-password-row button').getBoundingClientRect();
+    const bounds = redeem.getBoundingClientRect();
+    return {
+      noHorizontalOverflow: redeem.scrollWidth <= redeem.clientWidth,
+      inputInside: input.left >= bounds.left && input.right <= bounds.right,
+      buttonInside: button.left >= bounds.left && button.right <= bounds.right
+    };
+  });
+  expect(layout).toEqual({
+    noHorizontalOverflow: true,
+    inputInside: true,
+    buttonInside: true
+  });
 });
 
 test('an imperfect cannon answer awards nothing and allows a retry', async ({ page }) => {
@@ -479,8 +517,25 @@ test('an unknown password is rejected', async ({ page }) => {
   await openApp(page, seedHunt(cannonHunt()));
   await loginAsGroup(page, 1);
   await page.locator('#cannonFab').click();
-  await page.evaluate(() => redeemCannonPassword('ZZZZZ'));
-  await expect(page.locator('#cannonMsg')).toContainText('bukan QR meriam');
+  await page.locator('#cannonPasswordInput').fill('ZZZZZ');
+  await page.getByRole('button', { name: 'Sahkan', exact: true }).click();
+  await expect(page.locator('#cannonMsg')).toContainText('tidak sah');
+});
+
+test('a new session restores the configured starting ammo', async ({ page }) => {
+  const hunt = cannonHunt();
+  hunt.config.cannon.startingAmmo = 4;
+  await openApp(page, seedHunt(hunt));
+  await loginAsGroup(page, 1);
+
+  await page.evaluate(() => {
+    window.confirm = () => true;
+    newSession();
+  });
+
+  await expect.poll(() => page.evaluate(() =>
+    Object.values(window.__db.gamestation2026.hunts.h1.progress).map(group => group.ammo)
+  )).toEqual([4, 4, 4]);
 });
 
 test('the offline hint does not duplicate across repeated renders', async ({ page }) => {

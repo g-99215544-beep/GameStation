@@ -3,12 +3,17 @@ importScripts('offline/preload.js');
 // Bump this whenever a cached file changes in a way returning devices must pick
 // up immediately. activate() deletes every other cache, so a bump forces a full
 // refetch. v15: app/styles.css shipped with sprite paths that 404'd, and
-// cache-first had no way to ever replace it.
-const CACHE_NAME = 'gs-shell-v15';
+// cache-first had no way to ever replace it. v16 adds the manual cannon
+// password controls and starting-ammo setting, which must ship as one UI build.
+const CACHE_NAME = 'gs-shell-v16';
 // Both lists live in offline/preload.js so the page and this worker cache
 // exactly the same things. Editing them here would reintroduce the drift.
 const LOCAL_ASSETS = self.OfflinePreload.LOCAL_ASSETS;
 const CDN_ASSETS = self.OfflinePreload.CDN_ASSETS;
+// Keep installation quick. The login preload below owns the full manifest and
+// reports every completed asset to the student; downloading all videos here
+// first leaves that visible progress screen stuck at 0 until install finishes.
+const INSTALL_ASSETS = ['index.html', 'app/styles.css'];
 
 // Cache one URL at a time and report which ones failed. `cache.addAll` rejects
 // the whole batch on a single 404, which used to fail the install silently and
@@ -43,7 +48,7 @@ async function cacheEach(cache, urls, onProgress) {
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    await cacheEach(cache, LOCAL_ASSETS.concat(CDN_ASSETS));
+    await cacheEach(cache, INSTALL_ASSETS);
     await self.skipWaiting();
   })());
 });

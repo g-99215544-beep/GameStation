@@ -38,6 +38,22 @@ async function openApp(page) {
   await page.evaluate(assets => { OfflinePreload.PRELOAD_ASSETS = assets; }, TEST_ASSETS);
 }
 
+test('service worker installation does not silently download the full game', async ({ page }) => {
+  await openApp(page);
+  const cached = await page.evaluate(async () => {
+    const hits = await caches.match('map idle pingpong.mp4', { ignoreSearch: true });
+    const entries = [];
+    for (const key of await caches.keys()) {
+      const cache = await caches.open(key);
+      entries.push(...(await cache.keys()).map(request => new URL(request.url).pathname));
+    }
+    return { hasMapVideo: Boolean(hits), entries };
+  });
+  expect(cached.hasMapVideo).toBe(false);
+  expect(cached.entries.some(path => path.endsWith('.mp4'))).toBe(false);
+  expect(cached.entries.length).toBeLessThanOrEqual(2);
+});
+
 test('a first login holds the group on a progress screen until the download finishes', async ({ page, context }) => {
   // Make one asset genuinely slow. Without this the whole (deliberately tiny)
   // test manifest lands faster than the reveal delay and the screen correctly
@@ -49,8 +65,7 @@ test('a first login holds the group on a progress screen until the download fini
     await route.continue();
   });
   await openApp(page);
-  // The worker's install() already pre-caches on the very first page load, so
-  // empty the cache to get a genuine cold start with work still to do.
+  // Empty the lightweight shell cache to get a genuine cold start.
   await page.evaluate(async () => {
     for (const key of await caches.keys()) await caches.delete(key);
   });
@@ -61,6 +76,9 @@ test('a first login holds the group on a progress screen until the download fini
   await page.click('#view-login button.big');
 
   await expect(page.locator('#view-preload')).toHaveClass(/active/, { timeout: 10000 });
+  // stations/layout.js is deliberately still downloading, but earlier assets
+  // must already be visible as progress instead of the screen freezing at 0/N.
+  await expect(page.locator('#preloadStatus')).not.toContainText('0/5', { timeout: 5000 });
   await expect(page.locator('#preloadPercent')).toHaveText('100%', { timeout: 15000 });
   await expect(page.locator('#preloadStatus')).toContainText('tanpa internet');
   // Then it hands over to the journey on its own.
