@@ -149,6 +149,10 @@ function playJourneyMapPingPong(){
   setupJourneyMapVideo(video);
   video.loop=true;
   video.playbackRate=1;
+  // A newly activated service worker can fix the request after this element's
+  // eager preload already failed. Reset the media state so opening the map
+  // retries through the current worker instead of keeping the old error.
+  if(video.error) video.load();
   if(video.paused) video.play().catch(()=>{});
 }
 function pauseJourneyMapPingPong(){
