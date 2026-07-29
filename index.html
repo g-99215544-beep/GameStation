@@ -345,6 +345,14 @@
   .sudoku-stage-options{display:flex;flex-wrap:wrap;gap:10px;}
   .sudoku-stage-option{display:flex;align-items:center;gap:6px;margin:0;font-weight:700;}
   .sudoku-stage-option input{width:auto;margin:0;}
+  .tangram-stage-editor{display:none;margin-top:12px;padding:12px 14px;background:#fff8df;border:2px solid var(--gold);border-radius:10px;}
+  .tangram-stage-editor p{margin:0 0 8px;font-size:14px;color:#65513a;}
+  .tangram-stage-options{display:flex;flex-wrap:wrap;gap:10px;}
+  .tangram-stage-option{display:flex;align-items:center;gap:6px;margin:0;font-weight:700;}
+  .tangram-stage-option input{width:auto;margin:0;}
+  .sifir-target-editor{display:none;margin-top:12px;padding:12px 14px;background:#fff8df;border:2px solid var(--gold);border-radius:10px;}
+  .sifir-target-editor p{margin:0 0 8px;font-size:14px;color:#65513a;}
+  .sifir-target-editor input{max-width:110px;}
   .group-setup{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
   .group-setup textarea{width:100%;font-family:inherit;}
   .group-card{border:2px solid var(--gold);border-radius:10px;padding:12px;margin:10px 0;background:#fff8df;}
@@ -2572,13 +2580,19 @@ function toggleWorksheetEditor(key){
   const isWorksheet=gameType==='lembaran_kerja';
   const isRun=gameType==='jejak_lari';
   const isSudoku=gameType==='sudoku';
+  const isSifir=gameType==='sifir';
+  const isTangram=gameType==='tangram';
   const editor=document.getElementById('worksheet_editor_'+key);
   const runEditor=document.getElementById('run_editor_'+key);
   const sudokuEditor=document.getElementById('sudoku_stage_editor_'+key);
+  const sifirEditor=document.getElementById('sifir_target_editor_'+key);
+  const tangramEditor=document.getElementById('tangram_stage_editor_'+key);
   const rawField=document.getElementById('game_data_field_'+key);
   if(editor) editor.style.display=isWorksheet?'block':'none';
   if(runEditor) runEditor.style.display=isRun?'block':'none';
   if(sudokuEditor) sudokuEditor.style.display=isSudoku?'block':'none';
+  if(sifirEditor) sifirEditor.style.display=isSifir?'block':'none';
+  if(tangramEditor) tangramEditor.style.display=isTangram?'block':'none';
   if(rawField) rawField.style.display='none';
 }
 function parseStationGameData(raw){
@@ -2604,6 +2618,41 @@ function sudokuStageEditorHtml(key,raw){
 }
 function selectedSudokuStages(key){
   const editor=document.getElementById('sudoku_stage_editor_'+key);
+  if(!editor) return [1,2,3];
+  return Array.from(editor.querySelectorAll('input[type="checkbox"]:checked'))
+    .map(input=>Number(input.value)).filter(stage=>Number.isInteger(stage) && stage>=1 && stage<=3).sort((a,b)=>a-b);
+}
+function sifirTargetFromRaw(raw){
+  const target=Number(parseStationGameData(raw).sifirTarget);
+  return Number.isInteger(target) && target>=1 && target<=SifirEngine.SIFIR_TARGET ? target : SifirEngine.SIFIR_TARGET;
+}
+function sifirTargetEditorHtml(key,raw){
+  const target=sifirTargetFromRaw(raw);
+  return `<div class="sifir-target-editor" id="sifir_target_editor_${key}">
+    <label>Bilangan Jawapan Betul Berturut-turut</label>
+    <p>Pilih streak jawapan betul yang murid perlu capai (1 hingga ${SifirEngine.SIFIR_TARGET}). Jawapan salah akan mula semula dari Soalan 1.</p>
+    <input id="st_sifir_target_${key}" type="number" min="1" max="${SifirEngine.SIFIR_TARGET}" step="1" value="${target}" inputmode="numeric">
+  </div>`;
+}
+function selectedSifirTarget(key){
+  const value=Number(document.getElementById('st_sifir_target_'+key)?.value);
+  return Number.isInteger(value) && value>=1 && value<=SifirEngine.SIFIR_TARGET ? value : SifirEngine.SIFIR_TARGET;
+}
+function tangramStagesFromRaw(raw){
+  const data=parseStationGameData(raw);
+  if(!Array.isArray(data.tangramStages)) return [1,2,3];
+  return [...new Set(data.tangramStages.map(Number).filter(stage=>Number.isInteger(stage) && stage>=1 && stage<=3))].sort((a,b)=>a-b);
+}
+function tangramStageEditorHtml(key,raw){
+  const selected=new Set(tangramStagesFromRaw(raw));
+  return `<div class="tangram-stage-editor" id="tangram_stage_editor_${key}">
+    <label>Stage Tangram Aktif</label>
+    <p>Tandakan bentuk yang murid perlu siapkan. Pilih sekurang-kurangnya satu stage.</p>
+    <div class="tangram-stage-options">${[1,2,3].map(stage=>`<label class="tangram-stage-option"><input type="checkbox" value="${stage}"${selected.has(stage)?' checked':''}> Stage ${stage}</label>`).join('')}</div>
+  </div>`;
+}
+function selectedTangramStages(key){
+  const editor=document.getElementById('tangram_stage_editor_'+key);
   if(!editor) return [1,2,3];
   return Array.from(editor.querySelectorAll('input[type="checkbox"]:checked'))
     .map(input=>Number(input.value)).filter(stage=>Number.isInteger(stage) && stage>=1 && stage<=3).sort((a,b)=>a-b);
@@ -2657,6 +2706,8 @@ function buildStationsUI(existing){
       <div id="game_data_field_${i}"><label>Data Game (JSON)</label><input id="st_gamedata_${i}" value='${(s.gameDataRaw||"{}").replace(/'/g,"&apos;")}'></div>
       <div class="worksheet-editor" id="worksheet_editor_${i}"></div>
       ${sudokuStageEditorHtml(i,s.gameDataRaw)}
+      ${sifirTargetEditorHtml(i,s.gameDataRaw)}
+      ${tangramStageEditorHtml(i,s.gameDataRaw)}
       <div class="run-editor" id="run_editor_${i}">
         <label>Jarak Sasaran (km)</label>
         <input id="st_targetkm_${i}" type="number" min="0.1" step="0.1" value="${RunTracker.parseTargetKm(s.gameDataRaw)}">
@@ -2703,6 +2754,8 @@ function cannonBlockHtml(cid, cannon){
       <div id="game_data_field_${cid}"><label>Data Game (JSON)</label><input id="st_gamedata_${cid}" value='${String(cannon.gameDataRaw||"{}").replace(/'/g,"&apos;")}'></div>
       <div class="worksheet-editor" id="worksheet_editor_${cid}"></div>
       ${sudokuStageEditorHtml(cid,cannon.gameDataRaw)}
+      ${sifirTargetEditorHtml(cid,cannon.gameDataRaw)}
+      ${tangramStageEditorHtml(cid,cannon.gameDataRaw)}
       <div class="run-editor" id="run_editor_${cid}">
         <label>Jarak Sasaran (km)</label>
         <input id="st_targetkm_${cid}" type="number" min="0.1" step="0.1" value="${RunTracker.parseTargetKm(cannon.gameDataRaw)}">
@@ -2774,6 +2827,7 @@ function validateCannons(stationConfig, cannonConfigValue, cannonList){
     return false;
   }
   if(!validateSudokuStages(cannonList,'Meriam')) return false;
+  if(!validateTangramStages(cannonList,'Meriam')) return false;
   // Without this, pushConfig's Promise.all commits stations, groups and
   // progress while the database rules reject the oversized config/cannons.
   // The teacher sees a raw Firebase error, the hunt looks saved, and the
@@ -2812,6 +2866,14 @@ function stationGameDataRaw(i, gameType){
   if(gameType==='sudoku'){
     const raw=document.getElementById('st_gamedata_'+i)?.value;
     return JSON.stringify({...parseStationGameData(raw),sudokuStages:selectedSudokuStages(i)});
+  }
+  if(gameType==='sifir'){
+    const raw=document.getElementById('st_gamedata_'+i)?.value;
+    return JSON.stringify({...parseStationGameData(raw),sifirTarget:selectedSifirTarget(i)});
+  }
+  if(gameType==='tangram'){
+    const raw=document.getElementById('st_gamedata_'+i)?.value;
+    return JSON.stringify({...parseStationGameData(raw),tangramStages:selectedTangramStages(i)});
   }
   return document.getElementById('st_gamedata_'+i).value;
 }
@@ -2857,6 +2919,12 @@ function validateSudokuStages(stationConfig,label='Stesen'){
   const invalid=Object.values(stationConfig).filter(st=>st.gameType==='sudoku' && sudokuStagesFromRaw(st.gameDataRaw).length===0);
   if(!invalid.length) return true;
   alert(`Pilih sekurang-kurangnya satu stage Sudoku untuk ${label} ${invalid.map(st=>st.id).join(', ')}.`);
+  return false;
+}
+function validateTangramStages(stationConfig,label='Stesen'){
+  const invalid=Object.values(stationConfig).filter(st=>st.gameType==='tangram' && tangramStagesFromRaw(st.gameDataRaw).length===0);
+  if(!invalid.length) return true;
+  alert(`Pilih sekurang-kurangnya satu stage Tangram untuk ${label} ${invalid.map(st=>st.id).join(', ')}.`);
   return false;
 }
 function rotationFor(startStation, count){
@@ -2918,7 +2986,7 @@ function pushConfig(){
   const st = collectStations();
   const cn = collectCannonConfig();
   const cnList = cn.enabled ? collectCannons() : {};
-  if(!validateStationPasswords(st) || !validateWorksheetStations(st) || !validateSudokuStages(st)) return;
+  if(!validateStationPasswords(st) || !validateWorksheetStations(st) || !validateSudokuStages(st) || !validateTangramStages(st)) return;
   if(!validateCannons(st, cn, cnList)) return;
   const name=String(document.getElementById('huntName')?.value||'').trim();
   if((isHuntDraft || currentHuntId) && !name){
@@ -3071,7 +3139,7 @@ function generateQRs(){
   const st = collectStations();
   const cn = collectCannonConfig();
   const cnList = cn.enabled ? collectCannons() : {};
-  if(!validateStationPasswords(st) || !validateWorksheetStations(st) || !validateSudokuStages(st)) return;
+  if(!validateStationPasswords(st) || !validateWorksheetStations(st) || !validateSudokuStages(st) || !validateTangramStages(st)) return;
   if(!validateCannons(st, cn, cnList)) return;
   stations = st; cannonConfig = cn; cannons = cnList;
   const out = document.getElementById('qrOutput');
@@ -3225,7 +3293,7 @@ function testStation(i){
     alert('Password stesen mesti tepat 5 huruf atau digit sebelum diuji.');
     return;
   }
-  if(!validateWorksheetStations({[i]:st}) || !validateSudokuStages({[i]:st})) return;
+  if(!validateWorksheetStations({[i]:st}) || !validateSudokuStages({[i]:st}) || !validateTangramStages({[i]:st})) return;
   window._testMode = true;
   startGame(st.id, st);
 }
@@ -3473,9 +3541,10 @@ function checkGrid(){
 // A wrong answer (or four-second timeout) creates a new set and restarts at Q1.
 function startSifir(st){
   const totalSec=(st.timeLimitMin||10)*60;
+  const target=sifirTargetFromRaw(st.gameDataRaw);
   gameState={
-    type:'sifir', total:SifirEngine.SIFIR_TARGET, correct:0,
-    sifir:{stationName:st.name, totalSec, questions:SifirEngine.generateQuestions(), qIndex:0, restartToken:0}
+    type:'sifir', total:target, correct:0,
+    sifir:{stationName:st.name, totalSec, target, questions:SifirEngine.generateQuestions(), qIndex:0, restartToken:0}
   };
   window._sifirTimeout=()=>finishSifir(0);
   renderSifirQuestion();
@@ -3494,7 +3563,7 @@ function renderSifirQuestion(){
     <h2>${sifir.stationName}</h2>
     <div id="sifirTopTimer" style="font-size:42px;font-weight:900;color:var(--red);margin:8px 0;">${sifirClockText(timeLeftSec)}</div>
     <p style="margin:0 0 8px;color:#65513a;">Masa stesen berbaki</p>
-    <div style="font-size:20px;font-weight:800;margin:20px 0 6px;">Soalan ${sifir.qIndex+1}/${SifirEngine.SIFIR_TARGET}</div>
+    <div style="font-size:20px;font-weight:800;margin:20px 0 6px;">Soalan ${sifir.qIndex+1}/${sifir.target}</div>
     <div id="sifirQCountdown" style="font-size:18px;font-weight:800;color:var(--navy);margin-bottom:8px;">⏱️ 4 saat</div>
     <div id="sifirQTimer" role="progressbar" aria-label="Masa menjawab soalan" aria-valuemin="0" aria-valuemax="4" aria-valuenow="4" style="height:16px;max-width:360px;margin:0 auto 18px;border:2px solid var(--navy);border-radius:999px;overflow:hidden;background:#fff8df;box-shadow:inset 0 1px 2px #0002;">
       <div id="sifirQBar" style="height:100%;width:100%;transform-origin:left center;animation:sifir-question-countdown ${SifirEngine.PER_QUESTION_SEC}s linear forwards;"></div>
@@ -3528,7 +3597,7 @@ function answerSifir(choice){
     playGameSfx('correct');
     sifir.qIndex++;
     gameState.correct=sifir.qIndex;
-    if(sifir.qIndex>=SifirEngine.SIFIR_TARGET){
+    if(sifir.qIndex>=sifir.target){
       finishSifir(SifirEngine.scoreFromTime(timeLeftSec,sifir.totalSec));
       return;
     }
@@ -4492,10 +4561,8 @@ function finishSudoku(onTime){
   if(window._testMode){ showTestResult(onTime,score,timeTakenSec); return; }
   submitCompletion(onTime,score,timeTakenSec);
 }
-// Tangram station: every student builds THREE shapes in sequence (square, then
-// horse, then cat), one shared timer, after a clear instructions screen. Marks
-// out of 200: 40 per shape completed, plus a time bonus of (timeLeft/total)*80
-// once all three are done. The admin "Uji" path runs this exact same flow.
+// Tangram stations use the selected subset of three shapes in order. Each
+// completed shape is worth 40 marks, with a time bonus once all are done.
 const TG_STAGE_MARK = 40, TG_TIME_BONUS = 80;
 // Automatic assist for Segi Empat only: every minute, reveal the grey target's
 // internal cut-lines for five seconds. It runs regardless of how many pieces
@@ -4503,13 +4570,16 @@ const TG_STAGE_MARK = 40, TG_TIME_BONUS = 80;
 const TG_HINT_INTERVAL_MS = 60000, TG_HINT_SEC = 5;
 function startTangram(st){
   const S = window.TangramShapes;
-  gameState.type='tangram'; gameState.total=1; gameState.correct=0;
   const totalSec = (st.timeLimitMin||10)*60;
-  const SHAPES = [
-    {id:'kuda',      name:'Kuda',       guide:false, assist:false},
-    {id:'kucing',    name:'Kucing',     guide:false, assist:false},
-    {id:'segiempat', name:'Segi Empat', guide:false, assist:true},
+  const ALL_SHAPES = [
+    {stage:1,id:'kuda',      name:'Kuda',       guide:false, assist:false},
+    {stage:2,id:'kucing',    name:'Kucing',     guide:false, assist:false},
+    {stage:3,id:'segiempat', name:'Segi Empat', guide:false, assist:true},
   ];
+  const selectedStages=tangramStagesFromRaw(st.gameDataRaw);
+  const SHAPES=(selectedStages.length?selectedStages:[1,2,3]).map(stage=>ALL_SHAPES[stage-1]);
+  const maxScore=SHAPES.length*TG_STAGE_MARK+TG_TIME_BONUS;
+  gameState.type='tangram'; gameState.total=SHAPES.length; gameState.correct=0;
   let idx = 0;    // shape currently being built
   let done = 0;   // shapes completed so far
   const card = document.getElementById('gameCard');
@@ -4528,12 +4598,12 @@ function startTangram(st){
       <div class="card" style="text-align:left;box-shadow:none;border:2px solid #eee;">
         <h3 style="margin-top:0;">📋 Arahan</h3>
         <ol style="padding-left:20px;line-height:1.7;margin:0;">
-          <li>Anda perlu bina <b>3 bentuk</b> mengikut urutan: <b>Kuda</b> → <b>Kucing</b> → <b>Segi Empat</b>.</li>
+          <li>Anda perlu bina <b>${SHAPES.length} bentuk</b> mengikut urutan: <b>${SHAPES.map(shape=>shape.name).join('</b> → <b>')}</b>.</li>
           <li>Bayang bentuk (kelabu) ada dalam kotak — <b>seret keping</b> ke dalam bayang; keping akan <b>melekat</b> ke tempatnya.</li>
           <li><b>Ketik</b> keping untuk pusing 45°. Bentuk siap secara <b>automatik</b> apabila lengkap.</li>
         </ol>
         <div class="msg ok" style="font-weight:700;margin-top:12px;">
-          🏆 Markah penuh <b>200</b> · Setiap bentuk siap = <b>${TG_STAGE_MARK}</b> markah · Siap semua 3 = bonus masa sehingga <b>${TG_TIME_BONUS}</b> (makin cepat, makin tinggi).<br>
+          🏆 Markah penuh <b>${maxScore}</b> · Setiap bentuk siap = <b>${TG_STAGE_MARK}</b> markah · Siap semua ${SHAPES.length} = bonus masa sehingga <b>${TG_TIME_BONUS}</b> (makin cepat, makin tinggi).<br>
           ⏱️ Masa: <b>${Math.round(totalSec/60)} minit</b> — bermula bila anda tekan Mula.
         </div>
       </div>
@@ -4554,7 +4624,7 @@ function startTangram(st){
     const shp = SHAPES[idx];
     card.innerHTML = testBanner() + `
       <h2>🧩 ${st.name}</h2>
-      <div style="font-weight:800;color:var(--gold);background:var(--navy);display:inline-block;padding:5px 14px;border-radius:6px;">Bentuk ${idx+1}/3: ${shp.name} · Markah: ${done*TG_STAGE_MARK}</div>
+      <div style="font-weight:800;color:var(--gold);background:var(--navy);display:inline-block;padding:5px 14px;border-radius:6px;">Stage ${shp.stage} (${idx+1}/${SHAPES.length}): ${shp.name} · Markah: ${done*TG_STAGE_MARK}</div>
       <canvas id="tgBoard" width="360" height="460" style="background:#fff;border:3px solid #d4a94e;border-radius:12px;touch-action:none;max-width:100%;display:block;margin:10px auto;"></canvas>
       <p style="color:#555;font-size:13px;">Seret keping ke dalam bayang. Ketik keping = putar.</p>
       <button id="tgFlip" class="secondary" style="display:none;" onclick="window._tgCtrl && window._tgCtrl.flipSelected()">↔ Balik</button>
@@ -4610,11 +4680,12 @@ function startTangram(st){
   function onShapeSolved(){
     stopAssist();
     playGameSfx('correct');
+    const solved=SHAPES[idx];
     done++; idx++;
     if(idx < SHAPES.length){
       card.innerHTML = testBanner() + `<div class="finalbox">
         <div style="font-size:56px;">✅</div>
-        <h2 style="color:var(--green);">Bentuk ${done}/3 Selesai! <span style="color:var(--gold);">+${TG_STAGE_MARK} markah</span></h2>
+        <h2 style="color:var(--green);">Stage ${solved.stage} Selesai! <span style="color:var(--gold);">+${TG_STAGE_MARK} markah</span></h2>
         <p>Markah setakat ini: <b>${done*TG_STAGE_MARK}</b>. Seterusnya: bina <b>${SHAPES[idx].name}</b>.</p>
         <p style="color:#888;font-size:13px;">⏱️ Masa masih berjalan — teruskan cepat untuk bonus masa!</p>
         <button class="big" onclick="window._tgNext()">➡️ Bina ${SHAPES[idx].name}</button>
@@ -4630,10 +4701,11 @@ function startTangram(st){
     if(timerInterval) clearInterval(timerInterval);
     const remain = Math.max(0, timeLeftSec);
     const allDone = done >= SHAPES.length;
+    gameState.correct=done;
     if(!allDone) playGameSfx('wrong');
     const score = done*TG_STAGE_MARK + (allDone ? Math.round((remain/totalSec)*TG_TIME_BONUS) : 0);
     const timeTakenSec = Math.round((Date.now()-window._startedAt)/1000);
-    if(window._testMode){ showTangramTestResult(done, SHAPES.length, score, timeTakenSec); return; }
+    if(window._testMode){ showTangramTestResult(done, SHAPES.length, maxScore, score, timeTakenSec); return; }
     submitCompletion(allDone, score, timeTakenSec);
   }
 
@@ -4642,7 +4714,7 @@ function startTangram(st){
   window._tgTimeout = complete;   // invoked by tick() when the timer hits 0
   showInstructions();
 }
-function showTangramTestResult(done, total, score, timeTakenSec){
+function showTangramTestResult(done, total, maxScore, score, timeTakenSec){
   show('view-result');
   document.getElementById('timer').style.display='none';
   const msg = done>=total ? `Semua ${total} bentuk siap! 🎉` : done>0 ? `${done}/${total} bentuk siap` : 'Tiada bentuk siap';
@@ -4650,7 +4722,7 @@ function showTangramTestResult(done, total, score, timeTakenSec){
     <div style="font-size:50px;">🧪</div>
     <h2>Ujian Selesai</h2>
     <p>${msg}</p>
-    <p>Markah: <b>${score}</b> / 200 <span style="color:#888;">(${timeTakenSec}s)</span></p>
+    <p>Markah: <b>${score}</b> / ${maxScore} <span style="color:#888;">(${timeTakenSec}s)</span></p>
     <p style="color:#888;font-size:13px;">${window._demoMode ? 'Demo — tiada markah disimpan.' : 'Mod ujian — tiada markah disimpan ke Firebase.'}</p>
     ${window._demoMode ? '<button class="big" onclick="startTangramDemo()">↺ Main Semula</button>' : `<button class="big" onclick="endTest()">${testExitLabel()}</button>`}
   </div>`;

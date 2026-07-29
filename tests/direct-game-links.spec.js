@@ -83,7 +83,8 @@ test('admin can select the Sudoku stages that a station requires', async ({ page
     selectAdminTab('setup');
     buildStationsUI({
       1: { id: 1, name: 'Sudoku', password: '12345', gameType: 'sudoku', gameDataRaw: '{}' },
-      2: {}, 3: {}
+      2: { id: 2, name: 'Sifir', password: '23456', gameType: 'sifir', gameDataRaw: '{}' },
+      3: { id: 3, name: 'Tangram', password: '34567', gameType: 'tangram', gameDataRaw: '{}' }
     });
   });
   const stages=page.locator('#sudoku_stage_editor_1 input[type="checkbox"]');
@@ -93,6 +94,17 @@ test('admin can select the Sudoku stages that a station requires', async ({ page
 
   const saved=await page.evaluate(() => JSON.parse(stationGameDataRaw(1,'sudoku')));
   expect(saved.sudokuStages).toEqual([1,2]);
+
+  await expect(page.locator('#sifir_target_editor_2')).toBeVisible();
+  await page.locator('#st_sifir_target_2').fill('3');
+  const sifirSaved=await page.evaluate(() => JSON.parse(stationGameDataRaw(2,'sifir')));
+  expect(sifirSaved.sifirTarget).toBe(3);
+
+  const tangramStages=page.locator('#tangram_stage_editor_3 input[type="checkbox"]');
+  await expect(tangramStages).toHaveCount(3);
+  await tangramStages.nth(1).uncheck();
+  const tangramSaved=await page.evaluate(() => JSON.parse(stationGameDataRaw(3,'tangram')));
+  expect(tangramSaved.tangramStages).toEqual([1,3]);
 
   await page.evaluate(() => {
     window._testMode=true;
