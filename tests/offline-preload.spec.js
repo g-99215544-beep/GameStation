@@ -38,15 +38,29 @@ async function openApp(page) {
   await page.evaluate(assets => { OfflinePreload.PRELOAD_ASSETS = assets; }, TEST_ASSETS);
 }
 
-test('logging in holds the group on a progress screen until the download finishes', async ({ page }) => {
+test('a first login holds the group on a progress screen until the download finishes', async ({ page, context }) => {
+  // Make one asset genuinely slow. Without this the whole (deliberately tiny)
+  // test manifest lands faster than the reveal delay and the screen correctly
+  // never appears — which is the behaviour the next test pins down.
+  // It must be context.route, not page.route: the fetching is done by the
+  // service worker, and page.route does not see service worker requests.
+  await context.route('**/stations/layout.js', async route => {
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    await route.continue();
+  });
   await openApp(page);
+  // The worker's install() already pre-caches on the very first page load, so
+  // empty the cache to get a genuine cold start with work still to do.
+  await page.evaluate(async () => {
+    for (const key of await caches.keys()) await caches.delete(key);
+  });
   await page.evaluate(async () => { await loadConfigCache(); });
 
   await page.selectOption('#groupLoginSelect', '1');
   await page.fill('#groupLoginPass', '1001');
   await page.click('#view-login button.big');
 
-  await expect(page.locator('#view-preload')).toHaveClass(/active/);
+  await expect(page.locator('#view-preload')).toHaveClass(/active/, { timeout: 10000 });
   await expect(page.locator('#preloadPercent')).toHaveText('100%', { timeout: 15000 });
   await expect(page.locator('#preloadStatus')).toContainText('tanpa internet');
   // Then it hands over to the journey on its own.
@@ -109,6 +123,31 @@ test('skipping releases the group without waiting for the rest', async ({ page }
     return promise;
   });
   expect(outcome).toEqual({ ok: false, reason: 'skipped' });
+});
+
+// The wait is meant to be paid once per device. Re-downloading ~15 MB of video
+// every time a group logs back in would burn the school's Wi-Fi and the lesson.
+test('logging in a second time downloads nothing and shows no progress bar', async ({ page }) => {
+  const requested = [];
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.origin === server.origin) requested.push(url.pathname);
+  });
+  await openApp(page);
+  await page.evaluate(async () => { await loadConfigCache(); currentGroupId = '1'; });
+
+  const first = await page.evaluate(() => runOfflinePreload());
+  expect(first.ok).toBe(true);
+
+  // Everything is on the device now. A second run must not refetch any of it.
+  requested.length = 0;
+  const second = await page.evaluate(() => runOfflinePreload());
+  expect(second.ok).toBe(true);
+
+  const refetched = requested.filter(p => TEST_ASSETS.some(asset => p.endsWith(asset)));
+  expect(refetched).toEqual([]);
+  // And the student never sees the screen, because there was nothing to wait for.
+  await expect(page.locator('#view-preload')).not.toHaveClass(/active/);
 });
 
 test('a returning student is not made to download again', async ({ page }) => {

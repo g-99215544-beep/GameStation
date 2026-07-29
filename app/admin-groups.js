@@ -312,6 +312,10 @@ function showAdminLogin(){
 function hideAdminLogin(){
   const card = document.getElementById('adminLoginCard');
   if(card){
+    // Move focus out before hiding. Leaving the PIN field focused inside an
+    // aria-hidden dialog hides a focused control from screen readers, which the
+    // browser rejects outright and logs about.
+    if(card.contains(document.activeElement)) document.activeElement.blur();
     card.classList.remove('open');
     card.setAttribute('aria-hidden','true');
   }
