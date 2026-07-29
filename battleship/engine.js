@@ -7,22 +7,16 @@
 
   const FLEET_SPEC = [
     { name: 'Lookout Cruiser', length: 2 },
-    { name: 'Submarine', length: 3 },
-    { name: 'Battleship', length: 3 },
-    { name: 'Destroyer', length: 4 },
-    { name: 'Pirate ship', length: 5 }
+    { name: 'Submarine', length: 3 }
   ];
 
   // Known-good layout used only if generateFleet's random placement can't
   // find room within the retry budget (should never happen at this
-  // grid size/fleet density — 17 cells in 81 — but keeps the game
+  // grid size/fleet density — 5 cells in 81 — but keeps the game
   // unbreakable in class).
   const FALLBACK_LAYOUT = [
     { name: 'Lookout Cruiser', length: 2, cells: [{ x: 0, y: 0 }, { x: 1, y: 0 }] },
-    { name: 'Submarine', length: 3, cells: [{ x: 0, y: 2 }, { x: 0, y: 3 }, { x: 0, y: 4 }] },
-    { name: 'Battleship', length: 3, cells: [{ x: 3, y: 0 }, { x: 4, y: 0 }, { x: 5, y: 0 }] },
-    { name: 'Destroyer', length: 4, cells: [{ x: 7, y: 0 }, { x: 7, y: 1 }, { x: 7, y: 2 }, { x: 7, y: 3 }] },
-    { name: 'Pirate ship', length: 5, cells: [{ x: 0, y: 6 }, { x: 1, y: 6 }, { x: 2, y: 6 }, { x: 3, y: 6 }, { x: 4, y: 6 }] }
+    { name: 'Submarine', length: 3, cells: [{ x: 0, y: 2 }, { x: 0, y: 3 }, { x: 0, y: 4 }] }
   ];
 
   function cellsFor(x, y, length, horizontal) {

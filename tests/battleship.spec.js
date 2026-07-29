@@ -51,7 +51,7 @@ async function openBattleship(page) {
 }
 
 async function placeFleet(page) {
-  // Rows y=0..4, each ship horizontal from x=0: the longest ship is 5 cells,
+  // Rows y=0..1, each ship horizontal from x=0: the longest ship is 3 cells,
   // so every row fits inside the 9-wide grid.
   const ships = await page.evaluate(() => BattleshipEngine.FLEET_SPEC.map(s => s.name));
   for (let i = 0; i < ships.length; i++) await dragShip(page, ships[i], 0, i);
@@ -90,7 +90,7 @@ test('battleship supports coordinate entry, hit/miss feedback, sinking, and a fu
   await openBattleship(page);
   await placeFleet(page);
 
-  await expect(page.locator('.bs-fleet-item')).toHaveCount(5);
+  await expect(page.locator('.bs-fleet-item')).toHaveCount(2);
   await expect(page.locator('#bsPad')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Tembak' })).toBeDisabled();
 
@@ -149,7 +149,7 @@ test('battleship timeout keeps partial credit and applies the late penalty', asy
   await placeFleet(page);
   await page.evaluate(() => {
     const bs = gameState.battleship;
-    bs.enemyFleet.slice(0, 2).forEach(ship => {
+    bs.enemyFleet.slice(0, 1).forEach(ship => {
       ship.cells.forEach(c => {
         const res = BattleshipEngine.fireAt(bs.enemyFleet, bs.playerShotLog, c.x, c.y);
         bs.playerShotLog = res.shotLog;
@@ -161,8 +161,8 @@ test('battleship timeout keeps partial credit and applies the late penalty', asy
   });
   await expect(page.getByRole('heading', { name: 'Ujian Selesai' })).toBeVisible();
   await expect(page.locator('#resultCard')).toContainText('Masa tamat');
-  // 2 of 5 sunk -> round(2/5*100)=40, minus the 20-point late penalty.
-  await expect(page.locator('#resultCard')).toContainText('Markah: 20');
+  // 1 of 2 sunk -> 50, minus the 20-point late penalty.
+  await expect(page.locator('#resultCard')).toContainText('Markah: 30');
 });
 
 test('both battle boards and native coordinate inputs stay visible on a phone without a numpad', async ({ page }) => {
@@ -245,7 +245,7 @@ test('battle view uses A-I columns, centered controls, and fleet lists beside th
   expect(layout.leftRight).toBeLessThanOrEqual(layout.boardLeft + 1);
   expect(layout.rightLeft).toBeGreaterThanOrEqual(layout.boardRight - 1);
   expect(layout.scrollWidth).toBeLessThanOrEqual(layout.innerWidth + 1);
-  await expect(page.locator('.bs-fleet-side .bs-fleet-item')).toHaveCount(5);
+  await expect(page.locator('.bs-fleet-side .bs-fleet-item')).toHaveCount(2);
 });
 
 test('the whole 9x9 board fits inside its frame on a phone', async ({ page }) => {
@@ -342,32 +342,33 @@ test('a resize event during placement schedules fitBsBoard\'s corrective pass â€
   expect(scheduledCorrectivePass).toBe(true);
 });
 
-test('the dock lists every ship and the battle starts only when all five are placed', async ({ page }) => {
+test('the dock lists both ships and the battle starts only when both are placed', async ({ page }) => {
   await openBattleship(page);
 
-  await expect(page.locator('.bs-dock-ship')).toHaveCount(5);
+  await expect(page.locator('.bs-dock-ship')).toHaveCount(2);
   await expect(page.locator('.bs-dock-ship[data-ship="Submarine"] .bs-dock-cell')).toHaveCount(3);
   await expect(page.locator('#bsPad')).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Letak' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Sedia! Mula Menembak' })).toBeDisabled();
 
-  // Four ships is not enough.
+  // One ship is not enough.
   await page.evaluate(() => {
-    BattleshipEngine.FLEET_SPEC.slice(0, 4).forEach((spec, i) => placeBsShipAt(spec.name, 0, i, 'h'));
+    const spec=BattleshipEngine.FLEET_SPEC[0];
+    placeBsShipAt(spec.name, 0, 0, 'h');
   });
-  await expect(page.locator('.bs-dock-ship.placed')).toHaveCount(4);
+  await expect(page.locator('.bs-dock-ship.placed')).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Sedia! Mula Menembak' })).toBeDisabled();
 
   // An off-grid or overlapping placement is refused and changes nothing.
   const refused = await page.evaluate(() => [
-    placeBsShipAt('Pirate ship', 8, 5, 'h'),
-    placeBsShipAt('Pirate ship', 0, 0, 'h')
+    placeBsShipAt('Submarine', 8, 5, 'h'),
+    placeBsShipAt('Submarine', 0, 0, 'h')
   ]);
   expect(refused).toEqual([false, false]);
-  await expect(page.locator('.bs-dock-ship.placed')).toHaveCount(4);
+  await expect(page.locator('.bs-dock-ship.placed')).toHaveCount(1);
 
-  await page.evaluate(() => placeBsShipAt('Pirate ship', 0, 4, 'h'));
-  await expect(page.locator('.bs-dock-ship.placed')).toHaveCount(5);
+  await page.evaluate(() => placeBsShipAt('Submarine', 0, 4, 'h'));
+  await expect(page.locator('.bs-dock-ship.placed')).toHaveCount(2);
   const start = page.getByRole('button', { name: 'Sedia! Mula Menembak' });
   await expect(start).toBeEnabled();
 
@@ -390,28 +391,28 @@ test('a ship dragged from the dock lands on the cells it was dropped on', async 
 test('the grabbed cell is the cell that lands under the pointer', async ({ page }) => {
   await openBattleship(page);
 
-  // Grab the Destroyer by its third cell (index 2) and drop that cell on (5,5):
+  // Grab the Submarine by its third cell (index 2) and drop that cell on (5,5):
   // the ship must start two cells to the left, at (3,5).
-  await dragShip(page, 'Destroyer', 5, 5, { grabIndex: 2 });
+  await dragShip(page, 'Submarine', 5, 5, { grabIndex: 2 });
 
-  const cells = await page.evaluate(() => bsShipByName('Destroyer').cells);
+  const cells = await page.evaluate(() => bsShipByName('Submarine').cells);
   expect(cells[0]).toEqual({ x: 3, y: 5 });
-  expect(cells).toHaveLength(4);
+  expect(cells).toHaveLength(3);
 });
 
 test('a drop that does not fit returns the ship to the dock', async ({ page }) => {
   await openBattleship(page);
   await dragShip(page, 'Submarine', 0, 0);
 
-  // Off the right edge: a 5-cell ship starting at x=8 runs past the edge.
-  await dragShip(page, 'Pirate ship', 8, 8);
-  expect(await page.evaluate(() => !!bsShipByName('Pirate ship'))).toBe(false);
-  await expect(page.locator('.bs-dock-ship[data-ship="Pirate ship"]')).not.toHaveClass(/placed/);
+  // Off the right edge: a 2-cell ship starting at x=8 runs past the edge.
+  await dragShip(page, 'Lookout Cruiser', 8, 8);
+  expect(await page.evaluate(() => !!bsShipByName('Lookout Cruiser'))).toBe(false);
+  await expect(page.locator('.bs-dock-ship[data-ship="Lookout Cruiser"]')).not.toHaveClass(/placed/);
   await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
 
   // On top of the Submarine already at (0,0)-(2,0).
-  await dragShip(page, 'Battleship', 1, 0);
-  expect(await page.evaluate(() => !!bsShipByName('Battleship'))).toBe(false);
+  await dragShip(page, 'Lookout Cruiser', 1, 0);
+  expect(await page.evaluate(() => !!bsShipByName('Lookout Cruiser'))).toBe(false);
   await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
 });
 
@@ -419,16 +420,16 @@ test('dragging highlights the target cells green when they fit and red when they
   await openBattleship(page);
   await dragShip(page, 'Submarine', 0, 0);
 
-  const grab = await page.locator('.bs-dock-ship[data-ship="Battleship"] .bs-dock-cell').first().boundingBox();
+  const grab = await page.locator('.bs-dock-ship[data-ship="Lookout Cruiser"] .bs-dock-cell').first().boundingBox();
   const good = await page.locator('#bsp_4_4').boundingBox();
   const bad = await page.locator('#bsp_1_0').boundingBox();
 
   await page.mouse.move(grab.x + grab.width / 2, grab.y + grab.height / 2);
   await page.mouse.down();
   await page.mouse.move(good.x + good.width / 2, good.y + good.height / 2, { steps: 5 });
-  await expect(page.locator('.bs-cell.preview-ok')).toHaveCount(3);
+  await expect(page.locator('.bs-cell.preview-ok')).toHaveCount(2);
   await page.mouse.move(bad.x + bad.width / 2, bad.y + bad.height / 2, { steps: 5 });
-  await expect(page.locator('.bs-cell.preview-bad')).toHaveCount(3);
+  await expect(page.locator('.bs-cell.preview-bad')).toHaveCount(2);
   await expect(page.locator('.bs-cell.preview-ok')).toHaveCount(0);
   await page.mouse.up();
   await expect(page.locator('.bs-cell.preview-ok, .bs-cell.preview-bad')).toHaveCount(0);
@@ -582,12 +583,12 @@ test('tapping a placed ship rotates it about its starting cell', async ({ page }
 test('a rotation that would not fit is refused and the ship keeps its cells', async ({ page }) => {
   await openBattleship(page);
   // Starting at y=8, a 5-cell vertical ship would need y=8..12 â€” off the grid.
-  await dragShip(page, 'Pirate ship', 0, 8);
+  await dragShip(page, 'Submarine', 0, 8);
 
   await page.locator('#bsp_0_8').click();
 
-  expect(await page.evaluate(() => bsShipByName('Pirate ship').cells)).toEqual([
-    { x: 0, y: 8 }, { x: 1, y: 8 }, { x: 2, y: 8 }, { x: 3, y: 8 }, { x: 4, y: 8 }
+  expect(await page.evaluate(() => bsShipByName('Submarine').cells)).toEqual([
+    { x: 0, y: 8 }, { x: 1, y: 8 }, { x: 2, y: 8 }
   ]);
   await expect(page.locator('#bsMsg')).toContainText('Tidak muat');
 });
@@ -607,13 +608,13 @@ test('dragging a placed ship moves it and frees the cells it left', async ({ pag
 
 test('a placed ship may be moved onto cells it currently occupies', async ({ page }) => {
   await openBattleship(page);
-  await dragShip(page, 'Destroyer', 3, 3);
+  await dragShip(page, 'Submarine', 3, 3);
 
   // Shift one cell right: the target overlaps the ship's own old cells, which
   // must not count as a collision.
-  await dragShip(page, 'Destroyer', 4, 3, { from: 'grid', fromX: 3, fromY: 3 });
+  await dragShip(page, 'Submarine', 4, 3, { from: 'grid', fromX: 3, fromY: 3 });
 
-  expect(await page.evaluate(() => bsShipByName('Destroyer').cells[0])).toEqual({ x: 4, y: 3 });
+  expect(await page.evaluate(() => bsShipByName('Submarine').cells[0])).toEqual({ x: 4, y: 3 });
 });
 
 test('tapping a ship in the dock does nothing', async ({ page }) => {

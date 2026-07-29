@@ -10,7 +10,7 @@ function seeded(seed) {
   };
 }
 
-test('generateFleet places all 5 ships with correct lengths, in bounds, no overlaps', () => {
+test('generateFleet places both ships with correct lengths, in bounds, no overlaps', () => {
   assert.strictEqual(E.GRID_SIZE, 9);
   for (let seed = 1; seed <= 500; seed++) {
     const fleet = E.generateFleet(seeded(seed));
@@ -31,7 +31,7 @@ test('generateFleet places all 5 ships with correct lengths, in bounds, no overl
         occupied.add(key);
       });
     });
-    assert.strictEqual(occupied.size, 17); // 2+3+3+4+5
+    assert.strictEqual(occupied.size, 5); // 2+3
   }
 });
 
