@@ -22,7 +22,7 @@
     'app/admin-stations.js', 'app/group-flow.js', 'app/games.js', 'app/crossword-ui.js',
     'app/battleship-ui.js', 'app/run-and-finish.js', 'app/finale-board.js',
     'assets/ship/ship-sail-sheet.png', 'assets/chest/chest_sheet.png', 'assets/chest/chest_open.mp3',
-    'assets/cannon/fire.mp4', 'assets/cannon/hit.mp4',
+    'assets/cannon/attack-icon.png', 'assets/cannon/fire.mp4', 'assets/cannon/hit.mp4',
     'Pixel_art_game_intro_animation_202607201130.mp4', 'map idle pingpong.mp4',
     'Kapal_berlayar_plain_cyan_backgr…_202607201223.mp4'
   ];

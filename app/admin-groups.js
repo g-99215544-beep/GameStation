@@ -232,13 +232,39 @@ function startTangramDemo(){
   startDirectGameDemo('tangram');
 }
 
-const SESSION_DURATION_MS = 12*60*60*1000; // 12 hours
+const SESSION_DURATION_MS = 2*60*60*1000;
+let sessionExpiryTimer=null;
 
 function saveSession(role, gid){
-  localStorage.setItem('gs_session', JSON.stringify({role, groupId:gid||null, huntId:currentHuntId||null, ts:Date.now()}));
+  const session={role, groupId:gid||null, huntId:currentHuntId||null, ts:Date.now()};
+  localStorage.setItem('gs_session', JSON.stringify(session));
+  scheduleSessionExpiry(session);
 }
 function clearSession(){
+  if(sessionExpiryTimer!==null){
+    window.clearTimeout(sessionExpiryTimer);
+    sessionExpiryTimer=null;
+  }
   localStorage.removeItem('gs_session');
+}
+function isSessionCurrent(session, now){
+  const ts=Number(session && session.ts);
+  const current=now==null ? Date.now() : Number(now);
+  return Number.isFinite(ts) && ts>0 && Number.isFinite(current) &&
+    current>=ts && current-ts<SESSION_DURATION_MS;
+}
+function expirePersistentSession(){
+  sessionExpiryTimer=null;
+  if(typeof captureStationResume==='function') captureStationResume();
+  logout();
+}
+function scheduleSessionExpiry(session){
+  if(sessionExpiryTimer!==null) window.clearTimeout(sessionExpiryTimer);
+  sessionExpiryTimer=null;
+  if(!isSessionCurrent(session)) return false;
+  const remaining=SESSION_DURATION_MS-(Date.now()-Number(session.ts));
+  sessionExpiryTimer=window.setTimeout(expirePersistentSession,Math.max(0,remaining));
+  return true;
 }
 // Gate on the session: an already-cached active session also permits offline play.
 function resolveSessionThenEnter(){
@@ -256,9 +282,12 @@ function tryRestoreSession(){
   const raw = localStorage.getItem('gs_session');
   if(!raw){ show('view-login'); return; }
   let session;
-  try{ session = JSON.parse(raw); }catch(e){ show('view-login'); return; }
-  const age = Date.now() - (session.ts||0);
-  if(age > SESSION_DURATION_MS){
+  try{ session = JSON.parse(raw); }catch(e){
+    clearSession();
+    show('view-login');
+    return;
+  }
+  if(!scheduleSessionExpiry(session)){
     clearSession();
     show('view-login');
     return;

@@ -11,9 +11,9 @@
   else root.StationResume = mod;
 })(typeof self !== 'undefined' ? self : this, function () {
   const RESUME_KEY_PREFIX = 'gs_station_resume';
-  // Matches SESSION_DURATION_MS in index.html: a snapshot cannot outlive the
+  // Matches SESSION_DURATION_MS in app/admin-groups.js: a snapshot cannot outlive the
   // login that produced it.
-  const MAX_AGE_MS = 12 * 60 * 60 * 1000;
+  const MAX_AGE_MS = 2 * 60 * 60 * 1000;
 
   function resumeKey(huntId, groupId) {
     return huntId

@@ -10,27 +10,28 @@ let cannons = {};
 const PARTICIPANT_VIEW_IDS = new Set(['view-login','view-preload','view-session','view-clue','view-game','view-result','view-chest']);
 
 const DAILY_INTRO_KEY = 'game_station_intro_last_seen';
+const DAILY_INTRO_INTERVAL_MS = 60*60*1000;
 const DAILY_INTRO_PLAY_MS = 3000;
 const DAILY_INTRO_FADE_MS = 1000;
 
-function localDayStamp(){
-  const now = new Date();
-  const month = String(now.getMonth()+1).padStart(2,'0');
-  const day = String(now.getDate()).padStart(2,'0');
-  return `${now.getFullYear()}-${month}-${day}`;
+function introWasShownRecently(now){
+  const lastSeen=Number(localStorage.getItem(DAILY_INTRO_KEY));
+  const current=now==null ? Date.now() : Number(now);
+  return Number.isFinite(lastSeen) && lastSeen>0 && Number.isFinite(current) &&
+    current>=lastSeen && current-lastSeen<DAILY_INTRO_INTERVAL_MS;
 }
 
 function playDailyIntro(){
   if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const intro = document.getElementById('dailyIntro');
   const video = document.getElementById('dailyIntroVideo');
-  const today = localDayStamp();
-  if(!intro || !video || localStorage.getItem(DAILY_INTRO_KEY)===today) return;
+  const now=Date.now();
+  if(!intro || !video || introWasShownRecently(now)) return;
 
   intro.hidden = false;
-  // Mark the day only when the intro is actually about to play, rather than
+  // Mark the time only when the intro is actually about to play, rather than
   // repeatedly showing it during navigation through the app.
-  localStorage.setItem(DAILY_INTRO_KEY, today);
+  localStorage.setItem(DAILY_INTRO_KEY, String(now));
   video.currentTime = 0;
   video.play().catch(()=>startIntroFade());
 
