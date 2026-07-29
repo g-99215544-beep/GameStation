@@ -1,29 +1,37 @@
-const CACHE_NAME = 'gs-shell-v13';
-const LOCAL_ASSETS = [
-  './', 'index.html',
-  'tangram/engine.js', 'tangram/shapes.js', 'tangram/ui.js',
-  'run/tracker.js', 'groups/roster.js', 'stations/layout.js',
-  'sifir/engine.js', 'crossword/engine.js', 'battleship/engine.js', 'offline/store.js',
-  'cannon/engine.js',
-  'assets/ship/ship-sail-sheet.png', 'assets/chest/chest_sheet.png', 'assets/chest/chest_open.mp3',
-  'assets/cannon/fire.mp4', 'assets/cannon/hit.mp4',
-  'Pixel_art_game_intro_animation_202607201130.mp4', 'map idle pingpong.mp4',
-  'Kapal_berlayar_plain_cyan_backgr…_202607201223.mp4'
-];
-const CDN_ASSETS = [
-  'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
-  'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',
-  'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'
-];
+importScripts('offline/preload.js');
+
+const CACHE_NAME = 'gs-shell-v14';
+// Both lists live in offline/preload.js so the page and this worker cache
+// exactly the same things. Editing them here would reintroduce the drift.
+const LOCAL_ASSETS = self.OfflinePreload.LOCAL_ASSETS;
+const CDN_ASSETS = self.OfflinePreload.CDN_ASSETS;
+
+// Cache one URL at a time and report which ones failed. `cache.addAll` rejects
+// the whole batch on a single 404, which used to fail the install silently and
+// leave a phone with no offline copy at all.
+async function cacheEach(cache, urls, onProgress) {
+  const failed = [];
+  let done = 0;
+  for (const url of urls) {
+    try {
+      const request = CDN_ASSETS.includes(url) ? new Request(url, { mode: 'no-cors' }) : url;
+      const response = await fetch(request, { cache: 'reload' });
+      // An opaque CDN response has status 0; anything else must be a real hit.
+      if (response.type !== 'opaque' && !response.ok) throw new Error(String(response.status));
+      await cache.put(url, response);
+    } catch (_) {
+      failed.push(url);
+    }
+    done++;
+    if (onProgress) onProgress(done, urls.length, failed);
+  }
+  return failed;
+}
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(LOCAL_ASSETS);
-    await Promise.all(CDN_ASSETS.map(async url => {
-      try { await cache.put(url, await fetch(url, { mode: 'no-cors' })); } catch (_) {}
-    }));
+    await cacheEach(cache, LOCAL_ASSETS.concat(CDN_ASSETS));
     await self.skipWaiting();
   })());
 });
@@ -32,6 +40,33 @@ self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     await Promise.all((await caches.keys()).filter(key => key !== CACHE_NAME).map(key => caches.delete(key)));
     await self.clients.claim();
+  })());
+});
+
+// The page asks for a precache after a group logs in and waits on the progress
+// it reports back, so a student never walks away from Wi-Fi mid-download.
+self.addEventListener('message', event => {
+  const data = event.data || {};
+  if (data.type !== 'PRECACHE') return;
+  // A MessageChannel port keeps this reply private to the caller; fall back to
+  // the client itself when the page did not open one.
+  const port = event.ports && event.ports[0];
+  const source = event.source;
+  const post = message => {
+    if (port) port.postMessage(message);
+    else if (source) source.postMessage(message);
+  };
+  event.waitUntil((async () => {
+    try {
+      const cache = await caches.open(CACHE_NAME);
+      const urls = Array.isArray(data.urls) && data.urls.length
+        ? data.urls : LOCAL_ASSETS.concat(CDN_ASSETS);
+      const failed = await cacheEach(cache, urls, (done, total) =>
+        post({ type: 'PRECACHE_PROGRESS', done, total }));
+      post({ type: 'PRECACHE_DONE', failed });
+    } catch (error) {
+      post({ type: 'PRECACHE_DONE', failed: ['*'], error: String(error && error.message || error) });
+    }
   })());
 });
 
