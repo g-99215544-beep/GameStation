@@ -53,7 +53,7 @@ async function advanceToThirdShape(page) {
   await page.evaluate(() => window._tgNext());
   await page.evaluate(() => window._tgCtrl.setPieces(TangramShapes.SOLUTIONS.kucing));
   await page.evaluate(() => window._tgNext());
-  await expect(page.getByText(/Bentuk 3\/3: Segi Empat/)).toBeVisible();
+  await expect(page.getByText(/Stage 3 \(3\/3\): Segi Empat/)).toBeVisible();
 }
 
 test('third Tangram shape automatically reveals guide lines every minute for five seconds', async ({ page }) => {
@@ -102,4 +102,18 @@ test('third Tangram shape automatically reveals guide lines every minute for fiv
 
   await page.evaluate(() => window.__tgMinuteHintCallbacks[0]());
   expect(await page.evaluate(() => window._tgCtrl.getGuideAlpha())).toBe(1);
+});
+
+test('Tangram plays only the stages selected by the admin', async ({ page }) => {
+  await openTangram(page);
+  await page.evaluate(() => {
+    startGame('tangram-selected', {
+      id: 'tangram-selected', name: 'Tangram Pilihan', gameType: 'tangram',
+      gameDataRaw: '{"tangramStages":[2]}', timeLimitMin: 10
+    });
+    window._tgStart();
+  });
+
+  expect(await page.evaluate(() => gameState.total)).toBe(1);
+  await expect(page.getByText(/Stage 2 \(1\/1\): Kucing/)).toBeVisible();
 });

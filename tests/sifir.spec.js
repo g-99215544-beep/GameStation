@@ -64,3 +64,20 @@ test('Sifir Challenge resets after a wrong answer and completes after 15 correct
   expect(progress.totalScore).toBeGreaterThan(0);
   expect(progress.currentIndex).toBe(1);
 });
+
+test('Sifir Challenge completes after the admin-configured correct-answer streak', async ({ page }) => {
+  await seedPage(page);
+  await page.goto(pathToFileURL(path.join(__dirname, '..', 'index.html')).href);
+  await page.locator('#dailyIntro').evaluate(element => { element.hidden = true; });
+  await page.evaluate(() => {
+    currentGroupId = '1';
+    startGame('1', { id: 1, name: 'Sifir Pendek', location: 'x', password: '12345', timeLimitMin: 10, gameType: 'sifir', gameDataRaw: '{"sifirTarget":3}' });
+  });
+
+  await expect(page.locator('#gameCard')).toContainText('Soalan 1/3');
+  for (let index = 0; index < 3; index++) {
+    const answer = await answerForPrompt(page);
+    await page.locator('.sifir-choice').filter({ hasText: new RegExp(`^${answer}$`) }).click();
+  }
+  await expect(page.locator('#view-result')).toHaveClass(/active/);
+});
