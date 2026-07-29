@@ -340,6 +340,11 @@
   @media (max-width:520px){.worksheet-answer-line{align-items:stretch;flex-direction:column;}.worksheet-question-row .worksheet-remove{align-self:flex-start;}.worksheet-question-image{max-height:46vh;}}
   .run-editor{display:none;margin-top:10px;}
   .run-editor input{max-width:160px;}
+  .sudoku-stage-editor{display:none;margin-top:12px;padding:12px 14px;background:#fff8df;border:2px solid var(--gold);border-radius:10px;}
+  .sudoku-stage-editor p{margin:0 0 8px;font-size:14px;color:#65513a;}
+  .sudoku-stage-options{display:flex;flex-wrap:wrap;gap:10px;}
+  .sudoku-stage-option{display:flex;align-items:center;gap:6px;margin:0;font-weight:700;}
+  .sudoku-stage-option input{width:auto;margin:0;}
   .group-setup{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
   .group-setup textarea{width:100%;font-family:inherit;}
   .group-card{border:2px solid var(--gold);border-radius:10px;padding:12px;margin:10px 0;background:#fff8df;}
@@ -866,7 +871,7 @@
 <script>
 const GAME_TYPES = [
   {id:'lembaran_kerja', name:'Lembaran Kerja'},
-  {id:'sudoku', name:'Sudoku Challenge (3 Stage)'},
+  {id:'sudoku', name:'Sudoku Challenge (1–3 Stage)'},
   {id:'crossword', name:'Crossword Puzzle'},
   {id:'battleship', name:'Battleship Koordinat'},
   {id:'sifir', name:'Sifir Challenge'},
@@ -2566,12 +2571,42 @@ function toggleWorksheetEditor(key){
   const gameType=select.value;
   const isWorksheet=gameType==='lembaran_kerja';
   const isRun=gameType==='jejak_lari';
+  const isSudoku=gameType==='sudoku';
   const editor=document.getElementById('worksheet_editor_'+key);
   const runEditor=document.getElementById('run_editor_'+key);
+  const sudokuEditor=document.getElementById('sudoku_stage_editor_'+key);
   const rawField=document.getElementById('game_data_field_'+key);
   if(editor) editor.style.display=isWorksheet?'block':'none';
   if(runEditor) runEditor.style.display=isRun?'block':'none';
+  if(sudokuEditor) sudokuEditor.style.display=isSudoku?'block':'none';
   if(rawField) rawField.style.display='none';
+}
+function parseStationGameData(raw){
+  try{
+    const data=JSON.parse(raw||'{}');
+    return data && typeof data==='object' && !Array.isArray(data) ? data : {};
+  }catch(_){ return {}; }
+}
+function sudokuStagesFromRaw(raw){
+  const data=parseStationGameData(raw);
+  // Existing stations predate this setting, so they retain the original
+  // three-stage experience until an admin saves a different selection.
+  if(!Array.isArray(data.sudokuStages)) return [1,2,3];
+  return [...new Set(data.sudokuStages.map(Number).filter(stage=>Number.isInteger(stage) && stage>=1 && stage<=3))].sort((a,b)=>a-b);
+}
+function sudokuStageEditorHtml(key,raw){
+  const selected=new Set(sudokuStagesFromRaw(raw));
+  return `<div class="sudoku-stage-editor" id="sudoku_stage_editor_${key}">
+    <label>Stage Sudoku Aktif</label>
+    <p>Tandakan stage yang murid perlu siapkan. Pilih sekurang-kurangnya satu stage.</p>
+    <div class="sudoku-stage-options">${[1,2,3].map(stage=>`<label class="sudoku-stage-option"><input type="checkbox" value="${stage}"${selected.has(stage)?' checked':''}> Stage ${stage}</label>`).join('')}</div>
+  </div>`;
+}
+function selectedSudokuStages(key){
+  const editor=document.getElementById('sudoku_stage_editor_'+key);
+  if(!editor) return [1,2,3];
+  return Array.from(editor.querySelectorAll('input[type="checkbox"]:checked'))
+    .map(input=>Number(input.value)).filter(stage=>Number.isInteger(stage) && stage>=1 && stage<=3).sort((a,b)=>a-b);
 }
 function updateStationButtons(){
   const label=document.getElementById('stationCountLabel');
@@ -2621,6 +2656,7 @@ function buildStationsUI(existing){
       <label>Jenis Game</label><select id="st_gametype_${i}" onchange="toggleWorksheetEditor('${i}')">${opts}</select>
       <div id="game_data_field_${i}"><label>Data Game (JSON)</label><input id="st_gamedata_${i}" value='${(s.gameDataRaw||"{}").replace(/'/g,"&apos;")}'></div>
       <div class="worksheet-editor" id="worksheet_editor_${i}"></div>
+      ${sudokuStageEditorHtml(i,s.gameDataRaw)}
       <div class="run-editor" id="run_editor_${i}">
         <label>Jarak Sasaran (km)</label>
         <input id="st_targetkm_${i}" type="number" min="0.1" step="0.1" value="${RunTracker.parseTargetKm(s.gameDataRaw)}">
@@ -2666,6 +2702,7 @@ function cannonBlockHtml(cid, cannon){
       <label>Jenis Soalan</label><select id="st_gametype_${cid}" onchange="toggleWorksheetEditor('${cid}')">${opts}</select>
       <div id="game_data_field_${cid}"><label>Data Game (JSON)</label><input id="st_gamedata_${cid}" value='${String(cannon.gameDataRaw||"{}").replace(/'/g,"&apos;")}'></div>
       <div class="worksheet-editor" id="worksheet_editor_${cid}"></div>
+      ${sudokuStageEditorHtml(cid,cannon.gameDataRaw)}
       <div class="run-editor" id="run_editor_${cid}">
         <label>Jarak Sasaran (km)</label>
         <input id="st_targetkm_${cid}" type="number" min="0.1" step="0.1" value="${RunTracker.parseTargetKm(cannon.gameDataRaw)}">
@@ -2736,6 +2773,7 @@ function validateCannons(stationConfig, cannonConfigValue, cannonList){
     alert(`Isi jawapan betul bagi semua soalan Lembaran Kerja di Meriam ${worksheets.join(', ')}.`);
     return false;
   }
+  if(!validateSudokuStages(cannonList,'Meriam')) return false;
   // Without this, pushConfig's Promise.all commits stations, groups and
   // progress while the database rules reject the oversized config/cannons.
   // The teacher sees a raw Firebase error, the hunt looks saved, and the
@@ -2770,6 +2808,10 @@ function stationGameDataRaw(i, gameType){
   if(gameType==='jejak_lari'){
     const km=Number(document.getElementById('st_targetkm_'+i).value);
     return JSON.stringify({targetKm:(isFinite(km)&&km>0)?km:3});
+  }
+  if(gameType==='sudoku'){
+    const raw=document.getElementById('st_gamedata_'+i)?.value;
+    return JSON.stringify({...parseStationGameData(raw),sudokuStages:selectedSudokuStages(i)});
   }
   return document.getElementById('st_gamedata_'+i).value;
 }
@@ -2810,6 +2852,12 @@ function validateWorksheetStations(stationConfig){
     return false;
   }
   return true;
+}
+function validateSudokuStages(stationConfig,label='Stesen'){
+  const invalid=Object.values(stationConfig).filter(st=>st.gameType==='sudoku' && sudokuStagesFromRaw(st.gameDataRaw).length===0);
+  if(!invalid.length) return true;
+  alert(`Pilih sekurang-kurangnya satu stage Sudoku untuk ${label} ${invalid.map(st=>st.id).join(', ')}.`);
+  return false;
 }
 function rotationFor(startStation, count){
   return StationLayout.rotationOrder(startStation, count == null ? currentStationCount() : count);
@@ -2870,7 +2918,7 @@ function pushConfig(){
   const st = collectStations();
   const cn = collectCannonConfig();
   const cnList = cn.enabled ? collectCannons() : {};
-  if(!validateStationPasswords(st) || !validateWorksheetStations(st)) return;
+  if(!validateStationPasswords(st) || !validateWorksheetStations(st) || !validateSudokuStages(st)) return;
   if(!validateCannons(st, cn, cnList)) return;
   const name=String(document.getElementById('huntName')?.value||'').trim();
   if((isHuntDraft || currentHuntId) && !name){
@@ -3023,7 +3071,7 @@ function generateQRs(){
   const st = collectStations();
   const cn = collectCannonConfig();
   const cnList = cn.enabled ? collectCannons() : {};
-  if(!validateStationPasswords(st) || !validateWorksheetStations(st)) return;
+  if(!validateStationPasswords(st) || !validateWorksheetStations(st) || !validateSudokuStages(st)) return;
   if(!validateCannons(st, cn, cnList)) return;
   stations = st; cannonConfig = cn; cannons = cnList;
   const out = document.getElementById('qrOutput');
@@ -3177,7 +3225,7 @@ function testStation(i){
     alert('Password stesen mesti tepat 5 huruf atau digit sebelum diuji.');
     return;
   }
-  if(!validateWorksheetStations({[i]:st})) return;
+  if(!validateWorksheetStations({[i]:st}) || !validateSudokuStages({[i]:st})) return;
   window._testMode = true;
   startGame(st.id, st);
 }
@@ -3519,11 +3567,11 @@ function finishSifir(score){
   submitCompletion(onTime,score,timeTakenSec);
 }
 
-// Sudoku uses fixed, verified puzzles so every group receives the same
-// three-stage challenge: 4x4, then a guided 9x9, then a harder 9x9.
+// Sudoku uses fixed, verified puzzles. The admin chooses which of the three
+// stages a station includes: 4x4, guided 9x9, and harder 9x9.
 function startSudoku(st){
-  const stages = [
-    {size:4,label:'4 x 4',hint:'Mulakan dengan Sudoku 4 x 4. Setiap kotak 2 x 2 juga perlu lengkap.',puzzle:[
+  const allStages = [
+    {id:1,size:4,label:'4 x 4',hint:'Mulakan dengan Sudoku 4 x 4. Setiap kotak 2 x 2 juga perlu lengkap.',puzzle:[
       [1,0,0,4],
       [0,4,1,0],
       [2,0,0,3],
@@ -3534,7 +3582,7 @@ function startSudoku(st){
       [2,1,4,3],
       [4,3,2,1]
     ]},
-    {size:9,label:'9 x 9 - Banyak Hint',hint:'Setiap kotak 3 x 3 hanya mempunyai 2 ruang kosong.',puzzle:[
+    {id:2,size:9,label:'9 x 9 - Banyak Hint',hint:'Setiap kotak 3 x 3 hanya mempunyai 2 ruang kosong.',puzzle:[
       [5,0,4,0,7,8,9,1,2],
       [6,7,0,1,9,5,3,0,8],
       [1,9,8,3,0,2,5,6,0],
@@ -3555,7 +3603,7 @@ function startSudoku(st){
       [2,8,7,4,1,9,6,3,5],
       [3,4,5,2,8,6,1,7,9]
     ]},
-    {size:9,label:'9 x 9 - Cabaran',hint:'Setiap kotak 3 x 3 mempunyai sehingga 5 ruang kosong.',puzzle:[
+    {id:3,size:9,label:'9 x 9 - Cabaran',hint:'Setiap kotak 3 x 3 mempunyai sehingga 5 ruang kosong.',puzzle:[
       [0,3,4,0,0,8,9,0,0],
       [6,7,0,0,0,5,3,4,0],
       [0,0,0,3,4,0,0,6,0],
@@ -3577,6 +3625,8 @@ function startSudoku(st){
       [3,4,5,2,8,6,1,7,9]
     ]}
   ];
+  const selectedStages=sudokuStagesFromRaw(st.gameDataRaw);
+  const stages=(selectedStages.length?selectedStages:[1,2,3]).map(id=>allStages[id-1]);
   gameState.type='sudoku';
   gameState.total=stages.length;
   gameState.correct=0;
@@ -3596,9 +3646,9 @@ function showSudokuStage(){
   const sudoku=gameState.sudoku;
   const stage=sudoku.stages[sudoku.stageIndex];
   const card=document.getElementById('gameCard');
-  const progress=sudoku.stages.map((_,i)=>`<span class="${i<sudoku.completed?'done':i===sudoku.stageIndex?'active':''}">${i+1}</span>`).join('');
+  const progress=sudoku.stages.map((item,i)=>`<span class="${i<sudoku.completed?'done':i===sudoku.stageIndex?'active':''}">${item.id}</span>`).join('');
   const blockRule=stage.size===9 ? ' Setiap kotak 3 x 3 juga mesti lengkap.' : stage.size===4 ? ' Setiap kotak 2 x 2 juga mesti lengkap.' : '';
-  let html=`<div class="sudoku-game"><h2>${sudoku.station.name}</h2><p>Selesaikan 3 stage Sudoku mengikut urutan.</p><div class="sudoku-progress">${progress}</div><h3 style="margin:0;">Stage ${sudoku.stageIndex+1}/3: ${stage.label}</h3><p style="color:#666;font-size:14px;">${stage.hint}</p><p style="color:#666;font-size:14px;">Isi nombor 1 hingga ${stage.size} sekali bagi setiap baris dan lajur.${blockRule}</p><div class="sudoku-board size-${stage.size}" style="grid-template-columns:repeat(${stage.size},minmax(0,1fr));">`;
+  let html=`<div class="sudoku-game"><h2>${sudoku.station.name}</h2><p>Selesaikan ${sudoku.stages.length} stage Sudoku yang dipilih mengikut urutan.</p><div class="sudoku-progress">${progress}</div><h3 style="margin:0;">Stage ${stage.id} (${sudoku.stageIndex+1}/${sudoku.stages.length}): ${stage.label}</h3><p style="color:#666;font-size:14px;">${stage.hint}</p><p style="color:#666;font-size:14px;">Isi nombor 1 hingga ${stage.size} sekali bagi setiap baris dan lajur.${blockRule}</p><div class="sudoku-board size-${stage.size}" style="grid-template-columns:repeat(${stage.size},minmax(0,1fr));">`;
   stage.puzzle.forEach((row,r)=>row.forEach((cell,c)=>{
     const style=sudokuCellBorderStyle(stage.size,r,c);
     if(cell){
@@ -3607,7 +3657,7 @@ function showSudokuStage(){
       html+=`<input class="sudoku-cell" id="sudoku_${sudoku.stageIndex}_${r}_${c}" inputmode="numeric" maxlength="1" aria-label="Baris ${r+1}, lajur ${c+1}" style="${style}" oninput="sanitizeSudokuInput(this,${stage.size})">`;
     }
   }));
-  html+=`</div><div id="sudokuMsg"></div><button class="big" onclick="checkSudokuStage()">Semak Stage ${sudoku.stageIndex+1}</button></div>`;
+  html+=`</div><div id="sudokuMsg"></div><button class="big" onclick="checkSudokuStage()">Semak Stage ${stage.id}</button></div>`;
   card.innerHTML=html;
 }
 function sanitizeSudokuInput(input,size){
@@ -3644,7 +3694,7 @@ function checkSudokuStage(){
     return;
   }
   const next=sudoku.stages[sudoku.stageIndex+1];
-  document.getElementById('gameCard').innerHTML=`<div class="finalbox"><div style="font-size:52px;">&#10003;</div><h2 style="color:var(--green);">Stage ${sudoku.completed} Selesai!</h2><p>Seterusnya: Sudoku ${next.label}.</p><button class="big" onclick="nextSudokuStage()">Teruskan ke Stage ${sudoku.completed+1}</button></div>`;
+  document.getElementById('gameCard').innerHTML=`<div class="finalbox"><div style="font-size:52px;">&#10003;</div><h2 style="color:var(--green);">Stage ${stage.id} Selesai!</h2><p>Seterusnya: Sudoku ${next.label}.</p><button class="big" onclick="nextSudokuStage()">Teruskan ke Stage ${next.id}</button></div>`;
 }
 function nextSudokuStage(){
   gameState.sudoku.stageIndex++;
@@ -3816,7 +3866,7 @@ function finishCrossword(onTime){
 const BS_BOARD_TRACKS=10, BS_BOARD_GAP=2, BS_BOARD_PAD=5;
 function startBattleship(st){
   gameState.type='battleship';
-  gameState.total=5;
+  gameState.total=BattleshipEngine.FLEET_SPEC.length;
   gameState.correct=0;
   gameState.battleship={
     station:st,phase:'placing',
@@ -4336,7 +4386,7 @@ function finishBattleship(onTime){
   const sunk=BattleshipEngine.countSunk(bs.enemyFleet,bs.playerShotLog);
   gameState.correct=sunk;
   const timeTakenSec=Math.round((Date.now()-window._startedAt)/1000);
-  let score=Math.round((sunk/5)*100);
+  let score=Math.round((sunk/gameState.total)*100);
   if(!onTime) score=Math.max(0,score-20);
   if(window._testMode){ showTestResult(onTime,score,timeTakenSec); return; }
   submitCompletion(onTime,score,timeTakenSec);
