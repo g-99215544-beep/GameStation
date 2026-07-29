@@ -27,6 +27,23 @@ test('every stylesheet index.html links is in the preload manifest', () => {
   });
 });
 
+// url() in a stylesheet resolves against the STYLESHEET, not the document. When
+// this CSS lived inline in index.html, url('assets/chest/...') meant
+// /assets/chest/...; the moment it moved to app/styles.css the same text meant
+// /app/assets/chest/... and every sprite 404'd. Resolve them the way a browser
+// does, from the stylesheet's own directory.
+test('every url() in the stylesheet points at a file that exists', () => {
+  const cssPath = path.join(ROOT, 'app', 'styles.css');
+  const css = fs.readFileSync(cssPath, 'utf8');
+  const urls = [...css.matchAll(/url\(\s*['"]?([^'")]+)['"]?\s*\)/g)].map(match => match[1]);
+  assert.ok(urls.length >= 2, 'expected the stylesheet to reference sprite sheets');
+  urls.forEach(url => {
+    if (/^(data:|https?:|\/\/)/.test(url)) return;              // absolute or inlined
+    const file = path.resolve(path.dirname(cssPath), url.split('?')[0]);
+    assert.ok(fs.existsSync(file), `app/styles.css references ${url}, which resolves to a missing file`);
+  });
+});
+
 test('index.html is a shell, not a place to keep code', () => {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   assert.ok(!/<script>[\s\S]*?<\/script>/.test(html), 'index.html should have no inline <script> block');
