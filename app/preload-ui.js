@@ -70,13 +70,33 @@ function precacheAssets(){
   return new Promise(resolve=>{
     if(!('serviceWorker' in navigator)){ resolve({ok:false, reason:'unsupported'}); return; }
     let settled=false;
-    const done=value=>{ if(!settled){ settled=true; resolve(value); } };
-    const timer=setTimeout(()=>done({ok:false, reason:'timeout'}), PRELOAD_TIMEOUT_MS);
-    navigator.serviceWorker.ready.then(registration=>{
-      const worker=registration.active;
-      if(!worker){ clearTimeout(timer); done({ok:false, reason:'unsupported'}); return; }
+    let attempt=0;
+    let activePort=null;
+    let messageWorker=null;
+    const onControllerChange=()=>{
+      navigator.serviceWorker.ready.then(registration=>send(registration.active)).catch(()=>{});
+    };
+    const cleanup=()=>{
+      clearTimeout(timer);
+      navigator.serviceWorker.removeEventListener('controllerchange',onControllerChange);
+      if(activePort) activePort.close();
+    };
+    const done=value=>{
+      if(settled) return;
+      settled=true;
+      cleanup();
+      resolve(value);
+    };
+    const send=worker=>{
+      if(settled || !worker) return;
+      if(worker===messageWorker) return;
+      messageWorker=worker;
+      const thisAttempt=++attempt;
+      if(activePort) activePort.close();
       const channel=new MessageChannel();
+      activePort=channel.port1;
       channel.port1.onmessage=event=>{
+        if(settled || thisAttempt!==attempt) return;
         const data=event.data||{};
         if(data.type==='PRECACHE_PROGRESS'){
           preloadState.assetsDone=data.done;
@@ -85,15 +105,41 @@ function precacheAssets(){
           return;
         }
         if(data.type==='PRECACHE_DONE'){
-          clearTimeout(timer);
           preloadState.assetsDone=preloadState.assetsTotal;
           renderPreload();
           const failed=Array.isArray(data.failed)?data.failed:[];
           done(failed.length ? {ok:false, reason:'assets', failed} : {ok:true, failed:[]});
         }
       };
-      worker.postMessage({type:'PRECACHE', urls:OfflinePreload.PRELOAD_ASSETS}, [channel.port2]);
-    }).catch(()=>{ clearTimeout(timer); done({ok:false, reason:'unsupported'}); });
+      try {
+        worker.postMessage({type:'PRECACHE', urls:OfflinePreload.PRELOAD_ASSETS}, [channel.port2]);
+      } catch (_) {
+        if(thisAttempt===attempt) done({ok:false, reason:'unsupported'});
+      }
+    };
+    const waitForLatestWorker=registration=>{
+      const pending=registration.installing||registration.waiting;
+      if(!pending || pending.state==='activated') return Promise.resolve(registration.active||pending);
+      return new Promise(resolveWorker=>{
+        const onState=()=>{
+          if(pending.state==='activated' || pending.state==='redundant'){
+            pending.removeEventListener('statechange',onState);
+            resolveWorker(registration.active||pending);
+          }
+        };
+        pending.addEventListener('statechange',onState);
+        onState();
+      });
+    };
+    const timer=setTimeout(()=>done({ok:false, reason:'timeout'}), PRELOAD_TIMEOUT_MS);
+    navigator.serviceWorker.addEventListener('controllerchange',onControllerChange);
+    navigator.serviceWorker.ready
+      .then(waitForLatestWorker)
+      .then(worker=>{
+        if(!worker){ done({ok:false, reason:'unsupported'}); return; }
+        send(worker);
+      })
+      .catch(()=>done({ok:false, reason:'unsupported'}));
   });
 }
 // Resolves once the phone is ready, or once the student chooses to skip.

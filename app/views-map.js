@@ -1,7 +1,11 @@
 // Session lifecycle so the app is reusable across events: admin presses Mula to
 // start, Tamat to end. status: 'setup' (not started) | 'active' | 'ended'.
 let sessionInfo = {status:'setup'};
-let cannonConfig = {enabled:false, damagePercent:CannonEngine.DEFAULT_DAMAGE};
+let cannonConfig = {
+  enabled:false,
+  damagePercent:CannonEngine.DEFAULT_DAMAGE,
+  startingAmmo:CannonEngine.DEFAULT_STARTING_AMMO
+};
 let cannons = {};
 const PARTICIPANT_VIEW_IDS = new Set(['view-login','view-preload','view-session','view-clue','view-game','view-result','view-chest']);
 

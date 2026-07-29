@@ -28,6 +28,16 @@ test('clampDamage keeps the teacher setting inside 1..50', () => {
   assert.strictEqual(E.clampDamage('   '), E.DEFAULT_DAMAGE);
 });
 
+test('clampStartingAmmo keeps the teacher setting inside 0..99', () => {
+  assert.strictEqual(E.clampStartingAmmo(4), 4);
+  assert.strictEqual(E.clampStartingAmmo(4.9), 4);
+  assert.strictEqual(E.clampStartingAmmo(-2), 0);
+  assert.strictEqual(E.clampStartingAmmo(120), 99);
+  assert.strictEqual(E.clampStartingAmmo('abc'), E.DEFAULT_STARTING_AMMO);
+  assert.strictEqual(E.clampStartingAmmo(undefined), E.DEFAULT_STARTING_AMMO);
+  assert.strictEqual(E.clampStartingAmmo(''), E.DEFAULT_STARTING_AMMO);
+});
+
 test('applyDamage stops exactly at the floor and never goes below', () => {
   assert.strictEqual(E.applyDamage(100, 10), 90);
   assert.strictEqual(E.applyDamage(55, 10), 50);
@@ -75,6 +85,14 @@ test('claiming the same cannon twice awards only one cannonball', () => {
 
   const second = E.claimBullet(progress, 'c2', 222);
   assert.deepStrictEqual(second, { ammo: 2, claimed: { c1: 111, c2: 222 } });
+});
+
+test('claiming a cannon never exceeds the database ammo limit', () => {
+  assert.deepStrictEqual(E.claimBullet({ ammo: 99 }, 'c1', 111), {
+    ammo: 99,
+    claimed: { c1: 111 }
+  });
+  assert.strictEqual(E.readAmmo({ ammo: 500 }), 99);
 });
 
 test('summarizeIncoming collapses several hits into one summary', () => {

@@ -26,6 +26,8 @@ function openCannonPanel(){
   if(!panel || !cannonEnabled()) return;
   panel.hidden=false;
   setCannonMsg('','');
+  const passwordInput=document.getElementById('cannonPasswordInput');
+  if(passwordInput) passwordInput.value='';
   attachCannonProgressListener();
   renderCannonPanel();
 }
@@ -58,11 +60,11 @@ function renderCannonPanel(){
   const ammo=CannonEngine.readAmmo(progress);
   const offline=isOffline();
   ammoBox.innerHTML=ammo
-    ? `Peluru anda: ${'💣'.repeat(ammo)} <span>(${ammo})</span>`
-    : 'Peluru anda: <span>0</span><br><small class="cannon-hint">Cari QR meriam untuk dapat peluru.</small>';
+    ? `Peluru anda: 💣 <span>(${ammo})</span>`
+    : 'Peluru anda: <span>0</span><br><small class="cannon-hint">Scan QR atau masukkan password meriam untuk dapat peluru.</small>';
   const ids=Object.keys(groups||{}).filter(gid=>String(gid)!==String(currentGroupId));
   const offlineHint=offline
-    ? '<p class="cannon-hint" id="cannonOfflineHint">📴 Perlu internet untuk menembak. Anda masih boleh scan QR meriam.</p>'
+    ? '<p class="cannon-hint" id="cannonOfflineHint">📴 Perlu internet untuk menembak. Anda masih boleh scan QR atau masukkan password meriam.</p>'
     : '';
   // Rebuilt wholesale (not appended) on every render, including the offline
   // hint, so repeated renders — e.g. closing and reopening the panel offline,
@@ -108,12 +110,21 @@ function stopCannonScanner(){
   cannonQrCode=null;
   try{ scanner.stop().catch(()=>{}); }catch(_){}
 }
+function submitCannonPassword(){
+  const input=document.getElementById('cannonPasswordInput');
+  redeemCannonPassword(input&&input.value);
+}
 function redeemCannonPassword(raw){
   const password=String(raw||'').trim().replace(/[^A-Za-z0-9]/g,'').slice(0,5);
+  if(!/^[A-Za-z0-9]{5}$/.test(password)){
+    playGameSfx('wrong');
+    setCannonMsg('err','Masukkan password meriam tepat 5 huruf atau digit.');
+    return;
+  }
   const cid=CannonEngine.findByPassword(cannons,password);
   if(!cid){
     playGameSfx('wrong');
-    setCannonMsg('err','Ini bukan QR meriam. Cuba QR yang lain.');
+    setCannonMsg('err','Password atau QR meriam tidak sah. Cuba semula.');
     return;
   }
   if(CannonEngine.hasClaimed(progress,cid)){

@@ -25,6 +25,7 @@
         "cannon": {
           "enabled":       { ".validate": "newData.isBoolean()" },
           "damagePercent": { ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 50" },
+          "startingAmmo":  { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 99" },
           "$other":        { ".validate": false }
         },
         "cannons": {

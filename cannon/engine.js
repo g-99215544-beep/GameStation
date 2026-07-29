@@ -8,6 +8,8 @@
   const MAX_CANNONS = 6;
   const DEFAULT_DAMAGE = 10;
   const MAX_DAMAGE = 50;
+  const DEFAULT_STARTING_AMMO = 0;
+  const MAX_AMMO = 99;
   // The four fields a student's phone must never write back. Its cached copy of
   // `progress` goes stale the moment somebody shoots them, so writing these
   // would restore HP the shooter had already knocked down.
@@ -22,7 +24,14 @@
 
   function readAmmo(progress) {
     const ammo = Math.floor(Number(progress && progress.ammo));
-    return Number.isFinite(ammo) && ammo > 0 ? ammo : 0;
+    return Number.isFinite(ammo) && ammo > 0 ? Math.min(MAX_AMMO, ammo) : 0;
+  }
+
+  function clampStartingAmmo(value) {
+    if (value == null || (typeof value === 'string' && !value.trim())) return DEFAULT_STARTING_AMMO;
+    const ammo = Math.floor(Number(value));
+    if (!Number.isFinite(ammo)) return DEFAULT_STARTING_AMMO;
+    return Math.min(MAX_AMMO, Math.max(0, ammo));
   }
 
   function clampDamage(value) {
@@ -57,7 +66,7 @@
     if (hasClaimed(progress, cid)) return null;
     const claimed = Object.assign({}, (progress && progress.claimed) || {});
     claimed[cid] = now == null ? Date.now() : now;
-    return { ammo: readAmmo(progress) + 1, claimed: claimed };
+    return { ammo: Math.min(MAX_AMMO, readAmmo(progress) + 1), claimed: claimed };
   }
 
   function summarizeIncoming(incoming) {
@@ -134,9 +143,11 @@
 
   return {
     MIN_HP: MIN_HP, MAX_HP: MAX_HP, MAX_CANNONS: MAX_CANNONS,
-    DEFAULT_DAMAGE: DEFAULT_DAMAGE, CANNON_FIELDS: CANNON_FIELDS,
+    DEFAULT_DAMAGE: DEFAULT_DAMAGE, DEFAULT_STARTING_AMMO: DEFAULT_STARTING_AMMO,
+    MAX_AMMO: MAX_AMMO, CANNON_FIELDS: CANNON_FIELDS,
     PASS_SCORE: PASS_SCORE, isPerfect: isPerfect,
     readHp: readHp, readAmmo: readAmmo, clampDamage: clampDamage,
+    clampStartingAmmo: clampStartingAmmo,
     applyDamage: applyDamage, effectiveScore: effectiveScore, finalScore: finalScore,
     isInBattle: isInBattle, hasClaimed: hasClaimed, claimBullet: claimBullet,
     summarizeIncoming: summarizeIncoming, stripCannonFields: stripCannonFields,

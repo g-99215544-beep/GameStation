@@ -379,7 +379,7 @@ function finishCannonQuestion(onTime, score){
   openCannonPanel();
   setCannonMsg(perfect?'ok':'err', perfect
     ? `🎉 Tepat! Anda dapat 1 peluru meriam. Jumlah peluru: ${CannonEngine.readAmmo(progress)}`
-    : 'Belum tepat — cuba lagi. Scan semula QR meriam ini.');
+    : 'Belum tepat — cuba lagi dengan scan QR atau password meriam ini.');
   syncCannonFab();
   // A cannon question is its own "the game just ended" route (it never goes
   // through showResult()), so a hit held while it was live must be flushed

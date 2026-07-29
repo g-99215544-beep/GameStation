@@ -1,4 +1,9 @@
 function currentStationCount(){ return StationLayout.clampStationCount(Object.keys(stations||{}).length); }
+function freshGroupProgress(config=cannonConfig){
+  const initial={currentIndex:0,status:'idle',completedStations:{},keys:[],totalScore:0};
+  if(config && config.enabled) initial.ammo=CannonEngine.clampStartingAmmo(config.startingAmmo);
+  return initial;
+}
 let browserOnline = navigator.onLine !== false;
 let firebaseConnected = true;
 let firebaseConnectionEstablished = false;
@@ -41,7 +46,8 @@ function applyConfigCache(cfg){
   groups=(cfg&&cfg.groups)||{};
   cannonConfig={
     enabled:!!(cfg&&cfg.cannon&&cfg.cannon.enabled),
-    damagePercent:CannonEngine.clampDamage(cfg&&cfg.cannon&&cfg.cannon.damagePercent)
+    damagePercent:CannonEngine.clampDamage(cfg&&cfg.cannon&&cfg.cannon.damagePercent),
+    startingAmmo:CannonEngine.clampStartingAmmo(cfg&&cfg.cannon&&cfg.cannon.startingAmmo)
   };
   cannons=(cfg&&cfg.cannons)||{};
   stationCount=StationLayout.clampStationCount((cfg&&cfg.stationCount) || Object.keys(stations).length);
@@ -51,6 +57,8 @@ function applyConfigCache(cfg){
   if(enabledBox) enabledBox.checked=cannonConfig.enabled;
   const damageBox=document.getElementById('cannonDamage');
   if(damageBox) damageBox.value=cannonConfig.damagePercent;
+  const startingAmmoBox=document.getElementById('cannonStartingAmmo');
+  if(startingAmmoBox) startingAmmoBox.value=cannonConfig.startingAmmo;
   const body=document.getElementById('cannonBody');
   if(body) body.hidden=!cannonConfig.enabled;
   buildCannonsUI(cannons);

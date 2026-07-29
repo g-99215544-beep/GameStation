@@ -61,7 +61,34 @@ async function boot(page) {
   await page.evaluate(() => navigator.serviceWorker.ready);
 }
 
+async function precache(page, urls) {
+  return page.evaluate(async requested => {
+    const registration = await navigator.serviceWorker.ready;
+    return new Promise(resolve => {
+      const channel = new MessageChannel();
+      channel.port1.onmessage = event => {
+        if (event.data && event.data.type === 'PRECACHE_DONE') resolve(event.data);
+      };
+      registration.active.postMessage({ type: 'PRECACHE', urls: requested }, [channel.port2]);
+    });
+  }, urls);
+}
+
 const probe = origin => `${origin}/app/styles.css`;
+
+test('install caches only the lightweight shell, not every video', async ({ page }) => {
+  await boot(page);
+  const cachedPaths = await page.evaluate(async () => {
+    const paths = [];
+    for (const key of await caches.keys()) {
+      const cache = await caches.open(key);
+      paths.push(...(await cache.keys()).map(request => new URL(request.url).pathname));
+    }
+    return paths;
+  });
+  expect(cachedPaths.some(pathname => pathname.endsWith('.mp4'))).toBe(false);
+  expect(cachedPaths.length).toBeLessThanOrEqual(2);
+});
 
 test('a cached file is refreshed in the background after a deploy', async ({ page }) => {
   await boot(page);
@@ -144,6 +171,8 @@ test('a ranged video request is served, not turned into a network error', async 
 test('a precached video answers byte ranges while offline', async ({ page, context }) => {
   await boot(page);
   const source = server.origin + '/map idle pingpong.mp4';
+  const preload = await precache(page, [source]);
+  expect(preload.failed).toEqual([]);
   await expect.poll(() => page.evaluate(async url => {
     const hit = await caches.match(url, { ignoreSearch: true });
     return hit ? hit.status : 0;
