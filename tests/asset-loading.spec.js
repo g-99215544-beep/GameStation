@@ -78,3 +78,21 @@ test('the sprite URLs the browser resolves are all fetchable', async ({ page }) 
   // A wrong relative path shows up here as 404 on /app/assets/... instead of 200.
   expect(results.filter(r => r.status !== 200)).toEqual([]);
 });
+
+test('the journey map retries a video whose initial preload failed', async ({ page }) => {
+  await boot(page);
+  const calls = await page.evaluate(() => {
+    const video = document.getElementById('journeyMapVideo');
+    const invoked = [];
+    Object.defineProperty(video, 'error', { configurable: true, value: { code: 2 } });
+    Object.defineProperty(video, 'paused', { configurable: true, value: true });
+    video.load = () => invoked.push('load');
+    video.play = () => {
+      invoked.push('play');
+      return Promise.resolve();
+    };
+    playJourneyMapPingPong();
+    return invoked;
+  });
+  expect(calls).toEqual(['load', 'play']);
+});

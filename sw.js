@@ -89,10 +89,6 @@ function isCacheable(request, url) {
   if (request.method !== 'GET') return false;
   // chrome-extension:, blob:, data: … the Cache API rejects every one of them.
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
-  // A ranged request (video seeking, and how <video> loads at all) is answered
-  // with 206 Partial Content, which the Cache API also refuses. Storing a
-  // fragment as if it were the whole file would corrupt the offline copy anyway.
-  if (request.headers.has('range')) return false;
   return true;
 }
 
@@ -112,11 +108,69 @@ async function cacheQuietly(request, response) {
   } catch (_) { /* unsupported for the cache — serving it is what matters */ }
 }
 
+function rangeNotSatisfiable(size) {
+  return new Response(null, {
+    status: 416,
+    statusText: 'Range Not Satisfiable',
+    headers: { 'Content-Range': `bytes */${size}` }
+  });
+}
+
+// Videos are precached as complete responses, but browsers normally read them
+// with byte-range requests. Build the requested 206 from that full cached copy
+// so playback keeps working after the group leaves Wi-Fi.
+async function cachedRangeResponse(request) {
+  const cached = await caches.match(request.url, { ignoreSearch: true });
+  if (!cached || cached.type === 'opaque') return null;
+
+  const bytes = await cached.arrayBuffer();
+  const size = bytes.byteLength;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') || '');
+  if (!match || (!match[1] && !match[2])) return null;
+
+  let start;
+  let end;
+  if (!match[1]) {
+    const suffixLength = Number(match[2]);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return rangeNotSatisfiable(size);
+    start = Math.max(0, size - suffixLength);
+    end = size - 1;
+  } else {
+    start = Number(match[1]);
+    end = match[2] ? Number(match[2]) : size - 1;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= size || start > end) {
+      return rangeNotSatisfiable(size);
+    }
+    end = Math.min(end, size - 1);
+  }
+
+  const headers = new Headers(cached.headers);
+  headers.set('Accept-Ranges', 'bytes');
+  headers.set('Content-Length', String(end - start + 1));
+  headers.set('Content-Range', `bytes ${start}-${end}/${size}`);
+  return new Response(bytes.slice(start, end + 1), {
+    status: 206,
+    statusText: 'Partial Content',
+    headers
+  });
+}
+
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   // Realtime Database uses WebSockets; never intercept its network traffic.
   if (url.hostname.includes('firebaseio.com')) return;
   if (!isCacheable(event.request, url)) return;
+
+  // Never put a 206 in Cache Storage. Serve it from the already-precached full
+  // response when possible; otherwise let the host answer the range directly.
+  if (event.request.headers.has('range')) {
+    event.respondWith((async () => {
+      const cached = await cachedRangeResponse(event.request);
+      return cached || fetch(event.request);
+    })());
+    return;
+  }
+
   event.respondWith((async () => {
     // Always refresh the HTML shell when online. This prevents an older
     // cache-first index.html from keeping a broken bootstrap indefinitely.

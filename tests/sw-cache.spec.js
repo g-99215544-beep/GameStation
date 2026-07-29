@@ -141,6 +141,36 @@ test('a ranged video request is served, not turned into a network error', async 
   expect(result.bytes).toBeGreaterThan(0);
 });
 
+test('a precached video answers byte ranges while offline', async ({ page, context }) => {
+  await boot(page);
+  const source = server.origin + '/map idle pingpong.mp4';
+  await expect.poll(() => page.evaluate(async url => {
+    const hit = await caches.match(url, { ignoreSearch: true });
+    return hit ? hit.status : 0;
+  }, source), { timeout: 10000 }).toBe(200);
+
+  await context.setOffline(true);
+  const result = await page.evaluate(async url => {
+    try {
+      const response = await fetch(url, { headers: { Range: 'bytes=100-1123' } });
+      return {
+        status: response.status,
+        range: response.headers.get('content-range'),
+        bytes: (await response.arrayBuffer()).byteLength
+      };
+    } catch (error) {
+      return { error: String(error) };
+    }
+  }, source);
+  await context.setOffline(false);
+
+  expect(result).toEqual({
+    status: 206,
+    range: 'bytes 100-1123/1388720',
+    bytes: 1024
+  });
+});
+
 test('the intro and map videos actually load through the worker', async ({ page }) => {
   const failed = [];
   page.on('requestfailed', request => failed.push(new URL(request.url()).pathname));
