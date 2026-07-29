@@ -1,6 +1,10 @@
 importScripts('offline/preload.js');
 
-const CACHE_NAME = 'gs-shell-v14';
+// Bump this whenever a cached file changes in a way returning devices must pick
+// up immediately. activate() deletes every other cache, so a bump forces a full
+// refetch. v15: app/styles.css shipped with sprite paths that 404'd, and
+// cache-first had no way to ever replace it.
+const CACHE_NAME = 'gs-shell-v15';
 // Both lists live in offline/preload.js so the page and this worker cache
 // exactly the same things. Editing them here would reintroduce the drift.
 const LOCAL_ASSETS = self.OfflinePreload.LOCAL_ASSETS;
@@ -14,11 +18,18 @@ async function cacheEach(cache, urls, onProgress) {
   let done = 0;
   for (const url of urls) {
     try {
-      const request = CDN_ASSETS.includes(url) ? new Request(url, { mode: 'no-cors' }) : url;
-      const response = await fetch(request, { cache: 'reload' });
-      // An opaque CDN response has status 0; anything else must be a real hit.
-      if (response.type !== 'opaque' && !response.ok) throw new Error(String(response.status));
-      await cache.put(url, response);
+      // Download only what is missing. This used to fetch with cache:'reload',
+      // which bypasses every cache — so a group logging in a second time
+      // re-downloaded all ~15 MB of video over the school Wi-Fi. Freshness is
+      // the fetch handler's job now: it revalidates in the background.
+      const existing = await cache.match(url, { ignoreSearch: true });
+      if (!existing) {
+        const request = CDN_ASSETS.includes(url) ? new Request(url, { mode: 'no-cors' }) : url;
+        const response = await fetch(request);
+        // An opaque CDN response has status 0; anything else must be a real hit.
+        if (response.type !== 'opaque' && !response.ok) throw new Error(String(response.status));
+        await cache.put(url, response);
+      }
     } catch (_) {
       failed.push(url);
     }
@@ -87,9 +98,27 @@ self.addEventListener('fetch', event => {
         return caches.match('index.html');
       }
     }
+    // Stale-while-revalidate. Pure cache-first was a trap: a file cached with a
+    // bug stayed served forever, because nothing ever went back to the network
+    // to replace it. Serving the cached copy first keeps the field behaviour
+    // (instant, works with no signal); refreshing it in the background means the
+    // next launch is current without anyone hand-bumping CACHE_NAME.
     const cached = await caches.match(event.request, { ignoreSearch: true });
-    if (cached) return cached;
-    try { return await fetch(event.request); }
-    catch (error) { throw error; }
+    const fromNetwork = fetch(event.request).then(async response => {
+      // An opaque CDN response has status 0; anything else must be a real hit
+      // before it is allowed to overwrite a good cached copy.
+      if (response.type === 'opaque' || response.ok) {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.put(event.request, response.clone());
+      }
+      return response;
+    });
+    if (cached) {
+      // Offline, this rejects and there is nothing to do about it — the cached
+      // copy has already been returned.
+      event.waitUntil(fromNetwork.catch(() => {}));
+      return cached;
+    }
+    return fromNetwork;
   })());
 });

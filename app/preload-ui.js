@@ -1,12 +1,18 @@
 // ---------- OFFLINE PRELOAD ----------
-// A group is held here once, straight after login, until this phone holds every
-// asset and the whole hunt config. Stations must never depend on the network
-// after this point — the field has no Wi-Fi.
+// A group is held here once per device, straight after login, until this phone
+// holds every asset and the whole hunt config. Stations must never depend on the
+// network after this point — the field has no Wi-Fi.
+//
+// A device that has already downloaded everything skips the wait entirely: the
+// worker only fetches what is missing, and the screen is not even shown unless
+// there is real work to do.
+const PRELOAD_REVEAL_AFTER_MS = 600;   // below this, do not flash a progress bar
 const PRELOAD_SKIP_AFTER_MS = 20000;   // offer an escape hatch if it drags
 const PRELOAD_TIMEOUT_MS = 120000;     // give up and let them through
 let preloadState = null;
 let preloadResolve = null;
 let preloadSkipTimer = null;
+let preloadRevealTimer = null;
 
 function renderPreload(){
   if(!preloadState) return;
@@ -33,6 +39,9 @@ function showPreloadSkip(label){
 // teacher sees that this phone is not fully ready before the group walks off.
 function failPreload(reason){
   if(!preloadState) return;
+  // A failure has to be seen, even if it happened faster than the reveal delay.
+  if(preloadRevealTimer){ clearTimeout(preloadRevealTimer); preloadRevealTimer = null; }
+  show('view-preload');
   preloadState.error = OfflinePreload.preloadFailureMessage(reason);
   renderPreload();
   showPreloadSkip('Teruskan juga');
@@ -45,6 +54,7 @@ function finishPreload(result){
   const resolve = preloadResolve;
   preloadResolve = null;
   if(preloadSkipTimer){ clearTimeout(preloadSkipTimer); preloadSkipTimer = null; }
+  if(preloadRevealTimer){ clearTimeout(preloadRevealTimer); preloadRevealTimer = null; }
   // Step off this view before handing over. What comes next is usually the
   // journey map, and showJourneyMap() only unhides an overlay — it never
   // switches the active .view — so the preload card would otherwise sit active
@@ -92,7 +102,11 @@ function runOfflinePreload(){
   // without support) and nothing to fetch when the network is already gone.
   if(!('serviceWorker' in navigator) || location.protocol==='file:') return Promise.resolve({ok:false, reason:'unsupported'});
   if(isOffline()) return Promise.resolve({ok:false, reason:'offline'});
-  show('view-preload');
+  // Hold the screen back for a moment. On a device that already downloaded
+  // everything there is nothing left to fetch, so this finishes in a blink and
+  // the student never sees a progress bar at all — the wait is meant to happen
+  // once per device, not once per login.
+  preloadRevealTimer=setTimeout(()=>{ if(preloadResolve) show('view-preload'); }, PRELOAD_REVEAL_AFTER_MS);
   preloadState={assetsDone:0, assetsTotal:OfflinePreload.PRELOAD_ASSETS.length, configDone:false, sessionDone:false, error:''};
   const skip=document.getElementById('preloadSkip');
   if(skip) skip.hidden=true;
