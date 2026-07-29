@@ -47,7 +47,7 @@ test('a snapshot from another group, hunt, or station is refused', () => {
   assert.strictEqual(Resume.isUsable(snapshot({ stId: 6 }), CONTEXT), false);
 });
 
-test('a snapshot older than twelve hours is refused', () => {
+test('a snapshot older than two hours is refused', () => {
   const stale = snapshot({ now: 1 });
   assert.strictEqual(Resume.isUsable(stale, { ...CONTEXT, now: 1 + Resume.MAX_AGE_MS + 1 }), false);
   assert.strictEqual(Resume.isUsable(stale, { ...CONTEXT, now: 1 + Resume.MAX_AGE_MS - 1 }), true);

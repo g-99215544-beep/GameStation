@@ -37,7 +37,7 @@
   </div>
 </div>
 
-<!-- Shown only on the first visit of each calendar day. The MP4 artwork is
+<!-- Shown at most once per hour. The MP4 artwork is
      deliberately opaque: it fully replaces the app background during playback. -->
 <section class="daily-intro" id="dailyIntro" hidden aria-label="Treasure Station intro">
   <video class="daily-intro-video" id="dailyIntroVideo" muted playsinline preload="auto" aria-hidden="true">
@@ -64,7 +64,8 @@
       <p id="journeyScoreText"></p>
     </section>
     <button class="cannon-fab" id="cannonFab" type="button" hidden onclick="openCannonPanel()" aria-label="Buka panel meriam">
-      💣<span class="cannon-fab-count" id="cannonFabCount">0</span>
+      <img class="cannon-fab-icon" src="assets/cannon/attack-icon.png" alt="" draggable="false">
+      <span class="cannon-fab-count" id="cannonFabCount">0</span>
     </button>
     <section class="cannon-panel" id="cannonPanel" role="dialog" aria-modal="true" aria-labelledby="cannonPanelTitle" hidden>
       <button class="journey-popup-close" type="button" onclick="closeCannonPanel()" aria-label="Tutup panel meriam" title="Tutup">&times;</button>

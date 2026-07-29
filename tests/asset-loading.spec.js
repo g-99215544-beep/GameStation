@@ -55,6 +55,37 @@ test('the journey map ship sprite loads', async ({ page }) => {
   expect(failures).toEqual([]);
 });
 
+test('the cannon attack icon loads with a transparent background', async ({ page }) => {
+  const failures = [];
+  await boot(page, failures);
+  const image = await page.evaluate(async () => {
+    const icon = document.querySelector('#cannonFab .cannon-fab-icon');
+    await icon.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = icon.naturalWidth;
+    canvas.height = icon.naturalHeight;
+    const context = canvas.getContext('2d');
+    context.drawImage(icon, 0, 0);
+    const alphaAt = (x, y) => context.getImageData(x, y, 1, 1).data[3];
+    return {
+      width: icon.naturalWidth,
+      height: icon.naturalHeight,
+      cornerAlpha: [
+        alphaAt(0, 0),
+        alphaAt(canvas.width - 1, 0),
+        alphaAt(0, canvas.height - 1),
+        alphaAt(canvas.width - 1, canvas.height - 1)
+      ],
+      centerAlpha: alphaAt(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2))
+    };
+  });
+  expect(image.width).toBeGreaterThan(0);
+  expect(image.height).toBeGreaterThan(0);
+  expect(image.cornerAlpha).toEqual([0, 0, 0, 0]);
+  expect(image.centerAlpha).toBe(255);
+  expect(failures).toEqual([]);
+});
+
 // Belt and braces: ask the browser what URL it actually resolved each sprite to
 // and fetch it. Computed style reports the absolute URL after the stylesheet's
 // own base has been applied, which is exactly where the app/ move went wrong.
