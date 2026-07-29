@@ -26,8 +26,9 @@ async function cacheEach(cache, urls, onProgress) {
       if (!existing) {
         const request = CDN_ASSETS.includes(url) ? new Request(url, { mode: 'no-cors' }) : url;
         const response = await fetch(request);
-        // An opaque CDN response has status 0; anything else must be a real hit.
-        if (response.type !== 'opaque' && !response.ok) throw new Error(String(response.status));
+        // Only a complete resource may be stored. `ok` spans 200-299, so it
+        // would wave through a 206 that the Cache API then rejects.
+        if (!isStorable(response)) throw new Error(String(response.status));
         await cache.put(url, response);
       }
     } catch (_) {
@@ -81,18 +82,48 @@ self.addEventListener('message', event => {
   })());
 });
 
+// Only a plain http(s) GET can go through the Cache API at all. Anything else
+// must be left to the browser untouched — intercepting it and failing turns a
+// working request into a network error.
+function isCacheable(request, url) {
+  if (request.method !== 'GET') return false;
+  // chrome-extension:, blob:, data: … the Cache API rejects every one of them.
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return false;
+  // A ranged request (video seeking, and how <video> loads at all) is answered
+  // with 206 Partial Content, which the Cache API also refuses. Storing a
+  // fragment as if it were the whole file would corrupt the offline copy anyway.
+  if (request.headers.has('range')) return false;
+  return true;
+}
+
+// A response is only worth storing if it is the complete resource. `ok` spans
+// 200-299, which wrongly includes 206.
+function isStorable(response) {
+  return response.type === 'opaque' || response.status === 200;
+}
+
+// Never let a cache write break the response being delivered. The Cache API
+// throws on inputs it does not accept, and the page still needs its bytes.
+async function cacheQuietly(request, response) {
+  if (!isStorable(response)) return;
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.put(request, response.clone());
+  } catch (_) { /* unsupported for the cache — serving it is what matters */ }
+}
+
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   // Realtime Database uses WebSockets; never intercept its network traffic.
   if (url.hostname.includes('firebaseio.com')) return;
+  if (!isCacheable(event.request, url)) return;
   event.respondWith((async () => {
     // Always refresh the HTML shell when online. This prevents an older
     // cache-first index.html from keeping a broken bootstrap indefinitely.
     if (event.request.mode === 'navigate') {
       try {
         const response = await fetch(event.request);
-        const cache = await caches.open(CACHE_NAME);
-        cache.put('index.html', response.clone());
+        await cacheQuietly('index.html', response);
         return response;
       } catch (_) {
         return caches.match('index.html');
@@ -105,12 +136,7 @@ self.addEventListener('fetch', event => {
     // next launch is current without anyone hand-bumping CACHE_NAME.
     const cached = await caches.match(event.request, { ignoreSearch: true });
     const fromNetwork = fetch(event.request).then(async response => {
-      // An opaque CDN response has status 0; anything else must be a real hit
-      // before it is allowed to overwrite a good cached copy.
-      if (response.type === 'opaque' || response.ok) {
-        const cache = await caches.open(CACHE_NAME);
-        await cache.put(event.request, response.clone());
-      }
+      await cacheQuietly(event.request, response);
       return response;
     });
     if (cached) {
