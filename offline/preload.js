@@ -8,14 +8,19 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = mod;
   else root.OfflinePreload = mod;
 })(typeof self !== 'undefined' ? self : this, function () {
-  // Keep in step with the <script> tags and asset URLs in index.html.
+  // Keep in step with the <script>, <link> and asset URLs in index.html.
+  // offline/preload.test.js fails if any of them is missing from this list.
   const LOCAL_ASSETS = [
-    './', 'index.html',
+    './', 'index.html', 'app/styles.css',
     'tangram/engine.js', 'tangram/shapes.js', 'tangram/ui.js',
     'run/tracker.js', 'groups/roster.js', 'stations/layout.js',
     'sifir/engine.js', 'crossword/engine.js', 'battleship/engine.js',
     'cannon/engine.js', 'offline/store.js', 'offline/preload.js',
     'offline/resume.js', 'hunts/registry.js',
+    'app/config.js', 'app/connectivity.js', 'app/preload-ui.js', 'app/views-map.js',
+    'app/cannon-ui.js', 'app/firebase-boot.js', 'app/admin-groups.js', 'app/admin-nav.js',
+    'app/admin-stations.js', 'app/group-flow.js', 'app/games.js', 'app/crossword-ui.js',
+    'app/battleship-ui.js', 'app/run-and-finish.js', 'app/finale-board.js',
     'assets/ship/ship-sail-sheet.png', 'assets/chest/chest_sheet.png', 'assets/chest/chest_open.mp3',
     'assets/cannon/fire.mp4', 'assets/cannon/hit.mp4',
     'Pixel_art_game_intro_animation_202607201130.mp4', 'map idle pingpong.mp4',

@@ -6,6 +6,9 @@ const Preload = require('./preload.js');
 
 const ROOT = path.join(__dirname, '..');
 
+// index.html is now a shell plus a list of includes, so this list is the only
+// thing standing between an added file and a station that breaks the moment a
+// group walks out of Wi-Fi range.
 test('every script index.html loads is in the preload manifest', () => {
   const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   const sources = [...html.matchAll(/<script src="([^"]+)"><\/script>/g)].map(match => match[1]);
@@ -13,6 +16,21 @@ test('every script index.html loads is in the preload manifest', () => {
   sources.forEach(src => {
     assert.ok(Preload.PRELOAD_ASSETS.includes(src), `${src} is loaded by index.html but missing from PRELOAD_ASSETS`);
   });
+});
+
+test('every stylesheet index.html links is in the preload manifest', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const hrefs = [...html.matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)].map(match => match[1]);
+  assert.ok(hrefs.length >= 1, 'expected index.html to link a stylesheet');
+  hrefs.forEach(href => {
+    assert.ok(Preload.PRELOAD_ASSETS.includes(href), `${href} is linked by index.html but missing from PRELOAD_ASSETS`);
+  });
+});
+
+test('index.html is a shell, not a place to keep code', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  assert.ok(!/<script>[\s\S]*?<\/script>/.test(html), 'index.html should have no inline <script> block');
+  assert.ok(!/<style>[\s\S]*?<\/style>/.test(html), 'index.html should have no inline <style> block');
 });
 
 test('every local asset in the manifest exists on disk', () => {
