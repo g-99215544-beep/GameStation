@@ -263,7 +263,7 @@
       <section class="admin-panel" id="admin-panel-qr">
         <div class="card" id="printArea">
           <h3>QR Tersembunyi</h3>
-          <p class="admin-panel-intro">Jana QR untuk setiap stesen dan setiap meriam, kemudian cetak dan sorokkan di lokasi clue. QR meriam bertanda merah. Setiap cetakan turut memaparkan password sebagai teks, untuk peranti yang tiada kamera QR.</p>
+          <p class="admin-panel-intro">Jana dan cetak QR untuk setiap stesen serta meriam. Selepas selesai mencetak, simpan Langkah 4 untuk menamatkan setup. QR meriam bertanda merah dan setiap cetakan turut memaparkan password sebagai teks.</p>
           <div class="feature-actions">
             <button class="secondary" onclick="saveAndGenerateQRs()">Simpan &amp; Jana QR Stesen</button>
             <button onclick="printQRCodes()">Cetak QR: Satu QR Setiap Halaman</button>
@@ -271,7 +271,7 @@
           <div id="qrOutput" class="qr-grid"></div>
           <div class="step-actions">
             <button onclick="goToAdminStep('passwords')">&#8592; Kembali</button>
-            <button class="step-next" onclick="goToAdminStep('session')">Seterusnya: Kawalan Sesi &#8594;</button>
+            <button class="step-next" onclick="saveQrStep()">Simpan Langkah 4 &amp; Selesai</button>
           </div>
         </div>
       </section>
