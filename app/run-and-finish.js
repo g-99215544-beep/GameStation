@@ -338,7 +338,23 @@ function submitCompletion(onTime, score, timeTakenSec){
   // dependency for the student journey once the group has logged in.
   if(isOffline()) queueProgressMerge(path,payload);
   else db.ref(path).update(payload).catch(()=>queueProgressMerge(path,payload));
+  // Time is up: this station is finished even if its activity was incomplete.
+  // Move straight to the following clue (or the chest), rather than leaving a
+  // button on the old station that a group could use to keep playing.
+  if(timeUp && !onTime){
+    showTimedOutStationAdvance(done);
+    return;
+  }
   showResult(onTime,score,done);
+}
+function showTimedOutStationAdvance(done){
+  document.getElementById('timer').style.display='none';
+  if(done){ showGoToBoard(); return; }
+  showJourneyMap();
+  // The map route is the normal clue hand-off, including the sailing
+  // transition. Selecting the newly unlocked island opens its clue directly.
+  selectJourneyIsland((Number(progress.currentIndex)||0)+1);
+  maybeShowHitPrompt();
 }
 // The offline queue de-dupes by path, so a queued cannon award and a queued
 // station completion at the same progress path would otherwise clobber each

@@ -298,6 +298,7 @@ function buildStationsUI(existing){
       <label>Nama Stesen</label><input id="st_name_${i}" value="${s.name||''}" placeholder="cth: Stesen Sifir">
       <label>Lokasi (teks clue)</label><input id="st_loc_${i}" value="${s.location||''}" placeholder="cth: Tempat membaca buku">
       <label>Password Stesen (tepat 5 huruf atau digit)</label><input id="st_pass_${i}" value="${stationPassword}" maxlength="5" pattern="[A-Za-z0-9]{5}" placeholder="cth: 14542 atau sabun" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5)">
+      <label>Masa stesen (minit)</label><input id="st_time_${i}" type="number" min="1" max="180" step="1" inputmode="numeric" value="${stationTimeLimitMin(s.timeLimitMin)}">
       <label>Jenis Game</label><select id="st_gametype_${i}" onchange="toggleWorksheetEditor('${i}')">${opts}</select>
       <div id="game_data_field_${i}"><label>Data Game (JSON)</label><input id="st_gamedata_${i}" value='${(s.gameDataRaw||"{}").replace(/'/g,"&apos;")}'></div>
       <div class="worksheet-editor" id="worksheet_editor_${i}"></div>
@@ -314,6 +315,13 @@ function buildStationsUI(existing){
     toggleWorksheetEditor(i);
   }
   syncStationSetupLock();
+}
+// Old hunts did not store a station duration. Keep them playable at the
+// original ten-minute default, while ensuring every new value is sensible.
+function stationTimeLimitMin(value){
+  const minutes=Number(value);
+  if(!Number.isFinite(minutes)) return 10;
+  return Math.max(1,Math.min(180,Math.round(minutes)));
 }
 function toggleCannonSetup(){
   const on=!!document.getElementById('cannonEnabled')?.checked;
@@ -485,7 +493,7 @@ function collectStations(){
       name:document.getElementById('st_name_'+i).value,
       location:document.getElementById('st_loc_'+i).value,
       password:document.getElementById('st_pass_'+i).value.trim(),
-      timeLimitMin:10,
+      timeLimitMin:stationTimeLimitMin(document.getElementById('st_time_'+i).value),
       gameType,
       gameDataRaw:stationGameDataRaw(i, gameType)};
   }
