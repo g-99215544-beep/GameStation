@@ -10,6 +10,61 @@ const ADMIN_TAB_NOTES = {
 };
 const ADMIN_STEP_MAP = {groups:1,setup:2,passwords:3,qr:4,session:5};
 let adminTopTab='hunts';
+let activeAdminTab='groups';
+let setupFlowRequired=false;
+let setupStepSaved={groups:false,setup:false,passwords:false,qr:false};
+let setupStepDirty={groups:false,setup:false,passwords:false,qr:false};
+const SETUP_STEP_NAMES=['groups','setup','passwords','qr'];
+
+function resetSetupFlow(){
+  setupFlowRequired=true;
+  setupStepSaved={groups:false,setup:false,passwords:false,qr:false};
+  setupStepDirty={groups:false,setup:false,passwords:false,qr:false};
+}
+function setupStepNameForPanel(panel){
+  return SETUP_STEP_NAMES.includes(panel) ? panel : null;
+}
+function markSetupStepDirty(step){
+  if(!setupFlowRequired || !setupStepNameForPanel(step)) return;
+  setupStepDirty[step]=true;
+  updateSetupSteps(ADMIN_STEP_MAP[activeAdminTab]||0);
+}
+function markSetupStepSaved(step){
+  const index=SETUP_STEP_NAMES.indexOf(step);
+  if(index<0) return;
+  setupStepSaved[step]=true;
+  setupStepDirty[step]=false;
+  // A later step may depend on the just-saved data (for example, group
+  // passwords depend on the saved list of groups), so it must be confirmed
+  // again before the setup can move forward.
+  SETUP_STEP_NAMES.slice(index+1).forEach(name=>{
+    setupStepSaved[name]=false;
+    setupStepDirty[name]=false;
+  });
+  if(index<SETUP_STEP_NAMES.indexOf('qr')){
+    const qrOutput=document.getElementById('qrOutput');
+    if(qrOutput) qrOutput.innerHTML='';
+  }
+  updateSetupSteps(ADMIN_STEP_MAP[activeAdminTab]||0);
+}
+function setupStepIsReady(step){ return Boolean(setupStepSaved[step]) && !setupStepDirty[step]; }
+function canOpenSetupTab(tab){
+  if(!setupFlowRequired) return true;
+  const target=ADMIN_STEP_MAP[tab]||0;
+  if(!target) return true;
+  const required=SETUP_STEP_NAMES.slice(0,Math.min(target-1,SETUP_STEP_NAMES.length));
+  const blocked=required.find(name=>!setupStepIsReady(name));
+  if(!blocked) return true;
+  const label={groups:'Langkah 1 (Kumpulan)',setup:'Langkah 2 (Stesen)',passwords:'Langkah 3 (Password)',qr:'Langkah 4 (QR)'}[blocked];
+  alert(`${label} perlu disimpan terlebih dahulu. Jika anda mengubahnya, tekan Simpan sekali lagi.`);
+  return false;
+}
+function bindSetupDirtyTracking(){
+  ['input','change'].forEach(eventName=>document.addEventListener(eventName,event=>{
+    const panel=event.target && event.target.closest && event.target.closest('.admin-panel');
+    if(panel) markSetupStepDirty(panel.id.replace('admin-panel-',''));
+  }));
+}
 function selectAdminTopTab(tab){
   adminTopTab=tab;
   const nav=document.querySelector('.admin-nav');
@@ -59,6 +114,8 @@ function renderHuntList(){
 }
 function beginNewHunt(){
   currentHuntId=null; currentHuntCreatedAt=null; isHuntDraft=true; stations={}; groups={}; stationCount=3; groupDraft=[]; sessionInfo={status:'setup'};
+  cannonConfig={enabled:false,damagePercent:10,startingAmmo:0}; cannons={};
+  resetSetupFlow();
   const name=document.getElementById('huntName'); if(name) name.value='';
   buildStationsUI(stations); renderGroupManager();
   selectAdminTopTab('setup');
@@ -67,6 +124,7 @@ function editHunt(id){
   const hunt=hunts[id]; if(!hunt) return;
   currentHuntId=id; currentHuntCreatedAt=hunt.createdAt||null;
   isHuntDraft=false;
+  resetSetupFlow();
   loadConfigCache().then(()=>{
     const name=document.getElementById('huntName'); if(name) name.value=hunt.name||'';
     selectAdminTopTab('setup'); selectAdminTab('groups'); watchSession();
@@ -94,6 +152,9 @@ function toggleHuntSession(id){
   if(!HuntRegistry.canStart(hunts,id) || (activeHuntId && String(activeHuntId)!==String(id))){
     alert('Treasure Hunt lain masih aktif. Tamatkan hunt tersebut dahulu.'); return;
   }
+  if(hunt.setupState && !hunt.setupState.qrSavedAt){
+    alert('Lengkapkan dan simpan Langkah 1 hingga 4 sebelum memulakan Treasure Hunt.'); return;
+  }
   currentHuntId=id;
   Promise.all([huntRef('session').set({status:'active',startedAt:Date.now()}),rootRef('activeHuntId').set(id)]).catch(error=>alert('Tidak dapat mulakan hunt: '+error.message));
 }
@@ -107,6 +168,11 @@ function deleteHunt(id){
 function selectAdminTab(tab){
   if(!document.getElementById('adminTabSelect')) return;
   const allowed = Object.prototype.hasOwnProperty.call(ADMIN_TAB_NOTES, tab) ? tab : 'setup';
+  if(!canOpenSetupTab(allowed)){
+    document.getElementById('adminTabSelect').value=activeAdminTab;
+    return false;
+  }
+  activeAdminTab=allowed;
   document.getElementById('adminTabSelect').value = allowed;
   document.querySelectorAll('.admin-panel').forEach(panel=>panel.classList.remove('active'));
   const panel = document.getElementById('admin-panel-'+allowed);
@@ -117,12 +183,14 @@ function selectAdminTab(tab){
   if(allowed==='passwords') showLoginPasswords();
   if(allowed==='session') renderSessionControls();
   if(allowed==='groups') renderGroupManager();
+  return true;
 }
 function updateSetupSteps(activeStep){
   document.querySelectorAll('.setup-step').forEach(step=>{
     const n = Number(step.getAttribute('data-step'));
     step.classList.toggle('active', n===activeStep);
-    step.classList.toggle('done', activeStep>0 && n<activeStep);
+    const name=SETUP_STEP_NAMES[n-1];
+    step.classList.toggle('done', setupFlowRequired ? setupStepIsReady(name) : (activeStep>0 && n<activeStep));
   });
 }
 function goToAdminStep(tab){ selectAdminTab(tab); }
@@ -182,6 +250,10 @@ function renderSessionControls(){
 }
 function startSession(){
   if(!currentHuntId){ alert('Pilih Treasure Hunt daripada senarai dahulu.'); return; }
+  if(setupFlowRequired && !SETUP_STEP_NAMES.every(setupStepIsReady)){
+    alert('Lengkapkan dan simpan Langkah 1 hingga 4 sebelum memulakan Treasure Hunt.');
+    return;
+  }
   if(!HuntRegistry.canStart(hunts,currentHuntId)){ alert('Treasure Hunt lain masih aktif.'); return; }
   Promise.all([huntRef('session').set({status:'active', startedAt:Date.now()}),rootRef('activeHuntId').set(currentHuntId)]);
 }

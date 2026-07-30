@@ -236,7 +236,7 @@
             </div>
           </div>
           <div class="feature-actions">
-            <button class="secondary" onclick="pushConfig()">Simpan Treasure Hunt</button>
+            <button class="secondary" onclick="pushConfig()">Simpan Stesen &amp; Meriam</button>
             <button onclick="testStation(1)">Uji Stesen 1</button>
           </div>
           <div id="pushStatus"></div>
@@ -265,13 +265,13 @@
           <h3>QR Tersembunyi</h3>
           <p class="admin-panel-intro">Jana QR untuk setiap stesen dan setiap meriam, kemudian cetak dan sorokkan di lokasi clue. QR meriam bertanda merah. Setiap cetakan turut memaparkan password sebagai teks, untuk peranti yang tiada kamera QR.</p>
           <div class="feature-actions">
-            <button class="secondary" onclick="generateQRs()">Jana QR Stesen</button>
+            <button class="secondary" onclick="saveAndGenerateQRs()">Simpan &amp; Jana QR Stesen</button>
             <button onclick="printQRCodes()">Cetak QR: Satu QR Setiap Halaman</button>
           </div>
           <div id="qrOutput" class="qr-grid"></div>
           <div class="step-actions">
             <button onclick="goToAdminStep('passwords')">&#8592; Kembali</button>
-            <button class="step-next" onclick="pushConfig()">Simpan Treasure Hunt</button>
+            <button class="step-next" onclick="goToAdminStep('session')">Seterusnya: Kawalan Sesi &#8594;</button>
           </div>
         </div>
       </section>

@@ -102,13 +102,52 @@ function openScanner(){
     html5QrCode.start(camId||{facingMode:"environment"}, {fps:10, qrbox:220}, onScan);
   }).catch(()=>{ html5QrCode.start({facingMode:"environment"},{fps:10,qrbox:220}, onScan); });
 }
+function parseGameStationQr(raw){
+  const parts=String(raw||'').trim().split('|');
+  if(parts.length!==5 || parts[0]!=='GS1' || !/^[SC]$/.test(parts[2]) || !parts[3] || !/^[A-Za-z0-9]{5}$/.test(parts[4])) return null;
+  return {huntId:parts[1],kind:parts[2],itemId:parts[3],password:parts[4]};
+}
+async function refreshHuntFromQr(qr){
+  if(!qr || String(qr.huntId)===String(currentHuntId)) return true;
+  if(isOffline()) throw new Error('Peranti masih menggunakan tetapan lama. Sambung internet dan scan QR baharu sekali lagi.');
+  const active=await firebaseOnceWithTimeout(rootRef('activeHuntId'));
+  if(String(active.val()||'')!==String(qr.huntId)) throw new Error('QR ini bukan untuk Treasure Hunt yang sedang aktif.');
+  currentHuntId=qr.huntId;
+  const config=await firebaseOnceWithTimeout(huntRef('config'));
+  applyConfigCache(config.val()||{});
+  cacheConfig();
+  if(!groups[currentGroupId]) throw new Error('Kumpulan ini tidak wujud dalam Treasure Hunt baharu. Sila log masuk semula.');
+  const session=await firebaseOnceWithTimeout(huntRef('session'));
+  sessionInfo=session.val()||{status:'setup'};
+  const savedProgress=await firebaseOnceWithTimeout(huntRef('progress/'+currentGroupId));
+  progress=savedProgress.val()||freshGroupProgress();
+  writeLocalJson(progressCacheKey(currentGroupId),progress);
+  saveSession('group',currentGroupId);
+  return true;
+}
 function onScan(decodedText){
-  document.getElementById('passInput').value = String(decodedText||'').trim().replace(/[^A-Za-z0-9]/g,'').slice(0,5);
+  const qr=parseGameStationQr(decodedText);
   html5QrCode.stop().catch(()=>{});
   document.getElementById('reader').style.display='none';
   if(navigator.vibrate) navigator.vibrate(200);
-  document.getElementById('passMsg').innerHTML='<div class="msg ok">Password daripada QR diterima. Game bermula...</div>';
-  setTimeout(checkPassword, 350);
+  const msg=document.getElementById('passMsg');
+  const useQr=()=>{
+    const g=groups[currentGroupId];
+    const expected=g && g.order && g.order[progress.currentIndex];
+    if(qr && (qr.kind!=='S' || String(qr.itemId)!==String(expected))){
+      msg.innerHTML='<div class="msg err">QR ini bukan untuk stesen semasa kumpulan anda.</div>';
+      return;
+    }
+    document.getElementById('passInput').value = qr ? qr.password : String(decodedText||'').trim().replace(/[^A-Za-z0-9]/g,'').slice(0,5);
+    msg.innerHTML='<div class="msg ok">Password daripada QR diterima. Game bermula...</div>';
+    setTimeout(checkPassword, 350);
+  };
+  if(qr && String(qr.huntId)!==String(currentHuntId)){
+    msg.innerHTML='<div class="msg">Memuatkan Treasure Hunt yang sepadan dengan QR baharu...</div>';
+    refreshHuntFromQr(qr).then(useQr).catch(error=>{ msg.innerHTML=`<div class="msg err">${escapeHtml(error.message)}</div>`; });
+    return;
+  }
+  useQr();
 }
 function checkPassword(){
   const g = groups[currentGroupId];
