@@ -284,9 +284,9 @@
           <div class="session-controls">
             <button class="secondary" id="btnStart" onclick="startSession()">Mula Treasure Hunt</button>
             <button id="btnEnd" onclick="endSession()" style="background:var(--red);">Tamat Treasure Hunt</button>
-            <button id="btnNew" onclick="newSession()">Sesi Baru</button>
+            <button id="btnNew" onclick="resetCurrentHunt()">Reset Kemajuan Kumpulan</button>
           </div>
-          <p class="session-help">Semasa status aktif, kumpulan boleh masuk dan bermain. Tekan Tamat selepas aktiviti selesai. Gunakan Sesi Baru untuk reset progress apabila menerima kumpulan murid yang baharu.</p>
+          <p class="session-help">Reset boleh digunakan pada bila-bila masa untuk mengembalikan semua kumpulan ke permulaan tanpa memadam tetapan Treasure Hunt.</p>
           <div class="step-actions">
             <button onclick="goToAdminStep('qr')">&#8592; Kembali</button>
             <button class="step-next" onclick="goToAdminStep('treasure')">Buka Peti Harta Karun &#8594;</button>
@@ -319,7 +319,7 @@
       <div id="sessionStatus"></div>
       <button class="secondary" id="btnStart" onclick="startSession()">▶️ Mula Sesi</button>
       <button id="btnEnd" onclick="endSession()" style="background:var(--red);">⏹️ Tamat Sesi</button>
-      <button id="btnNew" onclick="newSession()">🔄 Sesi Baru (murid baru)</button>
+      <button id="btnNew" onclick="resetCurrentHunt()">🔄 Reset Kemajuan Kumpulan</button>
       <p style="font-size:13px;color:#888;margin-top:12px;">Aliran: setup stesen &amp; <b>Push Config</b> (password) → tekan <b>Mula</b> untuk buka sesi. Kumpulan hanya boleh main bila sesi <b>Aktif</b>. Tekan <b>Tamat</b> bila habis. Guna <b>Sesi Baru</b> untuk mula semula dengan murid baru (progress direset, stesen &amp; password kekal).</p>
     </div>
     <div class="card">
