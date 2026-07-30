@@ -192,11 +192,13 @@
           <div id="groupCards"></div>
           <div class="feature-actions">
             <button onclick="groupAddGroup()">&#65291; Tambah Kumpulan</button>
-            <button class="secondary" onclick="saveGroupManager()">Simpan Kumpulan</button>
           </div>
           <div id="groupSaveMsg"></div>
           <div class="step-actions">
-            <button class="step-next" onclick="goToAdminStep('setup')">Seterusnya: Pengurusan Stesen &#8594;</button>
+            <div class="step-actions-right">
+              <button class="secondary" onclick="saveGroupManager()">Simpan Kumpulan</button>
+              <button class="step-next" onclick="goToAdminStep('setup')">Seterusnya: Pengurusan Stesen &#8594;</button>
+            </div>
           </div>
         </div>
       </section>
@@ -236,13 +238,15 @@
             </div>
           </div>
           <div class="feature-actions">
-            <button class="secondary" onclick="pushConfig()">Simpan Stesen &amp; Meriam</button>
             <button onclick="testStation(1)">Uji Stesen 1</button>
           </div>
           <div id="pushStatus"></div>
           <div class="step-actions">
             <button onclick="goToAdminStep('groups')">&#8592; Kembali</button>
-            <button class="step-next" onclick="goToAdminStep('passwords')">Seterusnya: Password Kumpulan &#8594;</button>
+            <div class="step-actions-right">
+              <button class="secondary" onclick="pushConfig()">Simpan Stesen &amp; Meriam</button>
+              <button class="step-next" onclick="goToAdminStep('passwords')">Seterusnya: Password Kumpulan &#8594;</button>
+            </div>
           </div>
         </div>
       </section>
@@ -255,7 +259,10 @@
           <div id="passwordPrintOutput" aria-hidden="true"></div>
           <div class="step-actions">
             <button onclick="goToAdminStep('setup')">&#8592; Kembali</button>
-            <button class="step-next" onclick="goToAdminStep('qr')">Seterusnya: QR Tersembunyi &#8594;</button>
+            <div class="step-actions-right">
+              <button class="secondary" onclick="saveLoginPasswords()">Simpan Password</button>
+              <button class="step-next" onclick="goToAdminStep('qr')">Seterusnya: QR Tersembunyi &#8594;</button>
+            </div>
           </div>
         </div>
       </section>
@@ -265,13 +272,17 @@
           <h3>QR Tersembunyi</h3>
           <p class="admin-panel-intro">Jana dan cetak QR untuk setiap stesen serta meriam. Selepas selesai mencetak, simpan Langkah 4 untuk menamatkan setup. QR meriam bertanda merah dan setiap cetakan turut memaparkan password sebagai teks.</p>
           <div class="feature-actions">
-            <button class="secondary" onclick="saveAndGenerateQRs()">Simpan &amp; Jana QR Stesen</button>
+            <button class="secondary" onclick="generateQRs()">Jana QR Stesen</button>
             <button onclick="printQRCodes()">Cetak QR: Satu QR Setiap Halaman</button>
           </div>
           <div id="qrOutput" class="qr-grid"></div>
+          <div id="qrSaveMsg"></div>
           <div class="step-actions">
             <button onclick="goToAdminStep('passwords')">&#8592; Kembali</button>
-            <button class="step-next" onclick="saveQrStep()">Simpan Langkah 4 &amp; Selesai</button>
+            <div class="step-actions-right">
+              <button class="secondary" onclick="saveQrStep()">Simpan Langkah 4</button>
+              <button class="step-next" onclick="finishSetup()">Selesai &#8594;</button>
+            </div>
           </div>
         </div>
       </section>

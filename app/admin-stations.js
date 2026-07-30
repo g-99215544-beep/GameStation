@@ -640,7 +640,7 @@ function showLoginPasswords(message=''){
   }
   const needsMigration=Object.values(groups).some(g=>String(g.loginPassword||'')!==numericLoginPassword(g.loginPassword));
   const startStationLocked=(sessionInfo||{}).status==='active';
-  let html = `<div class="password-actions"><button class="secondary" onclick="saveLoginPasswords()">Simpan Tetapan</button><button onclick="regenerateAllLoginPasswords()">Jana Semula Semua Password</button><button onclick="printLoginPasswords()">Cetak Password Kumpulan</button></div>
+  let html = `<div class="password-actions"><button onclick="regenerateAllLoginPasswords()">Jana Semula Semua Password</button><button onclick="printLoginPasswords()">Cetak Password Kumpulan</button></div>
     ${needsMigration?'<p class="password-note">Password lama akan ditukar kepada 4 digit nombor apabila anda menekan Simpan Password.</p>':''}
     <p class="password-note" id="startStationLockedNote"${startStationLocked?'':' hidden'}>Sesi sedang aktif. Stesen mula dikunci; gunakan Sesi Baru sebelum mengubahnya.</p>
     ${message?`<div class="msg ok">${message}</div>`:''}
@@ -758,8 +758,16 @@ function saveQrStep(){
   }
   huntRef('setupState').update({qrSavedAt:Date.now()}).then(()=>{
     markSetupStepSaved('qr');
-    selectAdminTopTab('hunts');
+    const message=document.getElementById('qrSaveMsg');
+    if(message) message.innerHTML='<div class="msg ok">✅ Langkah 4 berjaya disimpan. Tekan Selesai untuk kembali ke senarai Treasure Hunt.</div>';
   }).catch(error=>alert('Tidak dapat menyimpan QR: '+error.message));
+}
+function finishSetup(){
+  if(!setupStepIsReady('qr')){
+    alert('Simpan Langkah 4 terlebih dahulu.');
+    return;
+  }
+  selectAdminTopTab('hunts');
 }
 function generateQRs(){
   const st = collectStations();
