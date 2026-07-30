@@ -98,11 +98,31 @@ function queuePendingWrite(path, data){
   writeLocalJson(OfflineStore.PENDING_KEY,queue);
   updateConnectivityBadge();
 }
+function pendingWriteHuntId(path){
+  const parts=String(path||'').split('/').filter(Boolean);
+  const huntsIndex=parts.indexOf('hunts');
+  return huntsIndex>=0 && parts[huntsIndex+1] ? parts[huntsIndex+1] : null;
+}
+function discardPendingWritesBeforeReset(queue){
+  const items=Array.isArray(queue)?queue:[];
+  const huntIds=[...new Set(items.map(item=>pendingWriteHuntId(item&&item.path)).filter(Boolean))];
+  if(!huntIds.length) return Promise.resolve(items);
+  const resetTimes={};
+  return Promise.all(huntIds.map(id=>
+    rootRef(`hunts/${id}/session`).once('value').then(snapshot=>{
+      resetTimes[id]=Number(snapshot.val()&&snapshot.val().resetAt)||0;
+    })
+  )).then(()=>items.filter(item=>{
+    const id=pendingWriteHuntId(item&&item.path);
+    return !id || Number(item&&item.ts||0)>=Number(resetTimes[id]||0);
+  }));
+}
 function flushPendingWrites(){
   const queue=readLocalJson(OfflineStore.PENDING_KEY)||[];
   if(!db || isOffline() || syncingOfflineWrites || !queue.length) return Promise.resolve();
   syncingOfflineWrites=true; updateConnectivityBadge();
-  return Promise.all(queue.map(item=>db.ref(item.path).update(item.data)))
+  return discardPendingWritesBeforeReset(queue)
+    .then(currentQueue=>Promise.all(currentQueue.map(item=>db.ref(item.path).update(item.data))))
     .then(()=>removeLocalValue(OfflineStore.PENDING_KEY))
     .catch(()=>{})
     .finally(()=>{ syncingOfflineWrites=false; updateConnectivityBadge(); });

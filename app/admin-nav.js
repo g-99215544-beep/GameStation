@@ -105,6 +105,7 @@ function renderHuntList(){
     return `<div class="group-card"><div class="group-card-head"><h4>${escapeHtml(hunt.name)} <span class="badge ${active?'done':'idle'}">${label}</span></h4></div>
       <div class="feature-actions">
         <button class="secondary" onclick="toggleHuntSession('${hunt.id}')">${active?'Tamat':'Mula'} Hunt</button>
+        <button class="secondary" onclick="resetHunt('${hunt.id}')">Reset Kemajuan</button>
         <button onclick="editHunt('${hunt.id}')">Edit</button>
         <button onclick="openHuntDashboard('${hunt.id}')">Live Dashboard</button>
         <button onclick="openHuntTreasure('${hunt.id}')">Peti Harta Karun</button>
@@ -156,7 +157,7 @@ function toggleHuntSession(id){
     alert('Lengkapkan dan simpan Langkah 1 hingga 4 sebelum memulakan Treasure Hunt.'); return;
   }
   currentHuntId=id;
-  Promise.all([huntRef('session').set({status:'active',startedAt:Date.now()}),rootRef('activeHuntId').set(id)]).catch(error=>alert('Tidak dapat mulakan hunt: '+error.message));
+  Promise.all([huntRef('session').update({status:'active',startedAt:Date.now(),endedAt:null}),rootRef('activeHuntId').set(id)]).catch(error=>alert('Tidak dapat mulakan hunt: '+error.message));
 }
 function deleteHunt(id){
   if(String(activeHuntId)===String(id) || (hunts[id]&&hunts[id].session&&hunts[id].session.status==='active')){
@@ -246,7 +247,7 @@ function renderSessionControls(){
   const start=document.getElementById('btnStart'), end=document.getElementById('btnEnd'), nw=document.getElementById('btnNew');
   if(start) start.style.display = (st==='active') ? 'none' : 'inline-block';
   if(end)   end.style.display   = (st==='active') ? 'inline-block' : 'none';
-  if(nw)    nw.style.display    = (st==='ended')  ? 'inline-block' : 'none';
+  if(nw)    nw.style.display    = 'inline-block';
 }
 function startSession(){
   if(!currentHuntId){ alert('Pilih Treasure Hunt daripada senarai dahulu.'); return; }
@@ -255,18 +256,52 @@ function startSession(){
     return;
   }
   if(!HuntRegistry.canStart(hunts,currentHuntId)){ alert('Treasure Hunt lain masih aktif.'); return; }
-  Promise.all([huntRef('session').set({status:'active', startedAt:Date.now()}),rootRef('activeHuntId').set(currentHuntId)]);
+  Promise.all([huntRef('session').update({status:'active',startedAt:Date.now(),endedAt:null}),rootRef('activeHuntId').set(currentHuntId)]);
 }
 function endSession(){
   if(!confirm('Tamatkan sesi sekarang? Kumpulan tidak boleh main lagi.')) return;
   Promise.all([huntRef('session').update({status:'ended', endedAt:Date.now()}),rootRef('activeHuntId').set(null)]);
 }
+function resetHunt(id){
+  const hunt=hunts[id];
+  if(!hunt){
+    alert('Treasure Hunt tidak ditemui.');
+    return Promise.resolve(false);
+  }
+  const isActive=String(activeHuntId||'')===String(id) || (hunt.session&&hunt.session.status==='active');
+  const activeWarning=isActive ? '\n\nTreasure Hunt ini sedang aktif dan akan dihentikan.' : '';
+  if(!confirm(`Reset semua kemajuan kumpulan untuk “${hunt.name||id}”?\n\nMarkah, stesen semasa, kunci, peti, HP, peluru dan rekod meriam akan kembali ke permulaan. Kumpulan, soalan, password dan QR akan dikekalkan.${activeWarning}`)) return Promise.resolve(false);
+  const configuredGroups=(hunt.config&&hunt.config.groups)||{};
+  const configuredCannon=hunt.config&&hunt.config.cannon;
+  const nextProgress={};
+  Object.keys(configuredGroups).forEach(gid=>{ nextProgress[gid]=freshGroupProgress(configuredCannon); });
+  currentHuntId=id;
+  const writes=[
+    huntRef('progress').set(nextProgress),
+    huntRef('session').set({status:'setup',resetAt:Date.now()})
+  ];
+  if(isActive) writes.push(rootRef('activeHuntId').set(null));
+  return Promise.all(writes).then(()=>{
+    if(isActive) activeHuntId=null;
+    sessionInfo={status:'setup'};
+    progress={};
+    renderSessionControls();
+    renderHuntList();
+    return true;
+  }).catch(error=>{
+    alert('Tidak dapat reset Treasure Hunt: '+error.message);
+    return false;
+  });
+}
+function resetCurrentHunt(){
+  if(!currentHuntId){
+    alert('Pilih Treasure Hunt dahulu.');
+    return Promise.resolve(false);
+  }
+  return resetHunt(currentHuntId);
+}
 function newSession(){
-  if(!confirm('Mula sesi BARU dengan murid baru?\n\nSemua progress & peti harta akan direset. Stesen & password login kekal.')) return;
-  const prog={};
-  Object.keys(groups||{}).forEach(gid=>{ prog[gid]=freshGroupProgress(); });
-  huntRef('progress').set(prog);
-  huntRef('session').set({status:'setup'});
+  return resetCurrentHunt();
 }
 // Group side: route to game / waiting / ended based on live session status.
 function enterGroupBySession(){
