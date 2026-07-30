@@ -16,9 +16,14 @@ let setupStepSaved={groups:false,setup:false,passwords:false,qr:false};
 let setupStepDirty={groups:false,setup:false,passwords:false,qr:false};
 const SETUP_STEP_NAMES=['groups','setup','passwords','qr'];
 
-function resetSetupFlow(){
+function resetSetupFlow(markAllSaved=false){
   setupFlowRequired=true;
-  setupStepSaved={groups:false,setup:false,passwords:false,qr:false};
+  setupStepSaved={
+    groups:markAllSaved,
+    setup:markAllSaved,
+    passwords:markAllSaved,
+    qr:markAllSaved
+  };
   setupStepDirty={groups:false,setup:false,passwords:false,qr:false};
 }
 function setupStepNameForPanel(panel){
@@ -116,7 +121,7 @@ function renderHuntList(){
 function beginNewHunt(){
   currentHuntId=null; currentHuntCreatedAt=null; isHuntDraft=true; stations={}; groups={}; stationCount=3; groupDraft=[]; sessionInfo={status:'setup'};
   cannonConfig={enabled:false,damagePercent:10,startingAmmo:0}; cannons={};
-  resetSetupFlow();
+  resetSetupFlow(false);
   const name=document.getElementById('huntName'); if(name) name.value='';
   buildStationsUI(stations); renderGroupManager();
   selectAdminTopTab('setup');
@@ -125,7 +130,10 @@ function editHunt(id){
   const hunt=hunts[id]; if(!hunt) return;
   currentHuntId=id; currentHuntCreatedAt=hunt.createdAt||null;
   isHuntDraft=false;
-  resetSetupFlow();
+  // An existing hunt has already passed setup. Let the admin inspect any
+  // section immediately; normal dirty tracking will require a fresh save only
+  // after a field is actually changed.
+  resetSetupFlow(true);
   loadConfigCache().then(()=>{
     const name=document.getElementById('huntName'); if(name) name.value=hunt.name||'';
     selectAdminTopTab('setup'); selectAdminTab('groups'); watchSession();
