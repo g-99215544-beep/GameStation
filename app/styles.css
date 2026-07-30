@@ -303,6 +303,8 @@
   .step-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid #eee;margin-top:20px;padding-top:16px;}
   .step-actions button{margin:0;}
   .step-actions .step-next{margin-left:auto;}
+  .step-actions-right{display:flex;align-items:center;gap:12px;margin-left:auto;}
+  .step-actions-right .step-next{margin-left:0;}
   .status-card{border-left:5px solid var(--gold);background:#fffaf0;padding:16px 18px;border-radius:8px;margin-bottom:16px;}
   .status-card h3{font-size:18px;margin-bottom:4px;}
   .status-card p{margin:0;color:#666;font-size:14px;}
@@ -501,6 +503,8 @@
     .setup-step{font-size:10px;padding-left:4px;padding-right:4px;}
     .step-actions{align-items:stretch;flex-direction:column;}
     .step-actions .step-next{margin-left:0;width:100%;}
+    .step-actions-right{width:100%;margin-left:0;}
+    .step-actions-right button,.step-actions-right .step-next{width:auto;flex:1;}
   }
   @media print{
     @page{margin:18mm;}
