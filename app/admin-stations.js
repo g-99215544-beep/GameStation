@@ -626,11 +626,7 @@ function pushConfig(){
     cacheConfig();
     renderGroupLoginOptions();
     markSetupStepSaved('setup');
-    let listHtml = '<h4>Password Login Kumpulan (beri kepada setiap kumpulan)</h4><table><tr><th>Kumpulan</th><th>Password</th><th>Mula di Stesen</th></tr>';
-    Object.values(gr).forEach(g=>{ listHtml += `<tr><td>${g.name}</td><td><b>${g.loginPassword}</b></td><td>${g.startStation}</td></tr>`; });
-    listHtml += '</table>';
-    document.getElementById('pushStatus').innerHTML='<div class="msg ok">✅ Config di-push. '+Object.keys(gr).length+' kumpulan sedia.</div>'+listHtml;
-    if(currentHuntId) window.setTimeout(()=>selectAdminTopTab('hunts'),400);
+    document.getElementById('pushStatus').innerHTML='<div class="msg ok">✅ Config di-push. Stesen dan meriam berjaya disimpan. Teruskan ke Langkah 3.</div>';
   }).catch(error=>{
     document.getElementById('pushStatus').innerHTML='<div class="msg err">Gagal menyimpan Treasure Hunt: '+escapeHtml(error.message)+'</div>';
   });
@@ -750,14 +746,19 @@ function gameStationQrPayload(kind,id,password){
   // the correct configuration before it judges the scan.
   return currentHuntId ? `GS1|${currentHuntId}|${kind}|${id}|${password}` : password;
 }
-function saveAndGenerateQRs(){
+function saveQrStep(){
   if(!currentHuntId){
     alert('Simpan Langkah 1 hingga 3 terlebih dahulu.');
     return;
   }
-  if(!generateQRs()) return;
+  const output=document.getElementById('qrOutput');
+  if(!output || !output.querySelector('.qr-print')){
+    alert('Jana QR stesen terlebih dahulu sebelum menyimpan Langkah 4.');
+    return;
+  }
   huntRef('setupState').update({qrSavedAt:Date.now()}).then(()=>{
     markSetupStepSaved('qr');
+    selectAdminTopTab('hunts');
   }).catch(error=>alert('Tidak dapat menyimpan QR: '+error.message));
 }
 function generateQRs(){
