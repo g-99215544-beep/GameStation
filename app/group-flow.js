@@ -183,7 +183,7 @@ function testStation(i){
     name:document.getElementById('st_name_'+i).value || ('Stesen '+i),
     location:document.getElementById('st_loc_'+i).value,
     password:document.getElementById('st_pass_'+i).value,
-    timeLimitMin:10,
+    timeLimitMin:stationTimeLimitMin(document.getElementById('st_time_'+i).value),
     gameType,
     gameDataRaw:stationGameDataRaw(i, gameType)
   };

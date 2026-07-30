@@ -6,7 +6,8 @@ importScripts('offline/preload.js');
 // cache-first had no way to ever replace it. v18 ships the transparent cannon
 // icon together with the shorter login and intro replay windows. v19 forces
 // returning admin devices to discard the pre-step-flow JavaScript immediately.
-const CACHE_NAME = 'gs-shell-v19';
+// v20 delivers configurable station durations and timeout auto-advance.
+const CACHE_NAME = 'gs-shell-v20';
 // Both lists live in offline/preload.js so the page and this worker cache
 // exactly the same things. Editing them here would reintroduce the drift.
 const LOCAL_ASSETS = self.OfflinePreload.LOCAL_ASSETS;

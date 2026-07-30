@@ -55,11 +55,12 @@ function tick(){
     // Open-ended games (tangram) have no manual submit button, so auto-finish
     // on timeout — otherwise a student who can't solve is stranded here.
     if(gameState && gameState.type==='tangram' && window._tgTimeout){ window._tgTimeout(); }
-    if(gameState && gameState.type==='sudoku' && window._sudokuTimeout){ window._sudokuTimeout(); }
-    if(gameState && gameState.type==='crossword' && window._crosswordTimeout){ window._crosswordTimeout(); }
-    if(gameState && gameState.type==='battleship' && window._battleshipTimeout){ window._battleshipTimeout(); }
-    if(gameState && gameState.type==='sifir' && window._sifirTimeout){ window._sifirTimeout(); }
-    if(gameState && gameState.type==='jejak_lari' && window._runTimeout){ window._runTimeout(); }
+    else if(gameState && gameState.type==='sudoku' && window._sudokuTimeout){ window._sudokuTimeout(); }
+    else if(gameState && gameState.type==='crossword' && window._crosswordTimeout){ window._crosswordTimeout(); }
+    else if(gameState && gameState.type==='battleship' && window._battleshipTimeout){ window._battleshipTimeout(); }
+    else if(gameState && gameState.type==='sifir' && window._sifirTimeout){ window._sifirTimeout(); }
+    else if(gameState && gameState.type==='jejak_lari' && window._runTimeout){ window._runTimeout(); }
+    else finishGame();
   }
 }
 // `resumeStage` is the small per-game payload saved when the student left this
