@@ -115,13 +115,28 @@ function submitCannonPassword(){
   redeemCannonPassword(input&&input.value);
 }
 function redeemCannonPassword(raw){
-  const password=String(raw||'').trim().replace(/[^A-Za-z0-9]/g,'').slice(0,5);
+  const qr=typeof parseGameStationQr==='function' ? parseGameStationQr(raw) : null;
+  if(qr && qr.kind!=='C'){
+    setCannonMsg('err','QR ini bukan QR Meriam.');
+    return;
+  }
+  if(qr && String(qr.huntId)!==String(currentHuntId)){
+    setCannonMsg('','Memuatkan Treasure Hunt yang sepadan dengan QR baharu...');
+    refreshHuntFromQr(qr).then(()=>redeemCannonPassword(qr.password))
+      .catch(error=>setCannonMsg('err',error.message));
+    return;
+  }
+  const password=String(qr ? qr.password : raw||'').trim().replace(/[^A-Za-z0-9]/g,'').slice(0,5);
   if(!/^[A-Za-z0-9]{5}$/.test(password)){
     playGameSfx('wrong');
     setCannonMsg('err','Masukkan password meriam tepat 5 huruf atau digit.');
     return;
   }
   const cid=CannonEngine.findByPassword(cannons,password);
+  if(qr && String(qr.itemId)!==String(cid||'')){
+    setCannonMsg('err','QR Meriam ini tidak sepadan dengan tetapan semasa.');
+    return;
+  }
   if(!cid){
     playGameSfx('wrong');
     setCannonMsg('err','Password atau QR meriam tidak sah. Cuba semula.');
@@ -151,10 +166,9 @@ function playCannonVideo(kind, caption){
     skip.classList.remove('is-ready');
     window.setTimeout(()=>skip.classList.add('is-ready'),2000);
   }
-  // Fullscreen and the orientation lock both need the user gesture that led
-  // here; failures are silent because the CSS fallback already rotates.
+  // Fullscreen is requested from the pupil's gesture, but the orientation is
+  // deliberately left untouched so the Game Station remains vertical.
   try{ overlay.requestFullscreen && overlay.requestFullscreen().catch(()=>{}); }catch(_){}
-  try{ screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(()=>{}); }catch(_){}
   if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
     window.setTimeout(endCannonVideo,1200);
     return new Promise(resolve=>{ cannonVideoDone=resolve; });
@@ -172,7 +186,6 @@ function endCannonVideo(){
   if(video){ video.onended=null; video.onerror=null; try{ video.pause(); }catch(_){} video.removeAttribute('src'); }
   if(overlay) overlay.hidden=true;
   try{ document.fullscreenElement && document.exitFullscreen && document.exitFullscreen().catch(()=>{}); }catch(_){}
-  try{ screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); }catch(_){}
   const resolve=cannonVideoDone;
   cannonVideoDone=null;
   resolve && resolve();

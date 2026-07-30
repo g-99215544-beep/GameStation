@@ -57,6 +57,7 @@ function groupAgih(){
   const names = GroupRoster.normalizeNames(document.getElementById('group_names').value);
   const res = GroupRoster.distributeNames(names, ng, mp);
   groupDraft = res.groups;
+  markSetupStepDirty('groups');
   renderGroupCards();
   if(msg) msg.innerHTML = res.overflow.length
     ? `<div class="msg">⚠️ ${res.overflow.length} nama berlebihan tidak diagihkan: ${res.overflow.map(escapeHtml).join(', ')}. Tambah kumpulan/ahli untuk memuatkannya.</div>`
@@ -68,20 +69,24 @@ function groupMoveMember(fromIdx, memberIdx){
   const toIdx = parseInt(sel.value,10);
   if(isNaN(toIdx)) return;
   groupDraft = GroupRoster.moveMember(groupDraft, fromIdx, memberIdx, toIdx);
+  markSetupStepDirty('groups');
   renderGroupCards();
 }
 function groupRemoveMember(gIdx, mIdx){
   groupDraft = GroupRoster.removeMember(groupDraft, gIdx, mIdx);
+  markSetupStepDirty('groups');
   renderGroupCards();
 }
 function groupAddMember(gIdx){
   const input = document.getElementById('group_add_'+gIdx);
   if(!input) return;
   groupDraft = GroupRoster.addMember(groupDraft, gIdx, input.value);
+  markSetupStepDirty('groups');
   renderGroupCards();
 }
 function groupAddGroup(){
   groupDraft = GroupRoster.addGroup(groupDraft);
+  markSetupStepDirty('groups');
   renderGroupCards();
 }
 function groupRemoveGroup(gIdx){
@@ -89,6 +94,7 @@ function groupRemoveGroup(gIdx){
   const count = (groupDraft[gIdx]||[]).length;
   if(!confirm(`Padam Kumpulan ${gIdx+1}${count?` dan ${count} ahlinya`:''}?`)) return;
   groupDraft = GroupRoster.removeGroup(groupDraft, gIdx);
+  markSetupStepDirty('groups');
   renderGroupCards();
 }
 function buildGroupsFromDraft(draftMembers, existingGroups){
@@ -123,19 +129,44 @@ function saveGroupManager(){
   const gr = buildGroupsFromDraft(groupDraft, groups);
   const prog = {};
   Object.keys(gr).forEach(gid=>{ prog[gid]=freshGroupProgress(); });
+  const name=String(document.getElementById('huntName')?.value||'').trim();
+  if(isHuntDraft && !currentHuntId && !name){
+    if(msg) msg.innerHTML='<div class="msg err">Masukkan nama Treasure Hunt sebelum menyimpan Langkah 1.</div>';
+    return;
+  }
+  if(isHuntDraft && !currentHuntId){
+    currentHuntId=rootRef('hunts').push().key;
+    currentHuntCreatedAt=Date.now();
+  }
   if(isHuntDraft){
-    groups=gr; renderGroupLoginOptions();
-    if(msg) msg.innerHTML='<div class="msg ok">Kumpulan disimpan dalam draf. Tekan Simpan Treasure Hunt pada akhir setup.</div>';
+    const metadata={name,createdAt:currentHuntCreatedAt||Date.now(),updatedAt:Date.now(),setupState:{groupsSavedAt:Date.now()}};
+    Promise.all([
+      huntRef().update(metadata),
+      huntRef('config/groups').set(gr),
+      huntRef('progress').set(prog),
+      huntRef('session').set({status:'setup'})
+    ]).then(()=>{
+      isHuntDraft=false;
+      groups=gr;
+      sessionInfo={status:'setup'};
+      renderGroupLoginOptions();
+      markSetupStepSaved('groups');
+      if(msg) msg.innerHTML=`<div class="msg ok">${Object.keys(gr).length} kumpulan disimpan. Anda boleh teruskan ke Langkah 2.</div>`;
+    }).catch(err=>{
+      if(msg) msg.innerHTML=`<div class="msg err">Gagal menyimpan kumpulan: ${escapeHtml(err && err.message ? err.message : err)}. Cuba lagi.</div>`;
+    });
     return;
   }
   Promise.all([
     huntRef('config/groups').set(gr),
     huntRef('progress').set(prog),
-    huntRef('session').set({status:'setup'})
+    huntRef('session').set({status:'setup'}),
+    huntRef('setupState').set({groupsSavedAt:Date.now()})
   ]).then(()=>{
     groups = gr;
     sessionInfo = {status:'setup'};
     renderGroupLoginOptions();
+    markSetupStepSaved('groups');
     if(msg) msg.innerHTML=`<div class="msg ok">✅ ${Object.keys(gr).length} kumpulan disimpan. Progress direset.</div>`;
   }).catch(err=>{
     if(msg) msg.innerHTML=`<div class="msg err">❌ Gagal menyimpan kumpulan: ${escapeHtml(err && err.message ? err.message : err)}. Cuba lagi.</div>`;
@@ -151,6 +182,7 @@ function renderGroupLoginOptions(){
 
 function initApp(){
   initConnectivity();
+  bindSetupDirtyTracking();
   renderGroupLoginOptions();
   const demoType=directGameDemoType();
   if(demoType){ startDirectGameDemo(demoType); return; }

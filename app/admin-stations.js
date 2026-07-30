@@ -264,6 +264,7 @@ function addStation(){
   if(sessionInfo && sessionInfo.status==='active' || stationCount>=StationLayout.MAX_STATIONS) return;
   const current=collectStations();
   stationCount=StationLayout.clampStationCount(stationCount+1);
+  markSetupStepDirty('setup');
   buildStationsUI(current);
 }
 function removeStation(){
@@ -271,6 +272,7 @@ function removeStation(){
   const current=collectStations();
   delete current[stationCount];
   stationCount=StationLayout.clampStationCount(stationCount-1);
+  markSetupStepDirty('setup');
   buildStationsUI(current);
 }
 function syncStationSetupLock(){
@@ -317,6 +319,7 @@ function toggleCannonSetup(){
   const on=!!document.getElementById('cannonEnabled')?.checked;
   const body=document.getElementById('cannonBody');
   if(body) body.hidden=!on;
+  markSetupStepDirty('setup');
   updateCannonButtons();
 }
 function updateCannonButtons(){
@@ -368,12 +371,14 @@ function addCannon(){
   let next=1;
   while(current['c'+next]) next++;
   current['c'+next]={id:'c'+next,name:'',password:generateStationPassword(),gameType:GAME_TYPES[0].id,gameDataRaw:'{}'};
+  markSetupStepDirty('setup');
   buildCannonsUI(current);
 }
 function removeCannon(cid){
   if(sessionInfo && sessionInfo.status==='active') return;
   const current=collectCannons();
   delete current[cid];
+  markSetupStepDirty('setup');
   buildCannonsUI(current);
 }
 function collectCannonConfig(){
@@ -604,7 +609,8 @@ function pushConfig(){
   if(isHuntDraft && !currentHuntId) currentHuntId=rootRef('hunts').push().key;
   const now=Date.now();
   const createdAt=currentHuntCreatedAt||now;
-  const metadata=currentHuntId ? huntRef().update({name,createdAt,updatedAt:now}) : Promise.resolve();
+  const metadata=currentHuntId ? huntRef().update({name,createdAt,updatedAt:now,
+    setupState:{groupsSavedAt:now,stationsSavedAt:now}}) : Promise.resolve();
   Promise.all([
     metadata,
     huntRef('config/stations').set(st),
@@ -619,6 +625,7 @@ function pushConfig(){
     stations=st; groups=gr; cannonConfig=cn; cannons=cnList; stationCount=N; sessionInfo={status:'setup'};
     cacheConfig();
     renderGroupLoginOptions();
+    markSetupStepSaved('setup');
     let listHtml = '<h4>Password Login Kumpulan (beri kepada setiap kumpulan)</h4><table><tr><th>Kumpulan</th><th>Password</th><th>Mula di Stesen</th></tr>';
     Object.values(gr).forEach(g=>{ listHtml += `<tr><td>${g.name}</td><td><b>${g.loginPassword}</b></td><td>${g.startStation}</td></tr>`; });
     listHtml += '</table>';
@@ -679,6 +686,7 @@ function regenerateLoginPassword(gid){
     if(/^\d{4}$/.test(value||'')) usedPasswords.add(value);
   });
   input.value=generateLoginPassword(usedPasswords);
+  markSetupStepDirty('passwords');
 }
 function regenerateAllLoginPasswords(){
   if(!confirm('Jana semula semua password kumpulan? Password lama tidak boleh digunakan selepas anda menekan Simpan Password.')) return;
@@ -687,6 +695,7 @@ function regenerateAllLoginPasswords(){
     const input=document.getElementById('login_password_'+gid);
     if(input) input.value=generateLoginPassword(usedPasswords);
   });
+  markSetupStepDirty('passwords');
 }
 function saveLoginPasswords(){
   const {edited,invalidPasswords,invalidStartStations}=collectEditedGroupSettings();
@@ -707,11 +716,16 @@ function saveLoginPasswords(){
   });
   if(isHuntDraft){
     groups=updated;
-    showLoginPasswords('Tetapan kumpulan disimpan dalam draf. Simpan Treasure Hunt pada langkah terakhir.');
+    markSetupStepSaved('passwords');
+    showLoginPasswords('Tetapan kumpulan disimpan. Anda boleh teruskan ke Langkah 4.');
     return;
   }
-  huntRef('config/groups').set(updated).then(()=>{
+  Promise.all([
+    huntRef('config/groups').set(updated),
+    huntRef('setupState').update({passwordsSavedAt:Date.now(),qrSavedAt:null})
+  ]).then(()=>{
     groups=updated;
+    markSetupStepSaved('passwords');
     showLoginPasswords('Tetapan kumpulan berjaya disimpan.');
   }).catch(error=>alert('Tidak dapat simpan password: '+error.message));
 }
@@ -730,6 +744,22 @@ function printLoginPasswords(){
   window.addEventListener('afterprint',()=>document.body.classList.remove('printing-passwords'),{once:true});
   window.print();
 }
+function gameStationQrPayload(kind,id,password){
+  // Older sheets contained only the password. New sheets carry the hunt and
+  // station identity too, allowing a phone with a stale cached hunt to reload
+  // the correct configuration before it judges the scan.
+  return currentHuntId ? `GS1|${currentHuntId}|${kind}|${id}|${password}` : password;
+}
+function saveAndGenerateQRs(){
+  if(!currentHuntId){
+    alert('Simpan Langkah 1 hingga 3 terlebih dahulu.');
+    return;
+  }
+  if(!generateQRs()) return;
+  huntRef('setupState').update({qrSavedAt:Date.now()}).then(()=>{
+    markSetupStepSaved('qr');
+  }).catch(error=>alert('Tidak dapat menyimpan QR: '+error.message));
+}
 function generateQRs(){
   const st = collectStations();
   const cn = collectCannonConfig();
@@ -744,15 +774,16 @@ function generateQRs(){
     div.className='qr-print';
     div.innerHTML=`<div style="font-weight:700;">Stesen ${s.id}: ${escapeHtml(s.name)}</div><div id="qr_${s.id}"></div><div class="qr-pass">Password: <b>${escapeHtml(String(s.password||'').toUpperCase())}</b></div><div style="font-size:11px;color:#888;">Sorok di: ${escapeHtml(s.location)}</div>`;
     out.appendChild(div);
-    setTimeout(()=>new QRCode(document.getElementById('qr_'+s.id), {text:s.password, width:130, height:130}), 0);
+    setTimeout(()=>new QRCode(document.getElementById('qr_'+s.id), {text:gameStationQrPayload('S',s.id,s.password), width:130, height:130}), 0);
   });
   Object.values(cnList).forEach(c=>{
     const div=document.createElement('div');
     div.className='qr-print cannon-qr';
     div.innerHTML=`<div style="font-weight:700;">⚔️ ${escapeHtml(c.name||('Meriam '+c.id.replace('c','')))}</div><div id="qr_${c.id}"></div><div class="qr-pass">Password: <b>${escapeHtml(String(c.password||'').toUpperCase())}</b></div><div style="font-size:11px;color:#888;">QR meriam — setiap kumpulan boleh ambil satu peluru sekali sahaja.</div>`;
     out.appendChild(div);
-    setTimeout(()=>new QRCode(document.getElementById('qr_'+c.id), {text:c.password, width:130, height:130}), 0);
+    setTimeout(()=>new QRCode(document.getElementById('qr_'+c.id), {text:gameStationQrPayload('C',c.id,c.password), width:130, height:130}), 0);
   });
+  return true;
 }
 function printQRCodes(){
   const output = document.getElementById('qrOutput');
