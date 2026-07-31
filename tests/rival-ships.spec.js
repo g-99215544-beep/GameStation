@@ -86,3 +86,59 @@ test('map/rivals.js is registered in the offline shell manifest', async ({ page 
   const registered = await page.evaluate(() => OfflinePreload.LOCAL_ASSETS.includes('map/rivals.js'));
   expect(registered).toBe(true);
 });
+
+test('the three nearest rivals appear with names and HP bars', async ({ page }) => {
+  // Kumpulan 1 is on island 3. Ahead: 5 (island 5) and 9 (island 4).
+  // Behind: 11 (island 2). Everyone else sits at the start line.
+  await openMapAs(page, seedHunt({
+    1: { currentIndex: 3 }, 5: { currentIndex: 5 }, 9: { currentIndex: 4 },
+    11: { currentIndex: 2, hp: 60 }
+  }), 1);
+
+  await expect(page.locator('#journeyRivalShips .journey-rival')).toHaveCount(3);
+  const shown = await page.locator('#journeyRivalShips .journey-rival').evaluateAll(
+    nodes => nodes.map(n => n.dataset.gid).sort());
+  expect(shown).toEqual(['11', '5', '9']);
+
+  await expect(page.locator('.journey-rival[data-gid="5"] .journey-rival-name')).toHaveText('Kumpulan 5');
+  await expect(page.locator('.journey-rival[data-gid="11"] .journey-rival-hp-fill'))
+    .toHaveAttribute('style', /width:\s*60%/);
+});
+
+test('a rival ship never covers the pupil\'s own ship', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 3 }, 2: { currentIndex: 3 } }), 1);
+  const rival = page.locator('.journey-rival[data-gid="2"]');
+  await expect(rival).toBeVisible();
+  const [shipBox, rivalBox] = await Promise.all([
+    page.locator('#journeyShip').boundingBox(),
+    rival.boundingBox()
+  ]);
+  expect(Math.abs(shipBox.x - rivalBox.x) + Math.abs(shipBox.y - rivalBox.y)).toBeGreaterThan(5);
+});
+
+test('a rival that opened its chest docks at the last island with a trophy', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 5 }, 2: { currentIndex: 6, status: 'won' } }), 1);
+  const rival = page.locator('.journey-rival[data-gid="2"]');
+  await expect(rival).toHaveClass(/is-won/);
+  // The bar element stays in the DOM and is hidden, so assert on visibility
+  // rather than count — toHaveCount(0) would fail against a hidden element.
+  await expect(rival.locator('.journey-rival-hp')).toBeHidden();
+  await expect(rival.locator('.journey-rival-trophy')).toBeVisible();
+  await expect(rival.locator('.journey-rival-trophy')).toHaveText('🏆');
+});
+
+test('an HP change reaches the map without a reload', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 3 }, 2: { currentIndex: 4 } }), 1);
+  await expect(page.locator('.journey-rival[data-gid="2"] .journey-rival-hp-fill'))
+    .toHaveAttribute('style', /width:\s*100%/);
+  await page.evaluate(() => huntRef('progress/2/hp').set(70));
+  await expect(page.locator('.journey-rival[data-gid="2"] .journey-rival-hp-fill'))
+    .toHaveAttribute('style', /width:\s*70%/);
+});
+
+test('island buttons stay clickable where a rival ship overlaps them', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 0 }, 2: { currentIndex: 1 } }), 1);
+  // Island 1 is this pupil's next stop; a rival is moored beside it.
+  await page.locator('[aria-label="Pergi ke Pulau 1"]').click();
+  await expect(page.locator('#view-clue')).toHaveClass(/active/, { timeout: 10000 });
+});

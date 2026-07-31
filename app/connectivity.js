@@ -35,7 +35,10 @@ function updateConnectivityBadge(){
   // every group's progress again, and the moment the panel can finally load
   // targets and enable firing.
   const map=document.getElementById('journeyMap');
-  if(map && !map.hidden) attachMapProgressListener();
+  if(map && !map.hidden){
+    attachMapProgressListener();
+    renderRivalShips();
+  }
   const cannonPanel=document.getElementById('cannonPanel');
   if(cannonPanel && !cannonPanel.hidden) renderCannonPanel();
 }

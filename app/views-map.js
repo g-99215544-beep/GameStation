@@ -84,12 +84,72 @@ function attachMapProgressListener(){
   rivalProgressRef=huntRef('progress');
   rivalProgressRef.on('value',snap=>{
     allProgress=snap.val()||{};
+    renderRivalShips();
     const panel=document.getElementById('cannonPanel');
     if(panel && !panel.hidden) renderCannonPanel();
   });
 }
 function detachMapProgressListener(){
   if(rivalProgressRef){ rivalProgressRef.off('value'); rivalProgressRef=null; }
+}
+
+// Deterministic per group so a rival keeps one colour for the whole hunt.
+// 47 is coprime with 360, so consecutive group ids land far apart on the wheel.
+function rivalHue(gid){ return (Number(gid)*47)%360; }
+
+function buildRivalShip(rival){
+  const node=document.createElement('button');
+  node.type='button';
+  node.className='journey-rival';
+  node.dataset.gid=rival.gid;
+  node.innerHTML=`<span class="journey-rival-plate">
+      <span class="journey-rival-name"></span>
+      <span class="journey-rival-hp"><span class="journey-rival-hp-fill"></span></span>
+      <span class="journey-rival-trophy" hidden>🏆</span>
+    </span>
+    <span class="journey-rival-ship"></span>`;
+  node.querySelector('.journey-rival-ship').style.filter=`hue-rotate(${rivalHue(rival.gid)}deg) saturate(.85)`;
+  node.addEventListener('click',()=>openCannonPanel(rival.gid));
+  return node;
+}
+function placeRivalShip(node,point){
+  node.style.left=point.x+'%';
+  node.style.top=point.y+'%';
+}
+function paintRivalShip(node,rival){
+  const hp=CannonEngine.readHp(allProgress[rival.gid]);
+  node.classList.toggle('is-won',rival.finished);
+  node.querySelector('.journey-rival-name').textContent=rival.name;
+  node.querySelector('.journey-rival-hp').hidden=rival.finished;
+  node.querySelector('.journey-rival-trophy').hidden=!rival.finished;
+  node.querySelector('.journey-rival-hp-fill').style.width=hp+'%';
+  node.setAttribute('aria-label',rival.finished
+    ? `${rival.name} sudah buka peti`
+    : `${rival.name}, HP ${hp} peratus. Buka panel meriam.`);
+}
+// Elements are reused by group id rather than rebuilt, so a ship that is
+// mid-voyage keeps sailing instead of snapping back when an unrelated group's
+// HP changes and re-renders the map.
+function renderRivalShips(){
+  const holder=document.getElementById('journeyRivalShips');
+  if(!holder) return;
+  // A missing module or a dead connection means no trustworthy positions. The
+  // pupil's own voyage is untouched — it has never needed the network.
+  if(typeof RivalShips==='undefined' || isOffline() || !groups || currentGroupId==null){
+    holder.innerHTML='';
+    rivalPositions={};
+    return;
+  }
+  const ranked=RivalShips.rank(allProgress,groups,currentStationCount());
+  const placed=RivalShips.layout(RivalShips.selectNearest(ranked,currentGroupId),MAP_STOPS);
+  const keep=new Set(placed.map(rival=>rival.gid));
+  Array.from(holder.children).forEach(node=>{ if(!keep.has(node.dataset.gid)) node.remove(); });
+  placed.forEach(rival=>{
+    let node=holder.querySelector(`.journey-rival[data-gid="${rival.gid}"]`);
+    if(!node){ node=buildRivalShip(rival); holder.appendChild(node); }
+    paintRivalShip(node,rival);
+    placeRivalShip(node,rival);
+  });
 }
 
 function setJourneyShipFrame(frame){
@@ -188,6 +248,8 @@ function hideJourneyMap(){
   journeyToken++;
   journeyMoving=false;
   detachMapProgressListener();
+  const rivalHolder=document.getElementById('journeyRivalShips');
+  if(rivalHolder) rivalHolder.innerHTML='';
   const map=document.getElementById('journeyMap');
   const popup=document.getElementById('journeyScorePopup');
   if(map) map.hidden=true;
@@ -281,5 +343,6 @@ function showJourneyMap(){
   renderJourneyIslandButtons();
   playJourneyMapPingPong();
   attachMapProgressListener();
+  renderRivalShips();
   syncCannonFab();
 }
