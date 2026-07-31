@@ -11,7 +11,18 @@
   // Three fixed berths around a mooring, in map percentage points. None of them
   // is {0,0}: that exact spot is where the pupil's own ship sits, and a rival
   // hiding underneath it would read as a rendering bug.
-  const BERTHS = [{ dx: -10, dy: 2 }, { dx: 10, dy: 3 }, { dx: 0, dy: 6.5 }];
+  //
+  // These offsets are larger than they look because an island's clickable
+  // button is a much bigger target than its drawn icon (24%-wide hit circle,
+  // MAP_ISLANDS in views-map.js) and a mooring in MAP_STOPS sits only a few
+  // percentage points from its own island's button centre. Every value below
+  // was chosen empirically (elementFromPoint sweep over all 6 islands x all 3
+  // berths, at 1280x720 and 390x640) so that: an island button's centre is
+  // never covered by a rival, and every rival keeps a real, contiguous
+  // >=44x44 CSS px tappable area clear of every island button. See
+  // task-5-report.md, "Fix round 1", for the search and the numbers it ruled
+  // out.
+  const BERTHS = [{ dx: -6, dy: 10 }, { dx: 22, dy: 2 }, { dx: 0, dy: 12 }];
 
   function num(value, fallback) {
     const n = Number(value);

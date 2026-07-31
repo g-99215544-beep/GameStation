@@ -137,9 +137,29 @@ test('an HP change reaches the map without a reload', async ({ page }) => {
 });
 
 test('island buttons stay clickable where a rival ship overlaps them', async ({ page }) => {
-  await openMapAs(page, seedHunt({ 1: { currentIndex: 0 }, 2: { currentIndex: 1 } }), 1);
-  // Island 1 is this pupil's next stop; a rival is moored beside it.
-  await page.locator('[aria-label="Pergi ke Pulau 1"]').click();
+  // Island 6's button sits closest of all six to its own mooring point
+  // (MAP_ISLANDS[6] vs MAP_STOPS[6] in app/views-map.js, only ~2 percentage
+  // points apart), so a rival docked there (gid 2, alone at that island and
+  // therefore berth slot 0) genuinely covers the button's own centre pixel —
+  // confirmed below rather than assumed, so this cannot go vacuous again the
+  // way the previous version of this test did. A stacking-order regression
+  // (rival above island buttons) was previously caught live on exactly this
+  // kind of overlap: elementFromPoint at the button's centre resolved to the
+  // rival, not the button, and the click below timed out instead of sailing.
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 5 }, 2: { currentIndex: 6 } }), 1);
+  const rival = page.locator('.journey-rival[data-gid="2"]');
+  const button = page.locator('[aria-label="Pergi ke Pulau 6"]');
+  await expect(rival).toBeVisible();
+  await expect(button).toBeVisible();
+  // Confirms the island's own centre pixel is genuinely inside the rival's
+  // box before trusting the click below to mean anything — otherwise this
+  // test could pass vacuously again if a future map layout moved them apart.
+  const [rivalBox, buttonBox] = await Promise.all([rival.boundingBox(), button.boundingBox()]);
+  const buttonCentre = { x: buttonBox.x + buttonBox.width / 2, y: buttonBox.y + buttonBox.height / 2 };
+  const centreInsideRivalBox = buttonCentre.x >= rivalBox.x && buttonCentre.x <= rivalBox.x + rivalBox.width &&
+    buttonCentre.y >= rivalBox.y && buttonCentre.y <= rivalBox.y + rivalBox.height;
+  expect(centreInsideRivalBox).toBe(true);
+  await button.click();
   await expect(page.locator('#view-clue')).toHaveClass(/active/, { timeout: 10000 });
 });
 
@@ -234,4 +254,59 @@ test('tapping a rival does nothing when cannons are disabled', async ({ page }) 
   await openMapAs(page, seed, 1);
   await page.locator('.journey-rival[data-gid="2"]').click();
   await expect(page.locator('#cannonPanel')).toBeHidden();
+});
+
+// Being "present" on screen is not the same as being tappable: an island
+// button always wins a contested pixel (previous test), so a rival that a
+// pupil can see but not reliably touch would be a silent regression — the
+// click handler wired in buildRivalShip would simply never fire for a real
+// finger. 44 CSS px is the standard minimum touch target, and these are
+// ten-year-olds on phones, so the check runs at a small phone viewport, not
+// the desktop-sized default.
+test('a rival ship keeps a real, finger-sized tappable area beside its island', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 640 });
+  // Island 6's mooring point sits only ~2 percentage points from its own
+  // island button (MAP_ISLANDS[6] vs MAP_STOPS[6] in app/views-map.js), the
+  // closest of all six — the tightest island and the one most likely to
+  // regress first if the berths ever shrink back down.
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 5 }, 2: { currentIndex: 6 } }), 1);
+  const rival = page.locator('.journey-rival[data-gid="2"]');
+  await expect(rival).toBeVisible();
+  // The daily-intro overlay (app/views-map.js, playDailyIntro) covers the
+  // whole screen for its first few seconds and would otherwise be what
+  // elementFromPoint below reports at every point, reading as "not tappable"
+  // for a reason that has nothing to do with the map geometry under test.
+  await expect(page.locator('#dailyIntro')).toBeHidden({ timeout: 6000 });
+
+  const tappablePx = await page.evaluate(gid => {
+    const node = document.querySelector(`.journey-rival[data-gid="${gid}"]`);
+    const rect = node.getBoundingClientRect();
+    // Scan the rival's own box on a 2px grid and find the largest contiguous
+    // square where elementFromPoint resolves back to this button — that is
+    // what a fingertip actually needs, not just "the element exists
+    // somewhere in the DOM".
+    const step = 2;
+    const rows = [];
+    for (let y = rect.top; y <= rect.bottom; y += step) {
+      const row = [];
+      for (let x = rect.left; x <= rect.right; x += step) {
+        const el = document.elementFromPoint(x, y);
+        row.push(el === node || node.contains(el) ? 1 : 0);
+      }
+      rows.push(row);
+    }
+    const rowCount = rows.length, colCount = rows[0] ? rows[0].length : 0;
+    const dp = Array.from({ length: rowCount }, () => new Array(colCount).fill(0));
+    let maxSide = 0;
+    for (let r = 0; r < rowCount; r++) {
+      for (let c = 0; c < colCount; c++) {
+        if (!rows[r][c]) continue;
+        dp[r][c] = (r === 0 || c === 0) ? 1 : Math.min(dp[r - 1][c], dp[r][c - 1], dp[r - 1][c - 1]) + 1;
+        maxSide = Math.max(maxSide, dp[r][c]);
+      }
+    }
+    return (maxSide - 1) * step;
+  }, '2');
+
+  expect(tappablePx).toBeGreaterThanOrEqual(44);
 });
