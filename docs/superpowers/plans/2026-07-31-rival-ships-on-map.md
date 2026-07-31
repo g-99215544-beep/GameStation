@@ -368,8 +368,11 @@ The live `huntRef('progress')` listener currently belongs to the cannon panel. T
   - `allProgress: object` — now declared in `app/views-map.js`, live while the map is open.
   - `attachMapProgressListener(): void`
   - `detachMapProgressListener(): void`
-  - `rivalPositions: object` — last rendered `gid → island`, cleared on detach.
-  - `renderRivalShips(): void` — a no-op stub in this task; Task 3 fills it in.
+
+> This task deliberately stops at the data layer. Nothing calls a rival
+> renderer yet — Task 3 introduces that function **and** its call sites in one
+> move, rather than leaving an empty stub behind here for a reviewer to trip
+> over.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -510,26 +513,19 @@ Add near the top of the file, beside the other module-level state (after `let jo
 // owns it and the panel just reads what is already here.
 let allProgress={};
 let rivalProgressRef=null;
-// Last rendered gid -> island. Cleared on detach, which is what stops several
-// ships lurching across the map at once when a phone comes back online.
-let rivalPositions={};
 
 function attachMapProgressListener(){
   if(isOffline() || rivalProgressRef) return;
   rivalProgressRef=huntRef('progress');
   rivalProgressRef.on('value',snap=>{
     allProgress=snap.val()||{};
-    renderRivalShips();
     const panel=document.getElementById('cannonPanel');
     if(panel && !panel.hidden) renderCannonPanel();
   });
 }
 function detachMapProgressListener(){
   if(rivalProgressRef){ rivalProgressRef.off('value'); rivalProgressRef=null; }
-  rivalPositions={};
 }
-// Filled in by the next task; declared now so the listener above can call it.
-function renderRivalShips(){}
 ```
 
 In `hideJourneyMap()` (`app/views-map.js:167`), add the detach immediately after `journeyMoving=false;`:
@@ -568,13 +564,11 @@ Replace the cannon-panel block at the end of `updateConnectivityBadge()` (lines 
 
 ```js
   // Groups routinely walk out of signal with the map open — hunting a cannon
-  // QR, for instance. Connectivity returning is the moment rival ships can be
-  // drawn again and the panel can finally load targets and enable firing.
+  // QR, for instance. Connectivity returning is the moment the map can load
+  // every group's progress again, and the moment the panel can finally load
+  // targets and enable firing.
   const map=document.getElementById('journeyMap');
-  if(map && !map.hidden){
-    attachMapProgressListener();
-    renderRivalShips();
-  }
+  if(map && !map.hidden) attachMapProgressListener();
   const cannonPanel=document.getElementById('cannonPanel');
   if(cannonPanel && !cannonPanel.hidden) renderCannonPanel();
 ```
@@ -605,13 +599,18 @@ git commit -m "Give the voyage map ownership of the live progress listener"
 ### Task 3: Draw rival ships with names and HP bars
 
 **Files:**
-- Modify: `app/views-map.js` (replace the `renderRivalShips` stub)
+- Modify: `app/views-map.js` (add `renderRivalShips` and its two call sites)
+- Modify: `app/connectivity.js` (call it when signal returns)
 - Modify: `app/styles.css` (add rival styles after the `.journey-ship-hp.is-hit` rule, ~line 34)
 - Test: `tests/rival-ships.spec.js`
 
 **Interfaces:**
-- Consumes: `RivalShips.rank/selectNearest/layout/positions/diff` (Task 1); `allProgress`, `rivalPositions` (Task 2); `MAP_STOPS` and `currentStationCount()` (existing); `CannonEngine.readHp(entry)` (existing, applies the 50% floor and the 100 default).
-- Produces: `renderRivalShips(): void`, rendering `button.journey-rival[data-gid]` elements into `#journeyRivalShips`.
+- Consumes: `RivalShips.rank/selectNearest/layout` (Task 1); `allProgress`, `attachMapProgressListener` (Task 2); `MAP_STOPS` and `currentStationCount()` (existing); `CannonEngine.readHp(entry)` (existing, applies the 50% floor and the 100 default).
+- Produces: `renderRivalShips(): void`, rendering `button.journey-rival[data-gid]` elements into `#journeyRivalShips`; plus `buildRivalShip`, `paintRivalShip`, `placeRivalShip`, `rivalHue`.
+
+Ships are placed directly at their berth in this task. Task 4 adds the sailing
+voyage and the position bookkeeping it needs; there is no movement placeholder
+here.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -680,9 +679,9 @@ test('island buttons stay clickable where a rival ship overlaps them', async ({ 
 Run: `npx playwright test tests/rival-ships.spec.js -g "nearest rivals"`
 Expected: FAIL — `#journeyRivalShips` has 0 children, because `renderRivalShips` is still the empty stub.
 
-- [ ] **Step 3a: Replace the stub in `app/views-map.js`**
+- [ ] **Step 3a: Add the renderer to `app/views-map.js`**
 
-Replace `function renderRivalShips(){}` with:
+Add below `detachMapProgressListener`:
 
 ```js
 // Deterministic per group so a rival keeps one colour for the whole hunt.
@@ -734,26 +733,56 @@ function renderRivalShips(){
   }
   const ranked=RivalShips.rank(allProgress,groups,currentStationCount());
   const placed=RivalShips.layout(RivalShips.selectNearest(ranked,currentGroupId),MAP_STOPS);
-  const moves=RivalShips.diff(rivalPositions,placed);
   const keep=new Set(placed.map(rival=>rival.gid));
   Array.from(holder.children).forEach(node=>{ if(!keep.has(node.dataset.gid)) node.remove(); });
   placed.forEach(rival=>{
     let node=holder.querySelector(`.journey-rival[data-gid="${rival.gid}"]`);
     if(!node){ node=buildRivalShip(rival); holder.appendChild(node); }
     paintRivalShip(node,rival);
-    const move=moves.find(entry=>entry.gid===rival.gid);
-    if(move) sailRivalShip(node,rival,move);
-    else placeRivalShip(node,rival);
+    placeRivalShip(node,rival);
   });
-  rivalPositions=RivalShips.positions(placed);
 }
-// Replaced in the next task with a real voyage. Placing the ship at its
-// destination is the correct fallback: it is exactly what a reduced-motion or
-// reconnecting client should see.
-function sailRivalShip(node,rival){ placeRivalShip(node,rival); }
 ```
 
-- [ ] **Step 3b: Add the styles to `app/styles.css`**
+Then clear the container in `hideJourneyMap()`, beside the existing
+`detachMapProgressListener();` call, so a map reopened for a different group
+never flashes the previous group's rivals:
+
+```js
+  const rivalHolder=document.getElementById('journeyRivalShips');
+  if(rivalHolder) rivalHolder.innerHTML='';
+```
+
+- [ ] **Step 3b: Wire up the three call sites**
+
+In `app/views-map.js`, inside the `attachMapProgressListener` listener callback, render on every progress change — this is what makes a rival's HP bar update live:
+
+```js
+  rivalProgressRef.on('value',snap=>{
+    allProgress=snap.val()||{};
+    renderRivalShips();
+    const panel=document.getElementById('cannonPanel');
+    if(panel && !panel.hidden) renderCannonPanel();
+  });
+```
+
+In `showJourneyMap()`, render once immediately after `attachMapProgressListener();`, so a map opened offline (or before the first snapshot lands) is in a known state rather than showing whatever was left over:
+
+```js
+  renderRivalShips();
+```
+
+In `app/connectivity.js`, inside `updateConnectivityBadge()`, render whenever connectivity flips — this is both the "ships vanish offline" and the "ships come back" path:
+
+```js
+  const map=document.getElementById('journeyMap');
+  if(map && !map.hidden){
+    attachMapProgressListener();
+    renderRivalShips();
+  }
+```
+
+- [ ] **Step 3c: Add the styles to `app/styles.css`**
 
 Insert after the `@keyframes shipHpHit` rule (line 34):
 
@@ -800,8 +829,12 @@ One shared animation driver moves the pupil's ship and every rival ship, so they
 - Test: `tests/rival-ships.spec.js`
 
 **Interfaces:**
-- Consumes: `RivalShips.pointAt` (Task 1), `SHIP_SPRITE` and `MAP_STOPS` (existing).
-- Produces: `animateShipAlong(options): void` where `options = {from:{x,y}, to:{x,y}, duration:number, place:(point)=>void, setFrame?:(frame:number)=>void, isCancelled?:()=>boolean, onDone?:()=>void}`.
+- Consumes: `RivalShips.pointAt/positions/diff` (Task 1), `renderRivalShips`/`placeRivalShip` (Task 3), `SHIP_SPRITE` and `MAP_STOPS` (existing).
+- Produces:
+  - `animateShipAlong(options): void` where `options = {from:{x,y}, to:{x,y}, duration:number, place:(point)=>void, setFrame?:(frame:number)=>void, isCancelled?:()=>boolean, onDone?:()=>void}`
+  - `sailRivalShip(node, rival, move): void`
+  - `rivalPositions: object` — last rendered `gid → island`
+  - `rivalVoyageTokens: object` — one cancellation token per group
 
 - [ ] **Step 1: Write the failing test**
 
@@ -921,7 +954,41 @@ The `if(fromPosition===toPosition){…}` early return above it is unchanged — 
 
 - [ ] **Step 3b: Give rival ships a real voyage in `app/views-map.js`**
 
-Replace the `sailRivalShip` fallback with:
+First add the voyage state beside `rivalProgressRef`:
+
+```js
+// Last rendered gid -> island. Cleared on detach, which is what stops several
+// ships lurching across the map at once when a phone comes back online: with
+// no previous position, a ship simply appears where it belongs.
+let rivalPositions={};
+```
+
+Then teach `renderRivalShips` to sail a ship whose island changed. Add the diff
+above the `placed.forEach(...)` loop:
+
+```js
+  const moves=RivalShips.diff(rivalPositions,placed);
+```
+
+replace the unconditional `placeRivalShip(node,rival);` inside that loop with:
+
+```js
+    const move=moves.find(entry=>entry.gid===rival.gid);
+    if(move) sailRivalShip(node,rival,move);
+    else placeRivalShip(node,rival);
+```
+
+and record the new positions as the loop's last line, inside `renderRivalShips`
+but after the `forEach`:
+
+```js
+  rivalPositions=RivalShips.positions(placed);
+```
+
+The early return for the offline/no-module case must clear them too — add
+`rivalPositions={};` beside its existing `holder.innerHTML='';`.
+
+Then add the voyage itself:
 
 ```js
 const RIVAL_VOYAGE_MS=2700;
@@ -964,9 +1031,10 @@ function sailRivalShip(node,rival,move){
 }
 ```
 
-In `detachMapProgressListener()`, clear the tokens alongside the positions so a reattach starts clean:
+Finally, clear both in `detachMapProgressListener()` so a reattach starts clean and no ship sails on the first snapshot after reconnecting:
 
 ```js
+  rivalPositions={};
   rivalVoyageTokens={};
 ```
 
