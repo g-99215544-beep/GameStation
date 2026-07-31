@@ -156,10 +156,21 @@ function setRivalShipFrame(node,frame){
   const row=Math.floor(current/SHIP_SPRITE.cols);
   sprite.style.backgroundPosition=`${col/(SHIP_SPRITE.cols-1)*100}% ${row/(SHIP_SPRITE.rows-1)*100}%`;
 }
+// The DOM already holds the truth of where a ship is actually drawn, which
+// `move.from` combined with the rival's *current* slot does not: berths are
+// reassigned per island whenever the set of rivals there changes, so that
+// combination can name a point the ship was never sitting at. Reading the
+// rendered style also means a rival whose island changes again mid-voyage
+// sails on from wherever it actually got to, not from its last island.
+function readRivalShipPoint(node){
+  const x=parseFloat(node.style.left);
+  const y=parseFloat(node.style.top);
+  return Number.isFinite(x) && Number.isFinite(y) ? {x,y} : null;
+}
 // Rival voyages are deliberately silent: only the pupil's own ship plays the
 // sailing audio, or three ships moving at once would be a wall of noise.
 function sailRivalShip(node,rival,move){
-  const from=RivalShips.pointAt(move.from,rival.slot,MAP_STOPS);
+  const from=readRivalShipPoint(node) || RivalShips.pointAt(move.from,rival.slot,MAP_STOPS);
   const to={x:rival.x,y:rival.y};
   const token=(rivalVoyageTokens[rival.gid]||0)+1;
   rivalVoyageTokens[rival.gid]=token;

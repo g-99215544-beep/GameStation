@@ -157,6 +157,20 @@ test('a rival sails to the next island when it clears a station', async ({ page 
     return Math.abs(box.y - before.y) > 2;
   }, { timeout: 4000 }).toBe(true);
 
+  // A teleport would already be sitting at the destination well before this
+  // point. A real 2700ms sail with ease-in-out has covered only ~22% of the
+  // distance at t=900ms, so asserting it is still at least 15% of the total
+  // distance short of the destination gives real animation a wide margin
+  // while failing hard against a teleport (0% short of the destination).
+  const midTarget = await page.evaluate(() => RivalShips.pointAt(3, 0, MAP_STOPS));
+  const midCanvas = await page.locator('#journeyMapCanvas').boundingBox();
+  const destY = midCanvas.y + midCanvas.height * midTarget.y / 100;
+  const totalDistance = Math.abs(destY - (before.y + before.height));
+  await page.waitForTimeout(900);
+  const mid = await rival.boundingBox();
+  const remaining = Math.abs(destY - (mid.y + mid.height));
+  expect(remaining).toBeGreaterThan(totalDistance * 0.15);
+
   // The voyage settles on the island the rival actually reached.
   await expect.poll(async () => {
     const box = await rival.boundingBox();

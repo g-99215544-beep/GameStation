@@ -402,8 +402,8 @@ function playStationJourney(fromPosition,toPosition,onArrive){
 
 // Drives one ship sprite from one map point to another. Shared by the pupil's
 // own voyage and by every rival ship so they move with identical physics.
-// A duration of 0 places the ship at its destination immediately, which is what
-// a reduced-motion client and a reconnecting client both need.
+// A duration of 0 places the ship at its destination immediately, which is
+// what a rival ship sailing under prefers-reduced-motion needs.
 function animateShipAlong(options){
   const {from,to,place}=options;
   const duration=Number(options.duration)||0;
