@@ -142,3 +142,50 @@ test('island buttons stay clickable where a rival ship overlaps them', async ({ 
   await page.locator('[aria-label="Pergi ke Pulau 1"]').click();
   await expect(page.locator('#view-clue')).toHaveClass(/active/, { timeout: 10000 });
 });
+
+test('a rival sails to the next island when it clears a station', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 3 }, 2: { currentIndex: 2 } }), 1);
+  const rival = page.locator('.journey-rival[data-gid="2"]');
+  await expect(rival).toBeVisible();
+  const before = await rival.boundingBox();
+
+  await page.evaluate(() => huntRef('progress/2/currentIndex').set(3));
+
+  // Mid-voyage: the ship has left its old berth but not yet reached the new one.
+  await expect.poll(async () => {
+    const box = await rival.boundingBox();
+    return Math.abs(box.y - before.y) > 2;
+  }, { timeout: 4000 }).toBe(true);
+
+  // The voyage settles on the island the rival actually reached.
+  await expect.poll(async () => {
+    const box = await rival.boundingBox();
+    const target = await page.evaluate(() => RivalShips.pointAt(3, 0, MAP_STOPS));
+    const canvas = await page.locator('#journeyMapCanvas').boundingBox();
+    return Math.abs((box.y + box.height) - (canvas.y + canvas.height * target.y / 100)) < 12;
+  }, { timeout: 6000 }).toBe(true);
+});
+
+test('a rival that was not on screen before appears without sailing', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 3 } }), 1);
+  // Kumpulan 14 starts at the back and is not among the three nearest.
+  await expect(page.locator('.journey-rival[data-gid="14"]')).toHaveCount(0);
+  await page.evaluate(() => huntRef('progress/14/currentIndex').set(4));
+  const rival = page.locator('.journey-rival[data-gid="14"]');
+  await expect(rival).toBeVisible();
+  const first = await rival.boundingBox();
+  await page.waitForTimeout(600);
+  const second = await rival.boundingBox();
+  expect(Math.abs(first.y - second.y)).toBeLessThan(2);
+});
+
+test('the pupil\'s own voyage still animates', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 0 } }), 1);
+  const ship = page.locator('#journeyShip');
+  const before = await ship.boundingBox();
+  await page.evaluate(() => selectJourneyIsland(1));
+  await expect.poll(async () => {
+    const box = await ship.boundingBox();
+    return Math.abs(box.y - before.y) > 2;
+  }, { timeout: 4000 }).toBe(true);
+});

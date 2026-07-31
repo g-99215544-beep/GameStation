@@ -78,6 +78,10 @@ let journeyMoving=false;
 // owns it and the panel just reads what is already here.
 let allProgress={};
 let rivalProgressRef=null;
+// Last rendered gid -> island. Cleared on detach, which is what stops several
+// ships lurching across the map at once when a phone comes back online: with
+// no previous position, a ship simply appears where it belongs.
+let rivalPositions={};
 
 function attachMapProgressListener(){
   if(isOffline() || rivalProgressRef) return;
@@ -91,6 +95,8 @@ function attachMapProgressListener(){
 }
 function detachMapProgressListener(){
   if(rivalProgressRef){ rivalProgressRef.off('value'); rivalProgressRef=null; }
+  rivalPositions={};
+  rivalVoyageTokens={};
 }
 
 // Deterministic per group so a rival keeps one colour for the whole hunt.
@@ -127,6 +133,46 @@ function paintRivalShip(node,rival){
     ? `${rival.name} sudah buka peti`
     : `${rival.name}, HP ${hp} peratus. Buka panel meriam.`);
 }
+
+const RIVAL_VOYAGE_MS=2700;
+// One token per group: a rival whose position changes again mid-voyage cancels
+// the first voyage instead of leaving two loops fighting over one element.
+let rivalVoyageTokens={};
+
+function rivalWantsInstantMove(){
+  return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+function setRivalShipDirection(node,from,to){
+  const sprite=node.querySelector('.journey-rival-ship');
+  if(!sprite || Math.abs(to.x-from.x)<.5) return;
+  // The source sprite faces right; mirror it only while travelling left.
+  sprite.classList.toggle('facing-left',to.x<from.x);
+}
+function setRivalShipFrame(node,frame){
+  const sprite=node.querySelector('.journey-rival-ship');
+  if(!sprite) return;
+  const current=frame%SHIP_SPRITE.frames;
+  const col=current%SHIP_SPRITE.cols;
+  const row=Math.floor(current/SHIP_SPRITE.cols);
+  sprite.style.backgroundPosition=`${col/(SHIP_SPRITE.cols-1)*100}% ${row/(SHIP_SPRITE.rows-1)*100}%`;
+}
+// Rival voyages are deliberately silent: only the pupil's own ship plays the
+// sailing audio, or three ships moving at once would be a wall of noise.
+function sailRivalShip(node,rival,move){
+  const from=RivalShips.pointAt(move.from,rival.slot,MAP_STOPS);
+  const to={x:rival.x,y:rival.y};
+  const token=(rivalVoyageTokens[rival.gid]||0)+1;
+  rivalVoyageTokens[rival.gid]=token;
+  setRivalShipDirection(node,from,to);
+  animateShipAlong({
+    from, to,
+    duration:rivalWantsInstantMove() ? 0 : RIVAL_VOYAGE_MS,
+    isCancelled:()=>rivalVoyageTokens[rival.gid]!==token || !node.isConnected,
+    place:point=>placeRivalShip(node,point),
+    setFrame:frame=>setRivalShipFrame(node,frame)
+  });
+}
+
 // Elements are reused by group id rather than rebuilt, so a ship that is
 // mid-voyage keeps sailing instead of snapping back when an unrelated group's
 // HP changes and re-renders the map.
@@ -144,12 +190,16 @@ function renderRivalShips(){
   const placed=RivalShips.layout(RivalShips.selectNearest(ranked,currentGroupId),MAP_STOPS);
   const keep=new Set(placed.map(rival=>rival.gid));
   Array.from(holder.children).forEach(node=>{ if(!keep.has(node.dataset.gid)) node.remove(); });
+  const moves=RivalShips.diff(rivalPositions,placed);
   placed.forEach(rival=>{
     let node=holder.querySelector(`.journey-rival[data-gid="${rival.gid}"]`);
     if(!node){ node=buildRivalShip(rival); holder.appendChild(node); }
     paintRivalShip(node,rival);
-    placeRivalShip(node,rival);
+    const move=moves.find(entry=>entry.gid===rival.gid);
+    if(move) sailRivalShip(node,rival,move);
+    else placeRivalShip(node,rival);
   });
+  rivalPositions=RivalShips.positions(placed);
 }
 
 function setJourneyShipFrame(frame){

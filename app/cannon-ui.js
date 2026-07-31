@@ -382,25 +382,53 @@ function playStationJourney(fromPosition,toPosition,onArrive){
   if(status) status.textContent=`Berlayar ke Pulau ${toPosition}...`;
   playJourneyMapPingPong();
   const duration=2700;
+  animateShipAlong({
+    from, to, duration,
+    isCancelled:()=>token!==journeyToken,
+    place:point=>placeJourneyShip(point),
+    setFrame:frame=>setJourneyShipFrame(frame),
+    onDone:()=>{
+      journeyShipPosition=toPosition;
+      journeyMoving=false;
+      stopJourneyShipAudio();
+      if(status) status.textContent=`Tiba di Pulau ${toPosition}!`;
+      window.setTimeout(()=>{
+        if(token!==journeyToken) return;
+        onArrive && onArrive();
+      },1000);
+    }
+  });
+}
+
+// Drives one ship sprite from one map point to another. Shared by the pupil's
+// own voyage and by every rival ship so they move with identical physics.
+// A duration of 0 places the ship at its destination immediately, which is what
+// a reduced-motion client and a reconnecting client both need.
+function animateShipAlong(options){
+  const {from,to,place}=options;
+  const duration=Number(options.duration)||0;
+  const setFrame=options.setFrame||(()=>{});
+  const isCancelled=options.isCancelled||(()=>false);
+  const onDone=options.onDone||(()=>{});
+  place(from);
+  setFrame(0);
+  if(duration<=0 || (from.x===to.x && from.y===to.y)){
+    place(to);
+    onDone();
+    return;
+  }
   let startedAt=null;
-  const animate=(now)=>{
-    if(token!==journeyToken) return;
+  const step=now=>{
+    if(isCancelled()) return;
     if(startedAt===null) startedAt=now;
-    const progress=Math.min(1,(now-startedAt)/duration);
-    const eased=progress<.5 ? 2*progress*progress : 1-Math.pow(-2*progress+2,2)/2;
-    placeJourneyShip({x:from.x+(to.x-from.x)*eased,y:from.y+(to.y-from.y)*eased});
-    setJourneyShipFrame(Math.floor((now-startedAt)/SHIP_SPRITE.frameMs));
-    if(progress<1){ requestAnimationFrame(animate); return; }
-    journeyShipPosition=toPosition;
-    journeyMoving=false;
-    stopJourneyShipAudio();
-    if(status) status.textContent=`Tiba di Pulau ${toPosition}!`;
-    window.setTimeout(()=>{
-      if(token!==journeyToken) return;
-      onArrive && onArrive();
-    },1000);
+    const elapsed=Math.min(1,(now-startedAt)/duration);
+    const eased=elapsed<.5 ? 2*elapsed*elapsed : 1-Math.pow(-2*elapsed+2,2)/2;
+    place({x:from.x+(to.x-from.x)*eased,y:from.y+(to.y-from.y)*eased});
+    setFrame(Math.floor((now-startedAt)/SHIP_SPRITE.frameMs));
+    if(elapsed<1){ requestAnimationFrame(step); return; }
+    onDone();
   };
-  requestAnimationFrame(animate);
+  requestAnimationFrame(step);
 }
 
 function show(id){
