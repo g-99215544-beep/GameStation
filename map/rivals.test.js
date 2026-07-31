@@ -49,6 +49,12 @@ test('rank falls back to a generated name when the group config has none', () =>
   assert.strictEqual(ranked[0].name, 'Kumpulan 7');
 });
 
+test('rank breaks ties by group id numerically, not as strings', () => {
+  const all = { 2: { currentIndex: 3 }, 10: { currentIndex: 3 }, 9: { currentIndex: 3 } };
+  const order = R.rank(all, groups([2, 9, 10]), 6).map(e => e.gid);
+  assert.deepStrictEqual(order, ['2', '9', '10']);
+});
+
 test('selectNearest takes two ahead and one behind', () => {
   const ranked = R.rank({
     1: { currentIndex: 5 }, 2: { currentIndex: 4 }, 3: { currentIndex: 3 },
