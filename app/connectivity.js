@@ -30,13 +30,14 @@ function updateConnectivityBadge(){
   if(syncingOfflineWrites){ badge.hidden=false; badge.textContent='🔄 Menyelaras…'; return; }
   badge.hidden=!isOffline();
   if(isOffline()) badge.textContent='📴 Luar Talian';
-  // The cannon panel is routinely opened offline, so connectivity returning is
-  // the moment it can finally load targets and enable firing.
+  // Groups routinely walk out of signal with the map open — hunting a cannon
+  // QR, for instance. Connectivity returning is the moment the map can load
+  // every group's progress again, and the moment the panel can finally load
+  // targets and enable firing.
+  const map=document.getElementById('journeyMap');
+  if(map && !map.hidden) attachMapProgressListener();
   const cannonPanel=document.getElementById('cannonPanel');
-  if(cannonPanel && !cannonPanel.hidden){
-    attachCannonProgressListener();
-    renderCannonPanel();
-  }
+  if(cannonPanel && !cannonPanel.hidden) renderCannonPanel();
 }
 function cacheConfig(){
   return writeLocalJson(OfflineStore.CONFIG_CACHE_KEY,{huntId:currentHuntId,stations:stations||{},groups:groups||{},cannon:cannonConfig,cannons:cannons||{},stationCount,ts:Date.now()});

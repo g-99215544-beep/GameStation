@@ -1,5 +1,3 @@
-let allProgress={};
-let cannonProgressRef=null;
 // Registered on progress/<gid> by showGoToBoard. Held here so logout() can
 // detach it — the hunt-root off() there cannot reach a child-path listener.
 let chestProgressRef=null;
@@ -28,25 +26,12 @@ function openCannonPanel(){
   setCannonMsg('','');
   const passwordInput=document.getElementById('cannonPasswordInput');
   if(passwordInput) passwordInput.value='';
-  attachCannonProgressListener();
   renderCannonPanel();
-}
-// Other groups' HP is only needed while this panel is open, so the listener
-// lives and dies with it rather than running through every station game.
-// Separate from openCannonPanel because the panel is expected to be opened
-// offline — the Scan button stays live while a group walks the grounds hunting
-// a cannon QR — and must come alive by itself when signal returns, rather than
-// stranding them with a dead panel and no hint to close and reopen it.
-function attachCannonProgressListener(){
-  if(isOffline() || cannonProgressRef) return;
-  cannonProgressRef=huntRef('progress');
-  cannonProgressRef.on('value',snap=>{ allProgress=snap.val()||{}; renderCannonPanel(); });
 }
 function closeCannonPanel(){
   const panel=document.getElementById('cannonPanel');
   if(panel) panel.hidden=true;
   stopCannonScanner();
-  if(cannonProgressRef){ cannonProgressRef.off('value'); cannonProgressRef=null; }
 }
 function setCannonMsg(kind,text){
   const box=document.getElementById('cannonMsg');

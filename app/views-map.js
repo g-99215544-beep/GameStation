@@ -72,6 +72,26 @@ let journeyToken=0;
 let journeyShipPosition=0;
 let journeyMoving=false;
 
+// Every group's progress, live for as long as the map is on screen. The cannon
+// panel used to own this listener, but the map needs the same data to draw
+// rival ships and the panel can only ever be opened from the map — so the map
+// owns it and the panel just reads what is already here.
+let allProgress={};
+let rivalProgressRef=null;
+
+function attachMapProgressListener(){
+  if(isOffline() || rivalProgressRef) return;
+  rivalProgressRef=huntRef('progress');
+  rivalProgressRef.on('value',snap=>{
+    allProgress=snap.val()||{};
+    const panel=document.getElementById('cannonPanel');
+    if(panel && !panel.hidden) renderCannonPanel();
+  });
+}
+function detachMapProgressListener(){
+  if(rivalProgressRef){ rivalProgressRef.off('value'); rivalProgressRef=null; }
+}
+
 function setJourneyShipFrame(frame){
   const ship=document.getElementById('journeyShip');
   if(!ship) return;
@@ -167,6 +187,7 @@ function pauseJourneyMapPingPong(){
 function hideJourneyMap(){
   journeyToken++;
   journeyMoving=false;
+  detachMapProgressListener();
   const map=document.getElementById('journeyMap');
   const popup=document.getElementById('journeyScorePopup');
   if(map) map.hidden=true;
@@ -259,5 +280,6 @@ function showJourneyMap(){
   if(status) status.textContent='Pilih pulau seterusnya atau pulau yang sudah selesai.';
   renderJourneyIslandButtons();
   playJourneyMapPingPong();
+  attachMapProgressListener();
   syncCannonFab();
 }
