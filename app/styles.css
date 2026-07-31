@@ -34,7 +34,12 @@
   @keyframes shipHpHit{0%,100%{transform:translate(-50%,-100%) scale(1);}40%{transform:translate(-50%,-100%) scale(1.35);}}
   /* Scoped by id so these outrank the `.participant-mode button` pirate skin,
      the same reason #journeyIslandButtons below is scoped that way. */
-  #journeyRivalShips .journey-rival{position:absolute;z-index:1;display:flex;flex-direction:column;align-items:center;gap:2px;width:16%;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;text-shadow:none;transform:translate(-50%,-88%);cursor:pointer;opacity:.9;transition:none;touch-action:manipulation;}
+  /* z-index 5: a rival's mooring point sits right beside — sometimes almost on
+     top of — the pupil's own ship (z-index 2) and the next-island button
+     (z-index 4), both invisible-background elements. Without outranking them
+     here, taps aimed at a visible rival ship land on whichever transparent
+     element happens to be stacked above it instead of opening the cannon panel. */
+  #journeyRivalShips .journey-rival{position:absolute;z-index:5;display:flex;flex-direction:column;align-items:center;gap:2px;width:16%;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;text-shadow:none;transform:translate(-50%,-88%);cursor:pointer;opacity:.9;transition:none;touch-action:manipulation;}
   #journeyRivalShips .journey-rival:hover,#journeyRivalShips .journey-rival:focus-visible{background:transparent;opacity:1;outline:2px solid #fff3a5;outline-offset:2px;}
   .journey-rival-plate{display:flex;flex-direction:column;align-items:center;gap:1px;pointer-events:none;}
   .journey-rival-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000;}
@@ -78,6 +83,7 @@
   .cannon-target-hp-fill{display:block;height:100%;background:var(--green);}
   .cannon-target-hp-text{flex:0 0 42px;font-size:12px;font-weight:700;text-align:right;}
   .cannon-target.is-won{opacity:.55;}
+  .cannon-target.is-targeted{outline:2px solid var(--gold);outline-offset:1px;background:rgba(255,243,165,.16);}
   .cannon-hint{font-size:13px;color:#8a909b;margin:8px 0 0;}
   .cannon-video{position:fixed;inset:0;z-index:1200;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;}
   .cannon-video[hidden]{display:none;}

@@ -8,6 +8,10 @@ let chestProgressRef=null;
 // overlay/its resolver (cannonVideoDone) are singletons, the second call's
 // playCannonVideo() would silently strand the first call's await forever.
 let cannonShotInFlight=false;
+// The group a pupil tapped on the map. Held here rather than passed through
+// renderCannonPanel's many call sites, so the highlight survives the live
+// re-renders the progress listener triggers while the panel is open.
+let cannonTargetGid=null;
 
 function cannonEnabled(){
   return !!(cannonConfig && cannonConfig.enabled) && CannonEngine.isInBattle(progress);
@@ -19,9 +23,10 @@ function syncCannonFab(){
   fab.hidden=!cannonEnabled();
   if(count) count.textContent=String(CannonEngine.readAmmo(progress));
 }
-function openCannonPanel(){
+function openCannonPanel(targetGid){
   const panel=document.getElementById('cannonPanel');
   if(!panel || !cannonEnabled()) return;
+  cannonTargetGid=targetGid==null ? null : String(targetGid);
   panel.hidden=false;
   setCannonMsg('','');
   const passwordInput=document.getElementById('cannonPasswordInput');
@@ -31,6 +36,7 @@ function openCannonPanel(){
 function closeCannonPanel(){
   const panel=document.getElementById('cannonPanel');
   if(panel) panel.hidden=true;
+  cannonTargetGid=null;
   stopCannonScanner();
 }
 function setCannonMsg(kind,text){
@@ -66,10 +72,15 @@ function renderCannonPanel(){
     const bar=inBattle
       ? `<div class="cannon-target-hp"><span class="cannon-target-hp-fill" style="width:${hp}%"></span></div><span class="cannon-target-hp-text">${hp}%</span>`
       : '';
-    return `<div class="cannon-target${inBattle?'':' is-won'}" data-gid="${gid}">
+    return `<div class="cannon-target${inBattle?'':' is-won'}${String(gid)===cannonTargetGid?' is-targeted':''}" data-gid="${gid}">
       <span class="cannon-target-name">Kumpulan ${gid}</span>${bar}${action}
     </div>`;
   }).join('') + offlineHint;
+  // The panel's target list scrolls, and a tapped group can be well below the
+  // fold — opening on a list that does not show the group the pupil just tapped
+  // would read as the tap having done nothing.
+  const targeted=cannonTargetGid && list.querySelector(`.cannon-target[data-gid="${cannonTargetGid}"]`);
+  if(targeted) targeted.scrollIntoView({block:'nearest'});
 }
 let cannonQrCode=null;
 function openCannonScanner(){

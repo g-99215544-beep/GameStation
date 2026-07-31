@@ -201,3 +201,37 @@ test('the pupil\'s own voyage still animates', async ({ page }) => {
     return Math.abs(box.y - before.y) > 2;
   }, { timeout: 4000 }).toBe(true);
 });
+
+test('tapping a rival opens the cannon panel with that group highlighted', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 3, ammo: 2 }, 2: { currentIndex: 4 } }), 1);
+  await page.locator('.journey-rival[data-gid="2"]').click();
+
+  await expect(page.locator('#cannonPanel')).toBeVisible();
+  await expect(page.locator('.cannon-target[data-gid="2"]')).toHaveClass(/is-targeted/);
+  await expect(page.locator('.cannon-target[data-gid="5"]')).not.toHaveClass(/is-targeted/);
+});
+
+test('the highlight survives a live progress update while the panel is open', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 3, ammo: 2 }, 2: { currentIndex: 4 } }), 1);
+  await page.locator('.journey-rival[data-gid="2"]').click();
+  await expect(page.locator('.cannon-target[data-gid="2"]')).toHaveClass(/is-targeted/);
+
+  await page.evaluate(() => huntRef('progress/2/hp').set(80));
+  await expect(page.locator('.cannon-target[data-gid="2"]')).toHaveClass(/is-targeted/);
+});
+
+test('closing the panel clears the target', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 3, ammo: 2 }, 2: { currentIndex: 4 } }), 1);
+  await page.locator('.journey-rival[data-gid="2"]').click();
+  await page.locator('#cannonPanel .journey-popup-close').click();
+  await page.locator('#cannonFab').click();
+  await expect(page.locator('.cannon-target[data-gid="2"]')).not.toHaveClass(/is-targeted/);
+});
+
+test('tapping a rival does nothing when cannons are disabled', async ({ page }) => {
+  const seed = seedHunt({ 1: { currentIndex: 3 }, 2: { currentIndex: 4 } });
+  seed.gamestation2026.hunts.h1.config.cannon = { enabled: false, damagePercent: 10, startingAmmo: 0 };
+  await openMapAs(page, seed, 1);
+  await page.locator('.journey-rival[data-gid="2"]').click();
+  await expect(page.locator('#cannonPanel')).toBeHidden();
+});
