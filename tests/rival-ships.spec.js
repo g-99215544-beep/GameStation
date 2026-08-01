@@ -264,3 +264,31 @@ test('tapping a rival does nothing when cannons are disabled', async ({ page }) 
   await page.locator('.journey-rival[data-gid="2"]').click();
   await expect(page.locator('#cannonPanel')).toBeHidden();
 });
+
+test('rival ships disappear offline and come back without sailing', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 3 }, 2: { currentIndex: 4 } }), 1);
+  await expect(page.locator('#journeyRivalShips .journey-rival')).toHaveCount(3);
+
+  // Stale positions are worse than none, so the ships are removed outright.
+  await page.evaluate(() => { browserOnline = false; updateConnectivityBadge(); });
+  await expect(page.locator('#journeyRivalShips .journey-rival')).toHaveCount(0);
+
+  // The pupil's own voyage never depended on the network.
+  await expect(page.locator('#journeyShip')).toBeVisible();
+  await expect(page.locator('[aria-label="Pergi ke Pulau 4"]')).toHaveCount(1);
+
+  await page.evaluate(() => { browserOnline = true; updateConnectivityBadge(); });
+  const rival = page.locator('.journey-rival[data-gid="2"]');
+  await expect(rival).toBeVisible();
+  // Reconnecting must not launch three ships across the map at once.
+  const first = await rival.boundingBox();
+  await page.waitForTimeout(600);
+  const second = await rival.boundingBox();
+  expect(Math.abs(first.y - second.y)).toBeLessThan(2);
+});
+
+test('the service worker shell version was bumped for this release', async () => {
+  const fs = require('node:fs');
+  const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
+  expect(sw).toContain("const CACHE_NAME = 'gs-shell-v21';");
+});
