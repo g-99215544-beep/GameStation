@@ -1,5 +1,3 @@
-let allProgress={};
-let cannonProgressRef=null;
 // Registered on progress/<gid> by showGoToBoard. Held here so logout() can
 // detach it — the hunt-root off() there cannot reach a child-path listener.
 let chestProgressRef=null;
@@ -10,6 +8,10 @@ let chestProgressRef=null;
 // overlay/its resolver (cannonVideoDone) are singletons, the second call's
 // playCannonVideo() would silently strand the first call's await forever.
 let cannonShotInFlight=false;
+// The group a pupil tapped on the map. Held here rather than passed through
+// renderCannonPanel's many call sites, so the highlight survives the live
+// re-renders the progress listener triggers while the panel is open.
+let cannonTargetGid=null;
 
 function cannonEnabled(){
   return !!(cannonConfig && cannonConfig.enabled) && CannonEngine.isInBattle(progress);
@@ -21,32 +23,22 @@ function syncCannonFab(){
   fab.hidden=!cannonEnabled();
   if(count) count.textContent=String(CannonEngine.readAmmo(progress));
 }
-function openCannonPanel(){
+function openCannonPanel(targetGid){
   const panel=document.getElementById('cannonPanel');
   if(!panel || !cannonEnabled()) return;
+  cannonTargetGid=targetGid==null ? null : String(targetGid);
   panel.hidden=false;
   setCannonMsg('','');
   const passwordInput=document.getElementById('cannonPasswordInput');
   if(passwordInput) passwordInput.value='';
-  attachCannonProgressListener();
   renderCannonPanel();
-}
-// Other groups' HP is only needed while this panel is open, so the listener
-// lives and dies with it rather than running through every station game.
-// Separate from openCannonPanel because the panel is expected to be opened
-// offline — the Scan button stays live while a group walks the grounds hunting
-// a cannon QR — and must come alive by itself when signal returns, rather than
-// stranding them with a dead panel and no hint to close and reopen it.
-function attachCannonProgressListener(){
-  if(isOffline() || cannonProgressRef) return;
-  cannonProgressRef=huntRef('progress');
-  cannonProgressRef.on('value',snap=>{ allProgress=snap.val()||{}; renderCannonPanel(); });
+  scrollCannonTargetIntoView();
 }
 function closeCannonPanel(){
   const panel=document.getElementById('cannonPanel');
   if(panel) panel.hidden=true;
+  cannonTargetGid=null;
   stopCannonScanner();
-  if(cannonProgressRef){ cannonProgressRef.off('value'); cannonProgressRef=null; }
 }
 function setCannonMsg(kind,text){
   const box=document.getElementById('cannonMsg');
@@ -81,10 +73,22 @@ function renderCannonPanel(){
     const bar=inBattle
       ? `<div class="cannon-target-hp"><span class="cannon-target-hp-fill" style="width:${hp}%"></span></div><span class="cannon-target-hp-text">${hp}%</span>`
       : '';
-    return `<div class="cannon-target${inBattle?'':' is-won'}" data-gid="${gid}">
+    return `<div class="cannon-target${inBattle?'':' is-won'}${String(gid)===cannonTargetGid?' is-targeted':''}" data-gid="${gid}">
       <span class="cannon-target-name">Kumpulan ${gid}</span>${bar}${action}
     </div>`;
   }).join('') + offlineHint;
+}
+// The panel scrolls (.cannon-panel is overflow-y:auto), and a tapped group can
+// be well below the fold — opening on a list that does not show the group the
+// pupil just tapped would read as the tap having done nothing. Called once
+// from openCannonPanel(), NOT from renderCannonPanel(): the map's progress
+// listener re-renders the panel on every write anywhere in the hunt (roughly
+// once every 30s in a live session), and scrolling on every render was
+// yanking a child's own in-progress scroll back to the targeted row.
+function scrollCannonTargetIntoView(){
+  const list=document.getElementById('cannonTargets');
+  const targeted=cannonTargetGid && list && list.querySelector(`.cannon-target[data-gid="${cannonTargetGid}"]`);
+  if(targeted) targeted.scrollIntoView({block:'nearest'});
 }
 let cannonQrCode=null;
 function openCannonScanner(){
@@ -397,25 +401,53 @@ function playStationJourney(fromPosition,toPosition,onArrive){
   if(status) status.textContent=`Berlayar ke Pulau ${toPosition}...`;
   playJourneyMapPingPong();
   const duration=2700;
+  animateShipAlong({
+    from, to, duration,
+    isCancelled:()=>token!==journeyToken,
+    place:point=>placeJourneyShip(point),
+    setFrame:frame=>setJourneyShipFrame(frame),
+    onDone:()=>{
+      journeyShipPosition=toPosition;
+      journeyMoving=false;
+      stopJourneyShipAudio();
+      if(status) status.textContent=`Tiba di Pulau ${toPosition}!`;
+      window.setTimeout(()=>{
+        if(token!==journeyToken) return;
+        onArrive && onArrive();
+      },1000);
+    }
+  });
+}
+
+// Drives one ship sprite from one map point to another. Shared by the pupil's
+// own voyage and by every rival ship so they move with identical physics.
+// A duration of 0 places the ship at its destination immediately, which is
+// what a rival ship sailing under prefers-reduced-motion needs.
+function animateShipAlong(options){
+  const {from,to,place}=options;
+  const duration=Number(options.duration)||0;
+  const setFrame=options.setFrame||(()=>{});
+  const isCancelled=options.isCancelled||(()=>false);
+  const onDone=options.onDone||(()=>{});
+  place(from);
+  setFrame(0);
+  if(duration<=0 || (from.x===to.x && from.y===to.y)){
+    place(to);
+    onDone();
+    return;
+  }
   let startedAt=null;
-  const animate=(now)=>{
-    if(token!==journeyToken) return;
+  const step=now=>{
+    if(isCancelled()) return;
     if(startedAt===null) startedAt=now;
-    const progress=Math.min(1,(now-startedAt)/duration);
-    const eased=progress<.5 ? 2*progress*progress : 1-Math.pow(-2*progress+2,2)/2;
-    placeJourneyShip({x:from.x+(to.x-from.x)*eased,y:from.y+(to.y-from.y)*eased});
-    setJourneyShipFrame(Math.floor((now-startedAt)/SHIP_SPRITE.frameMs));
-    if(progress<1){ requestAnimationFrame(animate); return; }
-    journeyShipPosition=toPosition;
-    journeyMoving=false;
-    stopJourneyShipAudio();
-    if(status) status.textContent=`Tiba di Pulau ${toPosition}!`;
-    window.setTimeout(()=>{
-      if(token!==journeyToken) return;
-      onArrive && onArrive();
-    },1000);
+    const elapsed=Math.min(1,(now-startedAt)/duration);
+    const eased=elapsed<.5 ? 2*elapsed*elapsed : 1-Math.pow(-2*elapsed+2,2)/2;
+    place({x:from.x+(to.x-from.x)*eased,y:from.y+(to.y-from.y)*eased});
+    setFrame(Math.floor((now-startedAt)/SHIP_SPRITE.frameMs));
+    if(elapsed<1){ requestAnimationFrame(step); return; }
+    onDone();
   };
-  requestAnimationFrame(animate);
+  requestAnimationFrame(step);
 }
 
 function show(id){

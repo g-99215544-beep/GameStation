@@ -984,17 +984,36 @@ test('a chest opened live while a hit is waiting discards it without playing', a
 // ever calling maybeShowHitPrompt(), so a hit landing mid-question stayed
 // hidden (and the HP bar stayed stale) until some unrelated event happened
 // to re-trigger the listener.
-// Final review, important 3: openCannonPanel() attaches its progress listener
-// only when online, and nothing ever attached it later. A group that opened the
-// panel while offline — the documented, expected case, since the Scan button is
-// meant to stay live while they walk the school grounds hunting a cannon QR —
-// was left with a dead panel after signal returned: the offline hint still up,
-// every fire button disabled, and every target at 100% because `allProgress`
-// had never been populated. Nothing on screen told them to close and reopen.
+// Final review, important 3: the progress listener attaches only when online,
+// and nothing ever attached it later. A group that opened the map while
+// offline — the documented, expected case, since the Scan button is meant to
+// stay live while they walk the school grounds hunting a cannon QR — was left
+// with a dead panel after signal returned: the offline hint still up, every
+// fire button disabled, and every target at 100% because `allProgress` had
+// never been populated. Nothing on screen told them to close and reopen.
+//
+// Task 2 moved this listener from the panel's open (openCannonPanel) to the
+// map's open (showJourneyMap), so the only way to reach a panel with no
+// listener ever having attached is for the map itself to have opened offline.
+// loginAsGroup reaches the map through several of its own async steps
+// (runOfflinePreload, session resolution, loadGroupProgress) that all read
+// isOffline() along the way, so flipping browserOnline after login — as this
+// test used to — no longer reproduces "never attached": by then the map has
+// already opened once online and the listener has already populated
+// allProgress. Driving the map directly (as tests/rival-ships.spec.js's
+// openMapAs does) reproduces the real moment instead of racing that chain.
 test('the cannon panel becomes usable when the network returns while it is open', async ({ page }) => {
   await openApp(page, seedHunt(cannonHunt()));
-  await loginAsGroup(page, 1);
-  await page.evaluate(() => { browserOnline = false; updateConnectivityBadge(); });
+  await expect(page.locator('#view-login')).toHaveClass(/active/);
+  await page.evaluate(() => {
+    currentHuntId = 'h1';
+    currentGroupId = '1';
+    progress = { currentIndex: 0, status: 'idle', keys: [], totalScore: 0, completedStations: {}, ammo: 1 };
+    browserOnline = false;
+    show('view-clue');
+    showJourneyMap();
+    updateConnectivityBadge();
+  });
   await page.locator('#cannonFab').click();
 
   await expect(page.locator('#cannonOfflineHint')).toHaveCount(1);
@@ -1200,7 +1219,7 @@ test('a target that opened its chest mid-shot aborts the transaction and keeps t
   // transaction — the test would then pass just as happily against code with
   // no transaction-level abort at all.
   await page.evaluate(() => {
-    if (cannonProgressRef) cannonProgressRef.off('value');
+    if (rivalProgressRef) rivalProgressRef.off('value');
     allProgress = JSON.parse(JSON.stringify(allProgress));
     window.__db.gamestation2026.hunts.h1.progress[2].status = 'won';
     window.__db.gamestation2026.hunts.h1.progress[2].finalScore = 270;

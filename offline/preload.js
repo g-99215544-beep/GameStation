@@ -13,7 +13,7 @@
   const LOCAL_ASSETS = [
     './', 'index.html', 'app/styles.css',
     'tangram/engine.js', 'tangram/shapes.js', 'tangram/ui.js',
-    'run/tracker.js', 'groups/roster.js', 'stations/layout.js',
+    'run/tracker.js', 'groups/roster.js', 'stations/layout.js', 'map/rivals.js',
     'sifir/engine.js', 'crossword/engine.js', 'battleship/engine.js',
     'cannon/engine.js', 'offline/store.js', 'offline/preload.js',
     'offline/resume.js', 'hunts/registry.js',

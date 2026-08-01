@@ -24,7 +24,20 @@ module.exports = function installFakeFirebase(seed) {
     if (last === undefined) return;
     if (value === null) delete node[last]; else node[last] = value;
   };
-  const notify = () => listeners.forEach(l => l.cb(snapshot(read(l.parts))));
+  // Real Firebase only calls a `.value` listener when data at (or under, or
+  // above) its own path actually changed — a write to progress/2/hp never
+  // reaches a listener on activeHuntId. Scope notifications the same way, or
+  // an unrelated write anywhere in the tree spuriously re-fires every listener
+  // in the app (e.g. re-triggering the login-screen redirect mid-session).
+  const related = (a, b) => {
+    const len = Math.min(a.length, b.length);
+    for (let i = 0; i < len; i++) if (a[i] !== b[i]) return false;
+    return true;
+  };
+  const notify = changedParts => listeners.forEach(l => {
+    if (changedParts && !related(l.parts, changedParts)) return;
+    l.cb(snapshot(read(l.parts)));
+  });
   const snapshot = value => ({
     val: () => (value === undefined ? null : value),
     exists: () => value !== undefined && value !== null
@@ -43,7 +56,7 @@ module.exports = function installFakeFirebase(seed) {
           if (listeners[i].parts.join('/') === parts.join('/')) listeners.splice(i, 1);
         }
       },
-      set: value => { write(parts, value); notify(); return Promise.resolve(); },
+      set: value => { write(parts, value); notify(parts); return Promise.resolve(); },
       // Real Firebase treats a key set to null in an update() as a delete of
       // that child, and — since it never stores empty container objects —
       // removes the parent entirely once its last child is gone. Mirror both:
@@ -56,13 +69,13 @@ module.exports = function installFakeFirebase(seed) {
           if (value[key] === null) delete merged[key]; else merged[key] = value[key];
         });
         write(parts, Object.keys(merged).length ? merged : null);
-        notify();
+        notify(parts);
         return Promise.resolve();
       },
-      remove: () => { write(parts, null); notify(); return Promise.resolve(); },
+      remove: () => { write(parts, null); notify(parts); return Promise.resolve(); },
       push: value => {
         const id = 'k' + (++pushCounter);
-        if (value !== undefined) { write(parts.concat(id), value); notify(); }
+        if (value !== undefined) { write(parts.concat(id), value); notify(parts.concat(id)); }
         const child = ref(parts.concat(id).join('/'));
         return Object.assign(Promise.resolve(child), child);
       },
@@ -72,7 +85,7 @@ module.exports = function installFakeFirebase(seed) {
           return Promise.resolve({ committed: false, snapshot: snapshot(read(parts)) });
         }
         write(parts, next);
-        notify();
+        notify(parts);
         return Promise.resolve({ committed: true, snapshot: snapshot(next) });
       }
     };
