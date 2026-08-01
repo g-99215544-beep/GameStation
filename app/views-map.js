@@ -145,25 +145,44 @@ function placeRivalShip(node,point){
   node.style.top=point.y+'%';
 }
 // A plate has no berth of its own — it just rides along with whichever ship
-// it names, at the same x. RIVAL_PLATE_LIFT pulls its y up above the ship
-// sprite before .journey-rival-plate's own translate(-50%,-100%) (CSS) grows
-// it further upward from there: a CSS percentage transform alone cannot do
-// this because it is relative to the tiny plate's OWN height, not the much
-// taller ship's.
+// it names, at the same x. The lift pulls its y up above the ship sprite
+// before .journey-rival-plate's own translate(-50%,-100%) (CSS) grows it
+// further upward from there: a CSS percentage transform alone cannot do this
+// because it is relative to the tiny plate's OWN height, not the much taller
+// ship's.
 //
-// 14, not the ~10 that merely clears .journey-rival-ship's own rendered
-// height: a rival sharing the pupil's own island can sit as close as
-// BERTHS[2] (dx:0, dy:6.5) — almost directly under #journeyShipHp, the
-// pupil's own HP badge, which floats at (the pupil's own anchor y - 4).
-// Rendering that exact case (all 4 groups on one island) and looking at it
-// showed a berth-10 plate landing right on top of the HP badge's own text,
-// interleaving both into an unreadable mess — a defect elementFromPoint
-// cannot see (both are ordinary painted text, not a stacking bug) but a
-// screenshot makes obvious. 14 clears the HP badge's own small height too.
-const RIVAL_PLATE_LIFT=14;
-function placeRivalPlate(node,point){
+// One lift per BERTHS slot, not a single shared constant: BERTHS packs all
+// three rivals within 10 horizontal points of each other, so when a rival
+// shares the pupil's own island — the common case, not an edge case, given
+// 14 groups on 3-6 islands — a single lift put plates close enough in height
+// that two of them (berths dx:-10 and dx:0, only 10 points apart) overlapped
+// horizontally by close to a quarter of their width, muddling both names.
+// Staggering the lift by slot spreads the three plates across three
+// different heights, each confirmed clear of the other two by a real gap
+// (not just touching), so they cannot collide however close their ships'
+// x positions are.
+//
+// Values tuned by rendering the worst case (pupil + all three rivals on one
+// island) and reading the screenshot, not by arithmetic — arithmetic alone
+// is what produced this module's first attempt (10/17/24), which looked
+// staggered but was never actually checked against what else occupies that
+// same vertical corridor: #journeyIslandButtons. Island buttons are a full
+// 24%-wide, ~78px-tall hit target (app/styles.css), so the gap between one
+// island's button and the next is much narrower than it looks, and a rival
+// plate lifted too far up (or, for the berth directly below the pupil,
+// lifted too little) lands its centre point inside a NEIGHBOURING island's
+// button instead of its own name — invisible to a screenshot (the text still
+// reads fine in isolation) but caught by "a rival ship never covers the
+// pupil's own ship" (tests/rival-ships.spec.js), which resolves each plate's
+// own centre point via elementFromPoint. 15/9/16 is the smallest-drift
+// combination found clear of every island button in that worst case while
+// still keeping each plate legibly separate from the other two and from the
+// pupil's own #journeyShipHp badge.
+const RIVAL_PLATE_LIFTS=[15,9,16];
+function placeRivalPlate(node,point,slot){
+  const lift=RIVAL_PLATE_LIFTS[slot]==null ? RIVAL_PLATE_LIFTS[0] : RIVAL_PLATE_LIFTS[slot];
   node.style.left=point.x+'%';
-  node.style.top=(point.y-RIVAL_PLATE_LIFT)+'%';
+  node.style.top=(point.y-lift)+'%';
 }
 function paintRivalShip(node,plateNode,rival){
   const hp=CannonEngine.readHp(allProgress[rival.gid]);
@@ -226,7 +245,7 @@ function sailRivalShip(node,plateNode,rival,move){
     // snap to the destination immediately (if placed once up front) or keep
     // naming a spot the ship already sailed away from (if left alone) —
     // either way the name would stop pointing at its own ship mid-voyage.
-    place:point=>{ placeRivalShip(node,point); placeRivalPlate(plateNode,point); },
+    place:point=>{ placeRivalShip(node,point); placeRivalPlate(plateNode,point,rival.slot); },
     setFrame:frame=>setRivalShipFrame(node,frame)
   });
 }
@@ -261,7 +280,7 @@ function renderRivalShips(){
     paintRivalShip(node,plateNode,rival);
     const move=moves.find(entry=>entry.gid===rival.gid);
     if(move) sailRivalShip(node,plateNode,rival,move);
-    else { placeRivalShip(node,rival); placeRivalPlate(plateNode,rival); }
+    else { placeRivalShip(node,rival); placeRivalPlate(plateNode,rival,rival.slot); }
   });
   rivalPositions=RivalShips.positions(placed);
 }
