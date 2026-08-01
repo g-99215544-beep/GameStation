@@ -52,6 +52,15 @@ async function openMapAs(page, seed, gid) {
   await page.addInitScript(installFakeFirebase, seed);
   await page.goto(INDEX);
   await expect(page.locator('#view-login')).toHaveClass(/active/);
+  // The daily intro overlay (z-index:1000) autoplays on first load — a fresh
+  // test context has no "last seen" localStorage entry — and stays visible
+  // for long enough that a fast, few-step test can still be mid-fade when it
+  // runs its assertions. Matches the same dismissal other specs already use
+  // (e.g. tests/asset-loading.spec.js); harmless for tests that never touch
+  // it, but load-bearing for anything here that hit-tests via
+  // document.elementFromPoint, which — unlike Playwright's own actionability
+  // checks — does not wait out a transient overlay on its own.
+  await page.evaluate(() => { const intro = document.getElementById('dailyIntro'); if (intro) intro.hidden = true; });
   await page.evaluate(async id => {
     currentHuntId = 'h1';
     currentGroupId = id;
@@ -72,6 +81,98 @@ test('the map keeps every group\'s progress live while it is open', async ({ pag
   // A change written by another group must reach this phone without a reload.
   await page.evaluate(() => huntRef('progress/2/currentIndex').set(5));
   await expect.poll(() => page.evaluate(() => allProgress['2'].currentIndex)).toBe(5);
+});
+
+test('rivals do not sail on open before the first real snapshot arrives', async ({ page }) => {
+  // Real Firebase delivers .on('value') asynchronously, but showJourneyMap()
+  // calls attachMapProgressListener() and then renderRivalShips() back to
+  // back with no await between them. tests/helpers/fake-firebase.js fires
+  // on()'s callback SYNCHRONOUSLY (see its own header comment), so in every
+  // other spec in this file `allProgress` is already fresh before that first
+  // render even runs — exactly why this bug had no test before now. This
+  // spec wraps just the hunt's progress-ref listener so its snapshot
+  // delivery is asynchronous, like real Firebase, so the gap actually gets
+  // exercised.
+  //
+  // Trimmed to 4 total groups (not the usual 14) so selectNearest's "3
+  // nearest" always returns the SAME 3 gids regardless of standings: with a
+  // stale, empty allProgress every group ranks at position 0, so a full
+  // 14-group hunt would pick different (lower-id) rivals from the stale
+  // render than the real one, and a mismatched gid set can never look like
+  // "movement" once the real snapshot lands. Only when the same gids are
+  // selected both times can a wrong stale position actually surface as a
+  // recorded, animated move — which is the failure this test exists to
+  // catch.
+  const seed = seedHunt({ 1: { currentIndex: 4 }, 2: { currentIndex: 6 }, 3: { currentIndex: 5 }, 4: { currentIndex: 1 } });
+  const cfg = seed.gamestation2026.hunts.h1.config;
+  const seededProgress = seed.gamestation2026.hunts.h1.progress;
+  ['5', '6', '7', '8', '9', '10', '11', '12', '13', '14'].forEach(gid => {
+    delete cfg.groups[gid];
+    delete seededProgress[gid];
+  });
+
+  await page.route('https://www.gstatic.com/firebasejs/**', route => route.fulfill({ body: '' }));
+  await page.addInitScript(installFakeFirebase, seed);
+  // Patch only the 'gamestation2026/hunts/h1/progress' ref's on() to dispatch
+  // asynchronously instead of synchronously. Every other ref, and every other
+  // spec's own fake-firebase instance, is untouched.
+  await page.addInitScript(() => {
+    const realDatabase = window.firebase.database;
+    window.firebase.database = (...args) => {
+      const database = realDatabase(...args);
+      const realRef = database.ref;
+      database.ref = path => {
+        const api = realRef(path);
+        if (path !== 'gamestation2026/hunts/h1/progress') return api;
+        const realOn = api.on;
+        // A real, if generous, delay rather than setTimeout(...,0): the
+        // assertion just below needs a reliable window to observe the
+        // "before the first snapshot" state despite the Node<->browser
+        // round-trip between page.evaluate() returning and the next
+        // Playwright command actually running.
+        api.on = (event, cb) => { realOn(event, snap => { setTimeout(() => cb(snap), 100); }); };
+        return api;
+      };
+      return database;
+    };
+  });
+  await page.goto(INDEX);
+  await expect(page.locator('#view-login')).toHaveClass(/active/);
+  await page.evaluate(async id => {
+    currentHuntId = 'h1';
+    currentGroupId = id;
+    const snap = await huntRef('progress/' + id).once('value');
+    progress = snap.val();
+    show('view-clue');
+    showJourneyMap();
+  }, '1');
+  await expect(page.locator('#journeyMap')).toBeVisible();
+
+  // Before the (deliberately delayed) first snapshot arrives, the map must
+  // show no rivals at all — not stale ones drawn from whatever allProgress
+  // last held — exactly like the offline state.
+  await expect(page.locator('#journeyRivalShips .journey-rival')).toHaveCount(0);
+
+  // Once the real snapshot lands, each rival must appear ALREADY at its real
+  // island — never sailing there, because as far as this attachment is
+  // concerned it was never anywhere else.
+  await expect(page.locator('#journeyRivalShips .journey-rival')).toHaveCount(3);
+  const readTop = gid => page.locator(`.journey-rival[data-gid="${gid}"]`).evaluate(node => parseFloat(node.style.top));
+  const destinations = await page.evaluate(() => ({
+    2: RivalShips.pointAt(6, 0, MAP_STOPS).y,
+    3: RivalShips.pointAt(5, 0, MAP_STOPS).y,
+    4: RivalShips.pointAt(1, 0, MAP_STOPS).y
+  }));
+  for (const gid of ['2', '3', '4']) {
+    expect(Math.abs((await readTop(gid)) - destinations[gid])).toBeLessThan(0.5);
+  }
+  // Confirm this isn't just early in an accidental sail that happens to pass
+  // through the right spot — it must still be there well after a real
+  // RIVAL_VOYAGE_MS (2700ms) sail would have finished moving it anywhere.
+  await page.waitForTimeout(600);
+  for (const gid of ['2', '3', '4']) {
+    expect(Math.abs((await readTop(gid)) - destinations[gid])).toBeLessThan(0.5);
+  }
 });
 
 test('leaving the map detaches the progress listener', async ({ page }) => {
@@ -100,39 +201,87 @@ test('the three nearest rivals appear with names and HP bars', async ({ page }) 
     nodes => nodes.map(n => n.dataset.gid).sort());
   expect(shown).toEqual(['11', '5', '9']);
 
-  await expect(page.locator('.journey-rival[data-gid="5"] .journey-rival-name')).toHaveText('Kumpulan 5');
-  await expect(page.locator('.journey-rival[data-gid="11"] .journey-rival-hp-fill'))
+  // Name + HP now live in the #journeyRivalPlates overlay, keyed by the same
+  // data-gid as the ship button, not nested inside .journey-rival itself —
+  // see the CSS comment on #journeyRivalPlates for why that nesting is what
+  // trapped a plate under the pupil's own ship.
+  await expect(page.locator('.journey-rival-plate[data-gid="5"] .journey-rival-name')).toHaveText('Kumpulan 5');
+  await expect(page.locator('.journey-rival-plate[data-gid="11"] .journey-rival-hp-fill'))
     .toHaveAttribute('style', /width:\s*60%/);
 });
 
 test('a rival ship never covers the pupil\'s own ship', async ({ page }) => {
-  await openMapAs(page, seedHunt({ 1: { currentIndex: 3 }, 2: { currentIndex: 3 } }), 1);
-  const rival = page.locator('.journey-rival[data-gid="2"]');
-  await expect(rival).toBeVisible();
-  const [shipBox, rivalBox] = await Promise.all([
-    page.locator('#journeyShip').boundingBox(),
-    rival.boundingBox()
-  ]);
-  expect(Math.abs(shipBox.x - rivalBox.x) + Math.abs(shipBox.y - rivalBox.y)).toBeGreaterThan(5);
+  // The pupil plus all three visible rivals sharing one island is the case
+  // the controller actually rendered and confirmed reads badly: a rival's
+  // name plate used to live inside its .journey-rival button's own stacking
+  // context (z-index:1), which trapped it under the pupil's own ship
+  // (z-index:2) no matter how far the hull was nudged — moving the hull far
+  // enough to clear the pupil's ship just made the rival read as moored at a
+  // NEIGHBOURING island instead, which is worse (a false position, not just
+  // an unreadable one). The actual fix moves the plate out of the ship's
+  // stacking context entirely, into its own overlay (#journeyRivalPlates,
+  // app/styles.css) above the pupil's ship — so this is a stacking-order
+  // check, not a geometry one.
+  await openMapAs(page, seedHunt({
+    1: { currentIndex: 3 }, 2: { currentIndex: 3 }, 3: { currentIndex: 3 }, 4: { currentIndex: 3 }
+  }), 1);
+  await expect(page.locator('#journeyRivalShips .journey-rival')).toHaveCount(3);
+
+  // #journeyShip is deliberately pointer-events:none (app/styles.css, so it
+  // can never steal a tap), which also means elementFromPoint can NEVER
+  // resolve to it no matter the stacking order — so the per-rival check
+  // below cannot, by itself, prove a plate paints above the pupil's ship.
+  // Assert the mechanism the fix actually relies on directly: confirmed this
+  // matters by temporarily dropping #journeyRivalPlates' z-index and
+  // watching this assertion (and only this one) go red while every
+  // elementFromPoint check below kept passing regardless.
+  const zIndexes = await page.evaluate(() => ({
+    plates: Number(getComputedStyle(document.getElementById('journeyRivalPlates')).zIndex),
+    ship: Number(getComputedStyle(document.getElementById('journeyShip')).zIndex)
+  }));
+  expect(zIndexes.plates).toBeGreaterThan(zIndexes.ship);
+
+  for (const gid of ['2', '3', '4']) {
+    const plate = page.locator(`.journey-rival-plate[data-gid="${gid}"]`);
+    await expect(plate).toBeVisible();
+    const box = await plate.boundingBox();
+    const centre = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const resolvedGid = await page.evaluate(pt => {
+      const el = document.elementFromPoint(pt.x, pt.y);
+      const plateEl = el && el.closest('.journey-rival-plate');
+      return plateEl ? plateEl.dataset.gid : null;
+    }, centre);
+    // The previous assertion here compared top-left CORNERS of boxes with
+    // different widths (.journey-ship is 25% wide, .journey-rival is 16%),
+    // so even a berth of {0,0} "passed" by ~17px on a 390px phone — it never
+    // actually checked for overlap. This checks the real thing: the centre
+    // of a rival's own name plate must resolve to that plate (or a node
+    // inside it, e.g. the name text) — never to the pupil's ship (which
+    // could not resolve here even by accident: #journeyShip is
+    // pointer-events:none, exactly so it can never sit "on top" of anything
+    // for hit-testing) and never to a DIFFERENT rival's plate drawn over it.
+    expect(resolvedGid).toBe(gid);
+  }
 });
 
 test('a rival that opened its chest docks at the last island with a trophy', async ({ page }) => {
   await openMapAs(page, seedHunt({ 1: { currentIndex: 5 }, 2: { currentIndex: 6, status: 'won' } }), 1);
   const rival = page.locator('.journey-rival[data-gid="2"]');
+  const plate = page.locator('.journey-rival-plate[data-gid="2"]');
   await expect(rival).toHaveClass(/is-won/);
   // The bar element stays in the DOM and is hidden, so assert on visibility
   // rather than count — toHaveCount(0) would fail against a hidden element.
-  await expect(rival.locator('.journey-rival-hp')).toBeHidden();
-  await expect(rival.locator('.journey-rival-trophy')).toBeVisible();
-  await expect(rival.locator('.journey-rival-trophy')).toHaveText('🏆');
+  await expect(plate.locator('.journey-rival-hp')).toBeHidden();
+  await expect(plate.locator('.journey-rival-trophy')).toBeVisible();
+  await expect(plate.locator('.journey-rival-trophy')).toHaveText('🏆');
 });
 
 test('an HP change reaches the map without a reload', async ({ page }) => {
   await openMapAs(page, seedHunt({ 1: { currentIndex: 3 }, 2: { currentIndex: 4 } }), 1);
-  await expect(page.locator('.journey-rival[data-gid="2"] .journey-rival-hp-fill'))
+  await expect(page.locator('.journey-rival-plate[data-gid="2"] .journey-rival-hp-fill'))
     .toHaveAttribute('style', /width:\s*100%/);
   await page.evaluate(() => huntRef('progress/2/hp').set(70));
-  await expect(page.locator('.journey-rival[data-gid="2"] .journey-rival-hp-fill'))
+  await expect(page.locator('.journey-rival-plate[data-gid="2"] .journey-rival-hp-fill'))
     .toHaveAttribute('style', /width:\s*70%/);
 });
 

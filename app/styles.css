@@ -42,9 +42,26 @@
      the map's most important control by a rival's hull. A rival stays tappable
      instead by never substantially overlapping a button's hit box in the first
      place (see BERTHS in map/rivals.js), not by outranking it here. */
-  #journeyRivalShips .journey-rival{position:absolute;z-index:1;display:flex;flex-direction:column;align-items:center;gap:2px;width:16%;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;text-shadow:none;transform:translate(-50%,-88%);cursor:pointer;opacity:.9;transition:none;touch-action:manipulation;}
+  #journeyRivalShips .journey-rival{position:absolute;z-index:1;width:16%;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;text-shadow:none;transform:translate(-50%,-88%);cursor:pointer;opacity:.9;transition:none;touch-action:manipulation;}
   #journeyRivalShips .journey-rival:hover,#journeyRivalShips .journey-rival:focus-visible{background:transparent;opacity:1;outline:2px solid #fff3a5;outline-offset:2px;}
-  .journey-rival-plate{display:flex;flex-direction:column;align-items:center;gap:1px;pointer-events:none;}
+  /* A full-canvas overlay (not a plain child of #journeyRivalShips) so its
+     z-index actually applies (z-index is a no-op on a static, non-positioned
+     element) and, crucially, so a plate is painted in ITS OWN stacking
+     context rather than nested inside .journey-rival's (z-index:1) — nesting
+     is what previously trapped a plate under the pupil's own ship (z-index:2)
+     no matter how the plate itself was styled. Above the pupil's ship, below
+     the island buttons (z-index:4): sailing onward must still win a tap
+     contest, same reasoning as the comment on .journey-ship above. */
+  #journeyRivalPlates{position:absolute;inset:0;z-index:3;pointer-events:none;}
+  /* pointer-events:auto opts back IN over the container's none (pointer-events
+     inherits): the empty water around each plate must stay click-through, but
+     a plate itself needs to be a real, hit-testable element or nothing could
+     ever verify — with elementFromPoint, not by eye — which ship a name
+     actually belongs to. It still has no click handler and no tabindex, so it
+     is not a new tap target for a pupil; the island-button z-index (4, above
+     this layer's 3) still wins any contest for a tap, same as it always has
+     against a rival's own ship. */
+  .journey-rival-plate{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;gap:1px;pointer-events:auto;}
   .journey-rival-name{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;font-weight:800;color:#fff;text-shadow:0 1px 2px #000;}
   .journey-rival-hp{width:40px;height:5px;border-radius:3px;background:var(--red);border:1px solid #00000055;overflow:hidden;}
   .journey-rival-hp[hidden]{display:none;}

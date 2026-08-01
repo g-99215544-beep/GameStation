@@ -30,6 +30,19 @@
   // pass cannot quietly widen these enough to fling ships off their island
   // again.
   const BERTH_ENVELOPE = { maxDx: 10, maxDy: 7 };
+  // A rival sharing the pupil's OWN island used to be handled by a second,
+  // wider berth set — but widening the HULL's offset to clear the pupil's
+  // ship necessarily either overlaps it (small nudge) or drifts toward a
+  // NEIGHBOURING island's mooring (wide nudge): with a 25%-wide pupil ship
+  // plus three 16%-wide rivals, there is no hull offset that clears one
+  // without lying about the other. Confirmed by rendering it: readable names
+  // came at the cost of a rival visibly mooring beside the wrong island,
+  // which a pupil reads as "that group is one island ahead/behind" — false,
+  // and the same failure Task 5 rejected once already. The actual fix is in
+  // app/views-map.js: the name plate now lives in its own overlay layer
+  // (#journeyRivalPlates) above the pupil's ship, so readability no longer
+  // depends on moving the hull at all — every rival, including one sharing
+  // the pupil's own island, uses the single BERTHS set above.
 
   function num(value, fallback) {
     const n = Number(value);

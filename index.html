@@ -54,6 +54,14 @@
     </video>
     <div id="journeyRivalShips" aria-label="Kapal kumpulan lain"></div>
     <div class="journey-ship" id="journeyShip" aria-hidden="true"></div>
+    <!-- Name plates for rival ships. A sibling of #journeyRivalShips (not
+         nested inside it) so its z-index is not trapped inside the .journey-rival
+         button's own stacking context — that trap is exactly why a rival's
+         plate could never paint above the pupil's own ship before. Purely
+         visual: aria-hidden because each rival's name + HP already lives in
+         its ship button's own aria-label, and pointer-events:none so it can
+         never intercept a tap meant for the ship or an island underneath it. -->
+    <div id="journeyRivalPlates" aria-hidden="true"></div>
     <div class="journey-ship-hp" id="journeyShipHp" hidden aria-live="polite">
       <div class="journey-ship-hp-bar"><span class="journey-ship-hp-fill" id="journeyShipHpFill"></span></div>
       <span class="journey-ship-hp-text" id="journeyShipHpText">100%</span>

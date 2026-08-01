@@ -78,6 +78,15 @@ let journeyMoving=false;
 // owns it and the panel just reads what is already here.
 let allProgress={};
 let rivalProgressRef=null;
+// Real Firebase delivers .on('value') asynchronously, but showJourneyMap()
+// calls attachMapProgressListener() and then renderRivalShips() back to back,
+// synchronously. Without this flag that second call draws rivals from
+// whatever `allProgress` was left holding (stale from a previous attachment,
+// or {} on a fresh load) and records those stale islands into
+// rivalPositions; when the real snapshot then lands, RivalShips.diff reads
+// the difference as movement and sails ships that never actually moved.
+// false until the first snapshot for *this* attachment has actually arrived.
+let rivalProgressReady=false;
 // Last rendered gid -> island. Cleared on detach, which is what stops several
 // ships lurching across the map at once when a phone comes back online: with
 // no previous position, a ship simply appears where it belongs.
@@ -85,9 +94,11 @@ let rivalPositions={};
 
 function attachMapProgressListener(){
   if(isOffline() || rivalProgressRef) return;
+  rivalProgressReady=false;
   rivalProgressRef=huntRef('progress');
   rivalProgressRef.on('value',snap=>{
     allProgress=snap.val()||{};
+    rivalProgressReady=true;
     renderRivalShips();
     const panel=document.getElementById('cannonPanel');
     if(panel && !panel.hidden) renderCannonPanel();
@@ -95,6 +106,7 @@ function attachMapProgressListener(){
 }
 function detachMapProgressListener(){
   if(rivalProgressRef){ rivalProgressRef.off('value'); rivalProgressRef=null; }
+  rivalProgressReady=false;
   rivalPositions={};
   rivalVoyageTokens={};
 }
@@ -108,27 +120,58 @@ function buildRivalShip(rival){
   node.type='button';
   node.className='journey-rival';
   node.dataset.gid=rival.gid;
-  node.innerHTML=`<span class="journey-rival-plate">
-      <span class="journey-rival-name"></span>
-      <span class="journey-rival-hp"><span class="journey-rival-hp-fill"></span></span>
-      <span class="journey-rival-trophy" hidden>🏆</span>
-    </span>
-    <span class="journey-rival-ship"></span>`;
+  node.innerHTML=`<span class="journey-rival-ship"></span>`;
   node.querySelector('.journey-rival-ship').style.filter=`hue-rotate(${rivalHue(rival.gid)}deg) saturate(.85)`;
   node.addEventListener('click',()=>openCannonPanel(rival.gid));
+  return node;
+}
+// The name + HP plate lives in its own element in the #journeyRivalPlates
+// overlay (index.html), a sibling of #journeyRivalShips rather than a child
+// of the ship button — see the CSS comment on #journeyRivalPlates for why
+// nesting it inside .journey-rival trapped it under the pupil's own ship no
+// matter how it was positioned. Purely decorative: the ship button's own
+// aria-label already carries the group's name and HP for assistive tech.
+function buildRivalPlate(rival){
+  const node=document.createElement('div');
+  node.className='journey-rival-plate';
+  node.dataset.gid=rival.gid;
+  node.innerHTML=`<span class="journey-rival-name"></span>
+    <span class="journey-rival-hp"><span class="journey-rival-hp-fill"></span></span>
+    <span class="journey-rival-trophy" hidden>🏆</span>`;
   return node;
 }
 function placeRivalShip(node,point){
   node.style.left=point.x+'%';
   node.style.top=point.y+'%';
 }
-function paintRivalShip(node,rival){
+// A plate has no berth of its own — it just rides along with whichever ship
+// it names, at the same x. RIVAL_PLATE_LIFT pulls its y up above the ship
+// sprite before .journey-rival-plate's own translate(-50%,-100%) (CSS) grows
+// it further upward from there: a CSS percentage transform alone cannot do
+// this because it is relative to the tiny plate's OWN height, not the much
+// taller ship's.
+//
+// 14, not the ~10 that merely clears .journey-rival-ship's own rendered
+// height: a rival sharing the pupil's own island can sit as close as
+// BERTHS[2] (dx:0, dy:6.5) — almost directly under #journeyShipHp, the
+// pupil's own HP badge, which floats at (the pupil's own anchor y - 4).
+// Rendering that exact case (all 4 groups on one island) and looking at it
+// showed a berth-10 plate landing right on top of the HP badge's own text,
+// interleaving both into an unreadable mess — a defect elementFromPoint
+// cannot see (both are ordinary painted text, not a stacking bug) but a
+// screenshot makes obvious. 14 clears the HP badge's own small height too.
+const RIVAL_PLATE_LIFT=14;
+function placeRivalPlate(node,point){
+  node.style.left=point.x+'%';
+  node.style.top=(point.y-RIVAL_PLATE_LIFT)+'%';
+}
+function paintRivalShip(node,plateNode,rival){
   const hp=CannonEngine.readHp(allProgress[rival.gid]);
   node.classList.toggle('is-won',rival.finished);
-  node.querySelector('.journey-rival-name').textContent=rival.name;
-  node.querySelector('.journey-rival-hp').hidden=rival.finished;
-  node.querySelector('.journey-rival-trophy').hidden=!rival.finished;
-  node.querySelector('.journey-rival-hp-fill').style.width=hp+'%';
+  plateNode.querySelector('.journey-rival-name').textContent=rival.name;
+  plateNode.querySelector('.journey-rival-hp').hidden=rival.finished;
+  plateNode.querySelector('.journey-rival-trophy').hidden=!rival.finished;
+  plateNode.querySelector('.journey-rival-hp-fill').style.width=hp+'%';
   node.setAttribute('aria-label',rival.finished
     ? `${rival.name} sudah buka peti`
     : `${rival.name}, HP ${hp} peratus. Buka panel meriam.`);
@@ -169,7 +212,7 @@ function readRivalShipPoint(node){
 }
 // Rival voyages are deliberately silent: only the pupil's own ship plays the
 // sailing audio, or three ships moving at once would be a wall of noise.
-function sailRivalShip(node,rival,move){
+function sailRivalShip(node,plateNode,rival,move){
   const from=readRivalShipPoint(node) || RivalShips.pointAt(move.from,rival.slot,MAP_STOPS);
   const to={x:rival.x,y:rival.y};
   const token=(rivalVoyageTokens[rival.gid]||0)+1;
@@ -179,7 +222,11 @@ function sailRivalShip(node,rival,move){
     from, to,
     duration:rivalWantsInstantMove() ? 0 : RIVAL_VOYAGE_MS,
     isCancelled:()=>rivalVoyageTokens[rival.gid]!==token || !node.isConnected,
-    place:point=>placeRivalShip(node,point),
+    // The plate has to move in lockstep, frame by frame, or it would either
+    // snap to the destination immediately (if placed once up front) or keep
+    // naming a spot the ship already sailed away from (if left alone) —
+    // either way the name would stop pointing at its own ship mid-voyage.
+    place:point=>{ placeRivalShip(node,point); placeRivalPlate(plateNode,point); },
     setFrame:frame=>setRivalShipFrame(node,frame)
   });
 }
@@ -189,11 +236,14 @@ function sailRivalShip(node,rival,move){
 // HP changes and re-renders the map.
 function renderRivalShips(){
   const holder=document.getElementById('journeyRivalShips');
-  if(!holder) return;
-  // A missing module or a dead connection means no trustworthy positions. The
-  // pupil's own voyage is untouched — it has never needed the network.
-  if(typeof RivalShips==='undefined' || isOffline() || !groups || currentGroupId==null){
+  const plateHolder=document.getElementById('journeyRivalPlates');
+  if(!holder || !plateHolder) return;
+  // A missing module, a dead connection, or no confirmed-fresh snapshot yet
+  // means no trustworthy positions. The pupil's own voyage is untouched — it
+  // has never needed the network.
+  if(typeof RivalShips==='undefined' || isOffline() || !rivalProgressReady || !groups || currentGroupId==null){
     holder.innerHTML='';
+    plateHolder.innerHTML='';
     rivalPositions={};
     return;
   }
@@ -201,14 +251,17 @@ function renderRivalShips(){
   const placed=RivalShips.layout(RivalShips.selectNearest(ranked,currentGroupId),MAP_STOPS);
   const keep=new Set(placed.map(rival=>rival.gid));
   Array.from(holder.children).forEach(node=>{ if(!keep.has(node.dataset.gid)) node.remove(); });
+  Array.from(plateHolder.children).forEach(node=>{ if(!keep.has(node.dataset.gid)) node.remove(); });
   const moves=RivalShips.diff(rivalPositions,placed);
   placed.forEach(rival=>{
     let node=holder.querySelector(`.journey-rival[data-gid="${rival.gid}"]`);
     if(!node){ node=buildRivalShip(rival); holder.appendChild(node); }
-    paintRivalShip(node,rival);
+    let plateNode=plateHolder.querySelector(`.journey-rival-plate[data-gid="${rival.gid}"]`);
+    if(!plateNode){ plateNode=buildRivalPlate(rival); plateHolder.appendChild(plateNode); }
+    paintRivalShip(node,plateNode,rival);
     const move=moves.find(entry=>entry.gid===rival.gid);
-    if(move) sailRivalShip(node,rival,move);
-    else placeRivalShip(node,rival);
+    if(move) sailRivalShip(node,plateNode,rival,move);
+    else { placeRivalShip(node,rival); placeRivalPlate(plateNode,rival); }
   });
   rivalPositions=RivalShips.positions(placed);
 }
@@ -311,6 +364,8 @@ function hideJourneyMap(){
   detachMapProgressListener();
   const rivalHolder=document.getElementById('journeyRivalShips');
   if(rivalHolder) rivalHolder.innerHTML='';
+  const rivalPlateHolder=document.getElementById('journeyRivalPlates');
+  if(rivalPlateHolder) rivalPlateHolder.innerHTML='';
   const map=document.getElementById('journeyMap');
   const popup=document.getElementById('journeyScorePopup');
   if(map) map.hidden=true;
