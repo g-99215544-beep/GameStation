@@ -32,6 +32,7 @@ function openCannonPanel(targetGid){
   const passwordInput=document.getElementById('cannonPasswordInput');
   if(passwordInput) passwordInput.value='';
   renderCannonPanel();
+  scrollCannonTargetIntoView();
 }
 function closeCannonPanel(){
   const panel=document.getElementById('cannonPanel');
@@ -76,10 +77,17 @@ function renderCannonPanel(){
       <span class="cannon-target-name">Kumpulan ${gid}</span>${bar}${action}
     </div>`;
   }).join('') + offlineHint;
-  // The panel's target list scrolls, and a tapped group can be well below the
-  // fold — opening on a list that does not show the group the pupil just tapped
-  // would read as the tap having done nothing.
-  const targeted=cannonTargetGid && list.querySelector(`.cannon-target[data-gid="${cannonTargetGid}"]`);
+}
+// The panel scrolls (.cannon-panel is overflow-y:auto), and a tapped group can
+// be well below the fold — opening on a list that does not show the group the
+// pupil just tapped would read as the tap having done nothing. Called once
+// from openCannonPanel(), NOT from renderCannonPanel(): the map's progress
+// listener re-renders the panel on every write anywhere in the hunt (roughly
+// once every 30s in a live session), and scrolling on every render was
+// yanking a child's own in-progress scroll back to the targeted row.
+function scrollCannonTargetIntoView(){
+  const list=document.getElementById('cannonTargets');
+  const targeted=cannonTargetGid && list && list.querySelector(`.cannon-target[data-gid="${cannonTargetGid}"]`);
   if(targeted) targeted.scrollIntoView({block:'nearest'});
 }
 let cannonQrCode=null;

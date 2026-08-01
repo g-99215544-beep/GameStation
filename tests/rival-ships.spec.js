@@ -398,6 +398,40 @@ test('the highlight survives a live progress update while the panel is open', as
   await expect(page.locator('.cannon-target[data-gid="2"]')).toHaveClass(/is-targeted/);
 });
 
+test('scrolling the cannon panel survives an unrelated progress update while a target is set', async ({ page }) => {
+  // .cannon-panel itself is the overflow-y:auto element (not a separate inner
+  // list), and the map's progress listener re-renders the open panel on
+  // every write anywhere in the hunt — roughly once every 30s in a live
+  // 14-group session. renderCannonPanel() used to call scrollIntoView() on
+  // the targeted row on every one of those re-renders, snapping a child's own
+  // in-progress scroll (e.g. scrolling down to reach a different group) back
+  // toward row 2 each time.
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 0, ammo: 2 }, 2: { currentIndex: 3 } }), 1);
+  await page.locator('.journey-rival[data-gid="2"]').click();
+  await expect(page.locator('.cannon-target[data-gid="2"]')).toHaveClass(/is-targeted/);
+
+  const panel = page.locator('#cannonPanel');
+  const scrolled = await panel.evaluate(node => {
+    node.scrollTop = node.scrollHeight;   // scroll all the way past the targeted row
+    return node.scrollTop;
+  });
+  // Guards against a panel that never actually overflows (13 other groups at
+  // ~40px/row inside a fixed inset comfortably does) — a scrollTop of 0 here
+  // would make the assertion below vacuously true no matter what the code did.
+  expect(scrolled).toBeGreaterThan(0);
+
+  // A write to a DIFFERENT group's progress — not group 2, the one targeted —
+  // still re-renders the panel, because attachMapProgressListener() listens
+  // on the whole 'progress' node, not per-child.
+  await page.evaluate(() => huntRef('progress/8/hp').set(70));
+  // Confirms the re-render actually happened, so a no-op write can't make
+  // this assertion pass vacuously either.
+  await expect(page.locator('.cannon-target[data-gid="8"] .cannon-target-hp-fill'))
+    .toHaveAttribute('style', /width:\s*70%/);
+
+  await expect.poll(() => panel.evaluate(node => node.scrollTop)).toBe(scrolled);
+});
+
 test('closing the panel clears the target', async ({ page }) => {
   await openMapAs(page, seedHunt({ 1: { currentIndex: 0, ammo: 2 }, 2: { currentIndex: 3 } }), 1);
   await page.locator('.journey-rival[data-gid="2"]').click();
