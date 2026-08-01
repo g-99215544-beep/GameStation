@@ -269,22 +269,54 @@ test('rival ships disappear offline and come back without sailing', async ({ pag
   await openMapAs(page, seedHunt({ 1: { currentIndex: 3 }, 2: { currentIndex: 4 } }), 1);
   await expect(page.locator('#journeyRivalShips .journey-rival')).toHaveCount(3);
 
+  // Drive real browser connectivity events rather than poking browserOnline
+  // and updateConnectivityBadge() directly, so a broken 'offline'/'online'
+  // listener registration (app/connectivity.js) would fail this test too.
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+
   // Stale positions are worse than none, so the ships are removed outright.
-  await page.evaluate(() => { browserOnline = false; updateConnectivityBadge(); });
   await expect(page.locator('#journeyRivalShips .journey-rival')).toHaveCount(0);
 
   // The pupil's own voyage never depended on the network.
   await expect(page.locator('#journeyShip')).toBeVisible();
   await expect(page.locator('[aria-label="Pergi ke Pulau 4"]')).toHaveCount(1);
 
-  await page.evaluate(() => { browserOnline = true; updateConnectivityBadge(); });
+  // Move a rival WHILE offline. The seed keeps every position identical
+  // across the offline window, `RivalShips.diff()` never sees a change, and
+  // "no sail" is trivially true whether or not `rivalPositions` was reset —
+  // this write is what actually exercises the guard: gid 2 goes from island
+  // 4 to island 5 while the map cannot render anyone.
+  await page.evaluate(() => huntRef('progress/2/currentIndex').set(5));
+
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
   const rival = page.locator('.journey-rival[data-gid="2"]');
   await expect(rival).toBeVisible();
-  // Reconnecting must not launch three ships across the map at once.
-  const first = await rival.boundingBox();
+
+  // Read the ship the same way the app positions it: a canvas-percentage
+  // `top` straight off the element's own inline style, as the "sails to the
+  // next island" test above does. boundingBox() would apply the element's
+  // CSS transform and viewport-dependent pixel scaling on top, which is
+  // exactly what let the previous version of this assertion pass no matter
+  // what the code did.
+  const readTop = () => rival.evaluate(node => parseFloat(node.style.top));
+  // Group 2 is alone at island 5 among the three rendered rivals, so it
+  // takes berth slot 0 there (map/rivals.js's layout()).
+  const destination = await page.evaluate(() => RivalShips.pointAt(5, 0, MAP_STOPS).y);
+
+  // If the offline guard in renderRivalShips() (app/views-map.js:195-198)
+  // did not reset rivalPositions, RivalShips.diff() would still hold gid 2
+  // at island 4 from before the outage. On reconnect that reads as a move
+  // (4 -> 5), so renderRivalShips would call sailRivalShip instead of
+  // placeRivalShip, and animateShipAlong (app/cannon-ui.js) places the ship
+  // at its *old* island synchronously before the ~2700ms voyage even starts
+  // animating. The very first read below would then land near island 4's y,
+  // nowhere close to `destination`, and this assertion would fail.
+  expect(Math.abs((await readTop()) - destination)).toBeLessThan(0.5);
+  // Confirm it is not merely early in a voyage that happens to pass through
+  // the destination — it must still be there after the voyage would have
+  // long finished.
   await page.waitForTimeout(600);
-  const second = await rival.boundingBox();
-  expect(Math.abs(first.y - second.y)).toBeLessThan(2);
+  expect(Math.abs((await readTop()) - destination)).toBeLessThan(0.5);
 });
 
 test('the service worker shell version was bumped for this release', async () => {
