@@ -10,6 +10,22 @@ test('MAX_RIVALS is three and there are three berths', () => {
   assert.strictEqual(R.BERTHS.length, 3);
 });
 
+// A round-1 tuning pass widened these far enough to guarantee a tappable
+// area, and in doing so moored ships closer to a NEIGHBOURING island than
+// their own — a pupil could no longer trust the map to say where anyone
+// actually was. This locks the truthfulness guarantee the human chose over
+// tappability: every berth must stay a small nudge from its own mooring, not
+// a leap toward someone else's.
+test('every berth stays within the small-nudge envelope, and none is the pupil\'s own mooring', () => {
+  R.BERTHS.forEach(berth => {
+    assert.ok(Math.abs(berth.dx) <= R.BERTH_ENVELOPE.maxDx,
+      `berth dx ${berth.dx} exceeds the ${R.BERTH_ENVELOPE.maxDx}-point envelope`);
+    assert.ok(Math.abs(berth.dy) <= R.BERTH_ENVELOPE.maxDy,
+      `berth dy ${berth.dy} exceeds the ${R.BERTH_ENVELOPE.maxDy}-point envelope`);
+    assert.ok(!(berth.dx === 0 && berth.dy === 0), 'a berth sits exactly on the pupil\'s own mooring');
+  });
+});
+
 test('positionOf reads currentIndex and clamps to the island count', () => {
   assert.strictEqual(R.positionOf({ currentIndex: 2 }, 6), 2);
   assert.strictEqual(R.positionOf({ currentIndex: 0 }, 6), 0);

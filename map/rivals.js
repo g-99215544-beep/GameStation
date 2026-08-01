@@ -12,17 +12,24 @@
   // is {0,0}: that exact spot is where the pupil's own ship sits, and a rival
   // hiding underneath it would read as a rendering bug.
   //
-  // These offsets are larger than they look because an island's clickable
-  // button is a much bigger target than its drawn icon (24%-wide hit circle,
-  // MAP_ISLANDS in views-map.js) and a mooring in MAP_STOPS sits only a few
-  // percentage points from its own island's button centre. Every value below
-  // was chosen empirically (elementFromPoint sweep over all 6 islands x all 3
-  // berths, at 1280x720 and 390x640) so that: an island button's centre is
-  // never covered by a rival, and every rival keeps a real, contiguous
-  // >=44x44 CSS px tappable area clear of every island button. See
-  // task-5-report.md, "Fix round 1", for the search and the numbers it ruled
-  // out.
-  const BERTHS = [{ dx: -6, dy: 10 }, { dx: 22, dy: 2 }, { dx: 0, dy: 12 }];
+  // Kept deliberately small (within 10 points horizontally, 7 vertically —
+  // BERTH_ENVELOPE below, enforced by a test in rivals.test.js): a round-1
+  // attempt widened these to guarantee a 44x44 tappable area on every island,
+  // but the wider offsets moored ships closer to a NEIGHBOURING island than
+  // their own — e.g. a rival actually at island 4 rendering on top of the
+  // pupil's own ship at island 3's mooring. A map a pupil cannot trust to say
+  // where anyone is defeats the entire feature, which is worse than a rival
+  // that is sometimes hard to tap. Tapping a rival to open the cannon panel is
+  // therefore explicitly best-effort — it works wherever the ship is not
+  // covered by an island button, and is not guaranteed on every island. The
+  // cannon FAB is the guaranteed path to the panel and already lists every
+  // group, so no capability is lost.
+  const BERTHS = [{ dx: -10, dy: 2 }, { dx: 10, dy: 3 }, { dx: 0, dy: 6.5 }];
+  // The envelope every berth above must stay inside of — see the comment
+  // above for why. Checked by a test in rivals.test.js so a future tuning
+  // pass cannot quietly widen these enough to fling ships off their island
+  // again.
+  const BERTH_ENVELOPE = { maxDx: 10, maxDy: 7 };
 
   function num(value, fallback) {
     const n = Number(value);
@@ -119,5 +126,5 @@
       .map(entry => ({ gid: entry.gid, from: before[entry.gid], to: entry.position }));
   }
 
-  return { MAX_RIVALS, BERTHS, positionOf, rank, selectNearest, pointAt, layout, positions, diff };
+  return { MAX_RIVALS, BERTHS, BERTH_ENVELOPE, positionOf, rank, selectNearest, pointAt, layout, positions, diff };
 });
