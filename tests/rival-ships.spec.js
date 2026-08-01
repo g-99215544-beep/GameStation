@@ -361,14 +361,43 @@ test('a rival that was not on screen before appears without sailing', async ({ p
 });
 
 test('the pupil\'s own voyage still animates', async ({ page }) => {
+  // Mirrors "a rival sails to the next island when it clears a station",
+  // above: a >2px bounding-box check only proves the ship eventually reaches
+  // somewhere near its destination, so a duration:0 regression specific to
+  // the pupil's own voyage (which would teleport it there instantly) would
+  // still pass — this is the branch's one automated guard on its loudest
+  // global constraint, that existing pupil-ship behaviour must not change.
   await openMapAs(page, seedHunt({ 1: { currentIndex: 0 } }), 1);
   const ship = page.locator('#journeyShip');
-  const before = await ship.boundingBox();
+
+  // Read the ship the same way the app positions it: a canvas-percentage
+  // `top`, straight off the element's own inline style. boundingBox() would
+  // return a device-pixel rect with the element's CSS transform
+  // (translate(-50%,-88%), app/styles.css) already applied, which silently
+  // adds a constant, canvas-size-dependent offset to every comparison.
+  const readTop = () => ship.evaluate(node => parseFloat(node.style.top));
+  const start = await readTop();
+
   await page.evaluate(() => selectJourneyIsland(1));
-  await expect.poll(async () => {
-    const box = await ship.boundingBox();
-    return Math.abs(box.y - before.y) > 2;
-  }, { timeout: 4000 }).toBe(true);
+
+  // Mid-voyage: the ship has left its old berth but not yet reached the new one.
+  await expect.poll(async () => Math.abs((await readTop()) - start) > 0.5, { timeout: 4000 }).toBe(true);
+
+  const destination = await page.evaluate(() => MAP_STOPS[1].y);
+  const totalDistance = Math.abs(destination - start);
+
+  // A teleport lands at zero distance from the destination the instant it
+  // moves; a real 2700ms sail with ease-in-out has covered only ~22% of the
+  // distance at t=900ms. Demanding the ship is still at least 15% of the
+  // total distance short of the destination gives real animation a wide
+  // margin while failing a teleport outright — in percentage units this
+  // holds at any viewport size, unlike a pixel-based comparison.
+  await page.waitForTimeout(900);
+  const remaining = Math.abs(destination - (await readTop()));
+  expect(remaining).toBeGreaterThan(totalDistance * 0.15);
+
+  // The voyage settles on the island the pupil actually selected.
+  await expect.poll(async () => Math.abs((await readTop()) - destination) < 0.5, { timeout: 6000 }).toBe(true);
 });
 
 // Tapping a rival is best-effort by design (app/styles.css keeps island
