@@ -83,6 +83,41 @@ test('the map keeps every group\'s progress live while it is open', async ({ pag
   await expect.poll(() => page.evaluate(() => allProgress['2'].currentIndex)).toBe(5);
 });
 
+test('every rival uses the same untinted sprite and size as the pupil ship', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 2: { currentIndex: 4 } }), 1);
+  await expect(page.locator('#journeyRivalShips .journey-rival')).toHaveCount(3);
+
+  const styles = await page.evaluate(() => {
+    const pupil = document.getElementById('journeyShip');
+    const pupilStyle = getComputedStyle(pupil);
+    return {
+      pupilWidth: pupilStyle.width,
+      pupilImage: pupilStyle.backgroundImage,
+      pupilFilter: pupilStyle.filter,
+      rivals: Array.from(document.querySelectorAll('#journeyRivalShips .journey-rival')).map(rivalButton => {
+        const rivalSprite = rivalButton.querySelector('.journey-rival-ship');
+        const rivalButtonStyle = getComputedStyle(rivalButton);
+        const rivalSpriteStyle = getComputedStyle(rivalSprite);
+        return {
+          width: rivalButtonStyle.width,
+          image: rivalSpriteStyle.backgroundImage,
+          filter: rivalSpriteStyle.filter,
+          inlineFilter: rivalSprite.style.filter,
+          opacity: rivalButtonStyle.opacity
+        };
+      })
+    };
+  });
+
+  for (const rival of styles.rivals) {
+    expect(rival.width).toBe(styles.pupilWidth);
+    expect(rival.image).toBe(styles.pupilImage);
+    expect(rival.filter).toBe(styles.pupilFilter);
+    expect(rival.inlineFilter).toBe('');
+    expect(rival.opacity).toBe('1');
+  }
+});
+
 test('rivals do not sail on open before the first real snapshot arrives', async ({ page }) => {
   // Real Firebase delivers .on('value') asynchronously, but showJourneyMap()
   // calls attachMapProgressListener() and then renderRivalShips() back to
@@ -534,5 +569,5 @@ test('rival ships disappear offline and come back without sailing', async ({ pag
 test('the service worker shell version was bumped for this release', async () => {
   const fs = require('node:fs');
   const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
-  expect(sw).toContain("const CACHE_NAME = 'gs-shell-v21';");
+  expect(sw).toContain("const CACHE_NAME = 'gs-shell-v22';");
 });

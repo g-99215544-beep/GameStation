@@ -8,7 +8,8 @@ importScripts('offline/preload.js');
 // returning admin devices to discard the pre-step-flow JavaScript immediately.
 // v20 delivers configurable station durations and timeout auto-advance.
 // v21 adds rival ships to the voyage map and ships map/rivals.js.
-const CACHE_NAME = 'gs-shell-v21';
+// v22 gives every rival the pupil ship's original sprite colour and size.
+const CACHE_NAME = 'gs-shell-v22';
 // Both lists live in offline/preload.js so the page and this worker cache
 // exactly the same things. Editing them here would reintroduce the drift.
 const LOCAL_ASSETS = self.OfflinePreload.LOCAL_ASSETS;
