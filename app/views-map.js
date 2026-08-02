@@ -111,17 +111,12 @@ function detachMapProgressListener(){
   rivalVoyageTokens={};
 }
 
-// Deterministic per group so a rival keeps one colour for the whole hunt.
-// 47 is coprime with 360, so consecutive group ids land far apart on the wheel.
-function rivalHue(gid){ return (Number(gid)*47)%360; }
-
 function buildRivalShip(rival){
   const node=document.createElement('button');
   node.type='button';
   node.className='journey-rival';
   node.dataset.gid=rival.gid;
   node.innerHTML=`<span class="journey-rival-ship"></span>`;
-  node.querySelector('.journey-rival-ship').style.filter=`hue-rotate(${rivalHue(rival.gid)}deg) saturate(.85)`;
   node.addEventListener('click',()=>openCannonPanel(rival.gid));
   return node;
 }

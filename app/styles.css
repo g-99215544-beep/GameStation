@@ -42,8 +42,8 @@
      the map's most important control by a rival's hull. A rival stays tappable
      instead by never substantially overlapping a button's hit box in the first
      place (see BERTHS in map/rivals.js), not by outranking it here. */
-  #journeyRivalShips .journey-rival{position:absolute;z-index:1;width:16%;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;text-shadow:none;transform:translate(-50%,-88%);cursor:pointer;opacity:.9;transition:none;touch-action:manipulation;}
-  #journeyRivalShips .journey-rival:hover,#journeyRivalShips .journey-rival:focus-visible{background:transparent;opacity:1;outline:2px solid #fff3a5;outline-offset:2px;}
+  #journeyRivalShips .journey-rival{position:absolute;z-index:1;width:25%;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;text-shadow:none;transform:translate(-50%,-88%);cursor:pointer;opacity:1;transition:none;touch-action:manipulation;}
+  #journeyRivalShips .journey-rival:hover,#journeyRivalShips .journey-rival:focus-visible{background:transparent;outline:2px solid #fff3a5;outline-offset:2px;}
   /* A full-canvas overlay (not a plain child of #journeyRivalShips) so its
      z-index actually applies (z-index is a no-op on a static, non-positioned
      element) and, crucially, so a plate is painted in ITS OWN stacking
@@ -68,7 +68,7 @@
   .journey-rival-hp-fill{display:block;height:100%;background:var(--green);transition:width .35s ease;}
   .journey-rival-trophy{font-size:11px;line-height:1;}
   .journey-rival-trophy[hidden]{display:none;}
-  .journey-rival-ship{display:block;width:100%;aspect-ratio:320/403;background-image:url('../assets/ship/ship-sail-sheet.png?v=ship-sail-1');background-size:600% 400%;background-repeat:no-repeat;image-rendering:pixelated;pointer-events:none;filter:drop-shadow(2px 3px 0 rgba(0,46,81,.3));}
+  .journey-rival-ship{display:block;width:100%;aspect-ratio:320/403;background-image:url('../assets/ship/ship-sail-sheet.png?v=ship-sail-1');background-size:600% 400%;background-repeat:no-repeat;image-rendering:pixelated;pointer-events:none;filter:drop-shadow(3px 5px 0 rgba(0,46,81,.36));}
   .journey-rival-ship.facing-left{transform:scaleX(-1);}
   .journey-status{position:absolute;z-index:3;left:50%;top:16px;transform:translateX(-50%);width:max-content;max-width:88%;padding:9px 14px;border:3px solid #704018;border-radius:5px;background:linear-gradient(180deg,#fff5b6,#f0bd53);box-shadow:3px 3px 0 #063a66;color:#12385b;font-family:"Trebuchet MS",system-ui,sans-serif;font-weight:900;text-align:center;text-shadow:1px 1px 0 #fffde6;}
   /* Scoped by id so these always outrank the `.participant-mode button` pirate skin. */
@@ -121,7 +121,7 @@
   body.map-clue-mode .topbar{background:rgba(10,47,79,.94);backdrop-filter:blur(2px);}
   body.map-clue-mode .wrap{min-height:calc(100vh - 64px);padding-top:28px;}
   body.map-clue-mode #view-clue .card{background:linear-gradient(135deg,#fff9df,#f7df9b);}
-  @media (max-width:420px){.journey-status{font-size:14px;top:12px;}.journey-ship{width:28%;}}
+  @media (max-width:420px){.journey-status{font-size:14px;top:12px;}.journey-ship,#journeyRivalShips .journey-rival{width:28%;}}
   .topbar{background:var(--navy);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;}
   .topbar h1{margin:0;font-size:18px;color:var(--gold);}
   #timer{font-size:22px;font-weight:800;background:#fff2;padding:4px 14px;border-radius:10px;}
