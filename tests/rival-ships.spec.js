@@ -508,7 +508,13 @@ test('tapping a rival does nothing when cannons are disabled', async ({ page }) 
   const seed = seedHunt({ 1: { currentIndex: 0 }, 2: { currentIndex: 3 } });
   seed.gamestation2026.hunts.h1.config.cannon = { enabled: false, damagePercent: 10, startingAmmo: 0 };
   await openMapAs(page, seed, 1);
-  await page.locator('.journey-rival[data-gid="2"]').click();
+  const rival = page.locator('.journey-rival[data-gid="2"]');
+  // Not offered as tappable at all: no HP bar, no "open the cannon panel"
+  // promise to assistive tech, and a disabled button.
+  await expect(rival).toBeDisabled();
+  await expect(rival).not.toHaveAttribute('aria-label', /meriam/);
+  await expect(page.locator('.journey-rival-plate[data-gid="2"] .journey-rival-hp')).toBeHidden();
+  await rival.click({ force: true });
   await expect(page.locator('#cannonPanel')).toBeHidden();
 });
 
@@ -566,8 +572,125 @@ test('rival ships disappear offline and come back without sailing', async ({ pag
   expect(Math.abs((await readTop()) - destination)).toBeLessThan(0.5);
 });
 
+test('going offline detaches the progress listener so reconnect cannot replay a stale snapshot', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 3 }, 2: { currentIndex: 4 } }), 1);
+  await expect(page.locator('#journeyRivalShips .journey-rival')).toHaveCount(3);
+
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  expect(await page.evaluate(() => rivalProgressRef)).toBeNull();
+
+  // Real Firebase does not deliver another phone's write while this one is
+  // offline. Write straight into the fake store, notifying nobody, to model
+  // that: a listener kept through the outage would never hear about it and
+  // would redraw gid 2 at island 4 on reconnect, then sail it once the server
+  // caught up. A fresh listener reads the current value instead.
+  await page.evaluate(() => { window.__db.gamestation2026.hunts.h1.progress['2'].currentIndex = 5; });
+
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  const rival = page.locator('.journey-rival[data-gid="2"]');
+  await expect(rival).toBeVisible();
+  const destination = await page.evaluate(() => RivalShips.pointAt(5, 0, MAP_STOPS).y);
+  expect(Math.abs((await rival.evaluate(node => parseFloat(node.style.top))) - destination)).toBeLessThan(0.5);
+});
+
+test('an unrelated update does not snap a sailing rival to its destination', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 3 }, 2: { currentIndex: 2 } }), 1);
+  const rival = page.locator('.journey-rival[data-gid="2"]');
+  await expect(rival).toBeVisible();
+  const destination = await page.evaluate(() => RivalShips.pointAt(3, 0, MAP_STOPS).y);
+
+  await page.evaluate(() => huntRef('progress/2/currentIndex').set(3));
+  await page.waitForTimeout(500);
+  // The fake delivers synchronously, so the top read straight after the
+  // write is whatever that re-render left behind — before any rAF frame.
+  const topAfterUnrelatedWrite = await page.evaluate(() => {
+    huntRef('progress/7/hp').set(80);
+    return parseFloat(document.querySelector('.journey-rival[data-gid="2"]').style.top);
+  });
+  expect(Math.abs(topAfterUnrelatedWrite - destination)).toBeGreaterThan(0.5);
+  await expect.poll(async () => Math.abs((await rival.evaluate(node => parseFloat(node.style.top))) - destination) < 0.5,
+    { timeout: 6000 }).toBe(true);
+});
+
+test('a sailing rival is re-routed when its berth at the destination is reassigned', async ({ page }) => {
+  // Pupil 1 on island 3; rivals 2 and 5 on island 4 (2 ahead of 5 by id).
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 3 }, 2: { currentIndex: 4 }, 5: { currentIndex: 4 } }), 1);
+  await expect(page.locator('.journey-rival[data-gid="5"]')).toBeVisible();
+
+  // 5 sails to island 5, where it is alone (berth slot 0)...
+  await page.evaluate(() => huntRef('progress/5/currentIndex').set(5));
+  await page.waitForTimeout(400);
+  // ...then 2 arrives too, taking slot 0 by group-id order and pushing 5 to slot 1.
+  await page.evaluate(() => huntRef('progress/2/currentIndex').set(5));
+
+  const slotOne = await page.evaluate(() => RivalShips.pointAt(5, 1, MAP_STOPS));
+  const readPoint = () => page.locator('.journey-rival[data-gid="5"]')
+    .evaluate(node => ({ x: parseFloat(node.style.left), y: parseFloat(node.style.top) }));
+  await expect.poll(async () => {
+    const at = await readPoint();
+    return Math.abs(at.x - slotOne.x) < 0.5 && Math.abs(at.y - slotOne.y) < 0.5;
+  }, { timeout: 6000 }).toBe(true);
+  // And it stays there once every voyage has finished.
+  await page.waitForTimeout(3000);
+  const settled = await readPoint();
+  expect(Math.abs(settled.x - slotOne.x)).toBeLessThan(0.5);
+  expect(Math.abs(settled.y - slotOne.y)).toBeLessThan(0.5);
+});
+
+test('the cannon panel will not fire before the map has a fresh snapshot', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 1: { currentIndex: 3, ammo: 2 } }), 1);
+  await page.evaluate(() => openCannonPanel());
+  await expect(page.locator('#cannonTargets button:not([disabled])').first()).toBeVisible();
+
+  // Model the gap between attaching a listener and its first snapshot.
+  await page.evaluate(() => { rivalProgressReady = false; renderCannonPanel(); });
+  await expect(page.locator('#cannonLoadingHint')).toBeVisible();
+  await expect(page.locator('#cannonTargets button:not([disabled])')).toHaveCount(0);
+  await page.evaluate(() => fireCannonAt('2'));
+  await expect(page.locator('#cannonMsg')).toContainText('dimuatkan');
+  expect(await page.evaluate(() => window.__db.gamestation2026.hunts.h1.progress['2'].hp)).toBe(100);
+});
+
+test('leaving the map forgets other groups\' progress', async ({ page }) => {
+  await openMapAs(page, seedHunt({ 2: { currentIndex: 4 } }), 1);
+  await expect.poll(() => page.evaluate(() => Object.keys(allProgress).length)).toBeGreaterThan(0);
+  await page.evaluate(() => show('view-login'));
+  expect(await page.evaluate(() => Object.keys(allProgress).length)).toBe(0);
+});
+
+for (const island of [0, 1, 2, 3, 4, 5, 6]) {
+  test(`rival name plates do not overlap when everyone shares island ${island}`, async ({ page }) => {
+    // The plate lifts in app/views-map.js were tuned by eye on one island;
+    // this keeps a retune honest on all of them. Geometry, not hit-testing:
+    // the transparent island buttons deliberately sit above the plates so a
+    // tap always reaches the island, which says nothing about readability.
+    const at = { currentIndex: island };
+    await openMapAs(page, seedHunt({ 1: at, 2: at, 3: at, 4: at }), 1);
+    await expect(page.locator('#journeyRivalShips .journey-rival')).toHaveCount(3);
+    const boxes = await page.evaluate(() => {
+      const rect = el => { const r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; };
+      const badge = document.getElementById('journeyShipHp');
+      return {
+        plates: Array.from(document.querySelectorAll('.journey-rival-plate')).map(el => ({ gid: el.dataset.gid, ...rect(el) })),
+        badge: badge && !badge.hidden ? rect(badge) : null,
+        map: rect(document.getElementById('journeyRivalPlates'))
+      };
+    });
+    const overlap = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+    expect(boxes.plates).toHaveLength(3);
+    for (let i = 0; i < boxes.plates.length; i++) {
+      const plate = boxes.plates[i];
+      expect(plate.t, `plate ${plate.gid} is on the map`).toBeGreaterThanOrEqual(boxes.map.t);
+      if (boxes.badge) expect(overlap(plate, boxes.badge), `plate ${plate.gid} clears the pupil's HP badge`).toBe(false);
+      for (const other of boxes.plates.slice(i + 1)) {
+        expect(overlap(plate, other), `plates ${plate.gid} and ${other.gid}`).toBe(false);
+      }
+    }
+  });
+}
+
 test('the service worker shell version was bumped for this release', async () => {
   const fs = require('node:fs');
   const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
-  expect(sw).toContain("const CACHE_NAME = 'gs-shell-v22';");
+  expect(sw).toContain("const CACHE_NAME = 'gs-shell-v23';");
 });

@@ -55,9 +55,12 @@ function renderCannonPanel(){
     ? `Peluru anda: 💣 <span>(${ammo})</span>`
     : 'Peluru anda: <span>0</span><br><small class="cannon-hint">Scan QR atau masukkan password meriam untuk dapat peluru.</small>';
   const ids=Object.keys(groups||{}).filter(gid=>String(gid)!==String(currentGroupId));
+  // Online but before the map's first snapshot lands, allProgress is empty, so
+  // no target's HP or chest state is known yet and firing must wait for it.
+  const loading=!offline && !mapProgressIsLive();
   const offlineHint=offline
     ? '<p class="cannon-hint" id="cannonOfflineHint">📴 Perlu internet untuk menembak. Anda masih boleh scan QR atau masukkan password meriam.</p>'
-    : '';
+    : loading ? '<p class="cannon-hint" id="cannonLoadingHint">⏳ Memuatkan status kumpulan lain…</p>' : '';
   // Rebuilt wholesale (not appended) on every render, including the offline
   // hint, so repeated renders — e.g. closing and reopening the panel offline,
   // or a double-tapped fab — can never stack duplicate #cannonOfflineHint
@@ -66,7 +69,7 @@ function renderCannonPanel(){
     const p=allProgress[gid]||{};
     const hp=CannonEngine.readHp(p);
     const inBattle=CannonEngine.isInBattle(p);
-    const canFire=inBattle && ammo>0 && !offline && !cannonShotInFlight;
+    const canFire=inBattle && ammo>0 && !offline && !loading && !cannonShotInFlight;
     const action=inBattle
       ? `<button type="button" ${canFire?'':'disabled'} onclick="fireCannonAt('${gid}')" aria-label="Tembak Kumpulan ${gid}">🔥</button>`
       : '<span class="cannon-target-hp-text">🏆 sudah buka peti</span>';
@@ -283,6 +286,7 @@ async function fireCannonAt(targetGid){
   if(cannonShotInFlight) return;
   if(isOffline()){ setCannonMsg('err','Perlu internet untuk menembak.'); return; }
   if(!CannonEngine.isInBattle(progress)){ setCannonMsg('err','Peti anda sudah dibuka — pertempuran tamat.'); return; }
+  if(!mapProgressIsLive()){ setCannonMsg('err','Status kumpulan lain masih dimuatkan — cuba sebentar lagi.'); return; }
   const target=allProgress[targetGid];
   if(!CannonEngine.isInBattle(target)){ setCannonMsg('err',`Kumpulan ${targetGid} sudah buka peti.`); return; }
   const damage=CannonEngine.clampDamage(cannonConfig.damagePercent);
