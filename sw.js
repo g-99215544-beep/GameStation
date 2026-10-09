@@ -10,7 +10,9 @@ importScripts('offline/preload.js');
 // v21 adds rival ships to the voyage map and ships map/rivals.js.
 // v22 gives every rival the pupil ship's original sprite colour and size.
 // v23 stops rival ships sailing on reconnect and flickering mid-voyage.
-const CACHE_NAME = 'gs-shell-v23';
+// v24 adds the map poster so the islands show even when the video cannot.
+// v25 simplifies hunt setup and logs groups in by code alone.
+const CACHE_NAME = 'gs-shell-v25';
 // Both lists live in offline/preload.js so the page and this worker cache
 // exactly the same things. Editing them here would reintroduce the drift.
 const LOCAL_ASSETS = self.OfflinePreload.LOCAL_ASSETS;

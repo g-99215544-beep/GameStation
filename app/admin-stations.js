@@ -251,26 +251,26 @@ function selectedTangramStages(key){
   return Array.from(editor.querySelectorAll('input[type="checkbox"]:checked'))
     .map(input=>Number(input.value)).filter(stage=>Number.isInteger(stage) && stage>=1 && stage<=3).sort((a,b)=>a-b);
 }
+function stationSetupLocked(){ return !!(sessionInfo && sessionInfo.status==='active'); }
 function updateStationButtons(){
   const label=document.getElementById('stationCountLabel');
   if(label) label.textContent=String(stationCount);
-  const locked=!!(sessionInfo && sessionInfo.status==='active');
-  const add=document.getElementById('btnAddStation');
-  const rem=document.getElementById('btnRemoveStation');
-  if(add) add.disabled=locked || stationCount>=StationLayout.MAX_STATIONS;
-  if(rem) rem.disabled=locked || stationCount<=StationLayout.MIN_STATIONS;
+  renderSetupCards();
 }
 function addStation(){
-  if(sessionInfo && sessionInfo.status==='active' || stationCount>=StationLayout.MAX_STATIONS) return;
+  if(stationSetupLocked() || stationCount>=StationLayout.MAX_STATIONS) return;
   const current=collectStations();
   stationCount=StationLayout.clampStationCount(stationCount+1);
   markSetupStepDirty('setup');
   buildStationsUI(current);
+  openStationModal(stationCount);
 }
+// Only the last station can go, so the remaining ones keep their numbers.
 function removeStation(){
-  if(sessionInfo && sessionInfo.status==='active' || stationCount<=StationLayout.MIN_STATIONS) return;
+  if(stationSetupLocked() || stationCount<=StationLayout.MIN_STATIONS) return;
   const current=collectStations();
   delete current[stationCount];
+  closeSetupModal();
   stationCount=StationLayout.clampStationCount(stationCount-1);
   markSetupStepDirty('setup');
   buildStationsUI(current);
@@ -278,38 +278,118 @@ function removeStation(){
 function syncStationSetupLock(){
   const panel=document.getElementById('admin-panel-setup');
   const lock=document.getElementById('stationSetupLock');
-  const locked=!!(sessionInfo && sessionInfo.status==='active');
+  const locked=stationSetupLocked();
   if(lock) lock.innerHTML=locked
-    ? '<div class="msg">🔒 Sesi sedang aktif — bilangan stesen dikunci. Tekan Tamat sebelum mengubah.</div>' : '';
+    ? '<div class="msg">🔒 Sesi sedang aktif — stesen dikunci. Tekan Tamat sebelum mengubah.</div>' : '';
   updateStationButtons();
-  if(panel) panel.querySelectorAll('.station-block input, .station-block select, .station-block button, .cannon-block input, .cannon-block select, .cannon-block button, #cannonEnabled, #cannonDamage, #cannonStartingAmmo').forEach(el=>{ el.disabled=locked; });
+  if(panel) panel.querySelectorAll('.station-block input, .station-block select, .station-block button, .station-remove, .cannon-block input, .cannon-block select, .cannon-block button, #cannonEnabled, #cannonDamage, #cannonStartingAmmo').forEach(el=>{ el.disabled=locked; });
   updateCannonButtons();
 }
+
+// ---------- Langkah 2: cards + pop-ups ----------
+// Every station's form stays in the DOM (inside its own hidden pop-up), so
+// collectStations() and the validators read the same inputs as before; the
+// page itself only shows one small card per station.
+function gameTypeName(id){
+  const type=GAME_TYPES.find(g=>g.id===id);
+  return type ? type.name : id;
+}
+function stationCardReady(i){
+  const loc=String(document.getElementById('st_loc_'+i)?.value||'').trim();
+  const pass=String(document.getElementById('st_pass_'+i)?.value||'').trim();
+  return Boolean(loc) && isValidStationPassword(pass);
+}
+function renderSetupCards(){
+  const holder=document.getElementById('stationCards');
+  if(!holder) return;
+  const locked=stationSetupLocked();
+  let html='';
+  for(let i=1;i<=stationCount;i++){
+    const type=document.getElementById('st_gametype_'+i)?.value;
+    const ready=stationCardReady(i);
+    html+=`<button type="button" class="setup-card${ready?' is-ready':''}" data-station="${i}" onclick="openStationModal(${i})">
+      <span class="setup-card-title">Stesen ${i}</span>
+      <span class="setup-card-sub">${escapeHtml(type ? gameTypeName(type) : '')}</span>
+      <span class="setup-card-status">${ready?'✅ Sedia':'⚠️ Belum lengkap'}</span>
+    </button>`;
+  }
+  if(stationCount<StationLayout.MAX_STATIONS){
+    html+=`<button type="button" class="setup-card setup-card-add" id="btnAddStation" onclick="addStation()" aria-label="Tambah stesen"${locked?' disabled':''}>＋</button>`;
+  }
+  const cannonOn=!!document.getElementById('cannonEnabled')?.checked;
+  const cannonCount=document.querySelectorAll('#cannonsArea .cannon-block').length;
+  html+=`<button type="button" class="setup-card setup-card-cannon" id="cannonCard" onclick="openCannonModal()">
+    <span class="setup-card-title">⚔️ Meriam</span>
+    <span class="setup-card-status">${cannonOn?`Aktif · ${cannonCount} meriam`:'Tidak aktif'}</span>
+  </button>`;
+  holder.innerHTML=html;
+}
+let openSetupModalId=null;
+let setupModalReturnFocus=null;
+function openSetupModal(id){
+  closeSetupModal();
+  const modal=document.getElementById(id);
+  if(!modal) return;
+  setupModalReturnFocus=document.activeElement;
+  modal.hidden=false;
+  openSetupModalId=id;
+  document.body.classList.add('setup-modal-open');
+  const first=modal.querySelector('input:not([disabled]), select:not([disabled]), button:not([disabled])');
+  if(first) first.focus();
+}
+function closeSetupModal(){
+  if(!openSetupModalId) return;
+  const modal=document.getElementById(openSetupModalId);
+  if(modal) modal.hidden=true;
+  openSetupModalId=null;
+  document.body.classList.remove('setup-modal-open');
+  renderSetupCards();
+  if(setupModalReturnFocus && setupModalReturnFocus.isConnected) setupModalReturnFocus.focus();
+  setupModalReturnFocus=null;
+}
+function openStationModal(i){ openSetupModal('station_modal_'+i); }
+function openCannonModal(){ openSetupModal('cannonModal'); }
+document.addEventListener('keydown',event=>{ if(event.key==='Escape' && openSetupModalId) closeSetupModal(); });
+// A tap on the dimmed backdrop (the pop-up wrapper itself) closes it.
+document.addEventListener('click',event=>{
+  if(openSetupModalId && event.target && event.target.id===openSetupModalId) closeSetupModal();
+});
+
 function buildStationsUI(existing){
   const area = document.getElementById('stationsArea');
+  closeSetupModal();
   area.innerHTML='';
+  const locked=stationSetupLocked();
   for(let i=1;i<=stationCount;i++){
     const s = existing[i] || {};
     const stationPassword = isValidStationPassword(s.password) ? s.password : generateStationPassword();
     const opts = GAME_TYPES.map(g=>`<option value="${g.id}" ${s.gameType===g.id?'selected':''}>${g.name}</option>`).join('');
+    const removable = i===stationCount && stationCount>StationLayout.MIN_STATIONS;
     area.innerHTML += `
-    <div class="station-block">
-      <h3>Stesen ${i}</h3>
-      <label>Nama Stesen</label><input id="st_name_${i}" value="${s.name||''}" placeholder="cth: Stesen Sifir">
-      <label>Lokasi (teks clue)</label><input id="st_loc_${i}" value="${s.location||''}" placeholder="cth: Tempat membaca buku">
-      <label>Password Stesen (tepat 5 huruf atau digit)</label><input id="st_pass_${i}" value="${stationPassword}" maxlength="5" pattern="[A-Za-z0-9]{5}" placeholder="cth: 14542 atau sabun" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5)">
-      <label>Masa stesen (minit)</label><input id="st_time_${i}" type="number" min="1" max="180" step="1" inputmode="numeric" value="${stationTimeLimitMin(s.timeLimitMin)}">
-      <label>Jenis Game</label><select id="st_gametype_${i}" onchange="toggleWorksheetEditor('${i}')">${opts}</select>
-      <div id="game_data_field_${i}"><label>Data Game (JSON)</label><input id="st_gamedata_${i}" value='${(s.gameDataRaw||"{}").replace(/'/g,"&apos;")}'></div>
-      <div class="worksheet-editor" id="worksheet_editor_${i}"></div>
-      ${sudokuStageEditorHtml(i,s.gameDataRaw)}
-      ${sifirTargetEditorHtml(i,s.gameDataRaw)}
-      ${tangramStageEditorHtml(i,s.gameDataRaw)}
-      <div class="run-editor" id="run_editor_${i}">
-        <label>Jarak Sasaran (km)</label>
-        <input id="st_targetkm_${i}" type="number" min="0.1" step="0.1" value="${RunTracker.parseTargetKm(s.gameDataRaw)}">
+    <div class="setup-modal" id="station_modal_${i}" hidden role="dialog" aria-modal="true" aria-labelledby="station_modal_title_${i}">
+      <div class="setup-modal-box">
+        <div class="setup-modal-head"><h3 id="station_modal_title_${i}">Stesen ${i}</h3><button type="button" class="setup-modal-close" onclick="closeSetupModal()" aria-label="Tutup">✕</button></div>
+        <div class="station-block">
+          <label>Lokasi (teks clue)</label><input id="st_loc_${i}" value="${escapeHtml(s.location||'')}" placeholder="cth: Tempat membaca buku">
+          <label>Password Stesen (tepat 5 huruf atau digit)</label><input id="st_pass_${i}" value="${stationPassword}" maxlength="5" pattern="[A-Za-z0-9]{5}" placeholder="cth: 14542 atau sabun" oninput="this.value=this.value.replace(/[^A-Za-z0-9]/g,'').slice(0,5)">
+          <label>Masa stesen (minit)</label><input id="st_time_${i}" type="number" min="1" max="180" step="1" inputmode="numeric" value="${stationTimeLimitMin(s.timeLimitMin)}">
+          <label>Jenis Game</label><select id="st_gametype_${i}" onchange="toggleWorksheetEditor('${i}')">${opts}</select>
+          <div id="game_data_field_${i}"><label>Data Game (JSON)</label><input id="st_gamedata_${i}" value='${(s.gameDataRaw||"{}").replace(/'/g,"&apos;")}'></div>
+          <div class="worksheet-editor" id="worksheet_editor_${i}"></div>
+          ${sudokuStageEditorHtml(i,s.gameDataRaw)}
+          ${sifirTargetEditorHtml(i,s.gameDataRaw)}
+          ${tangramStageEditorHtml(i,s.gameDataRaw)}
+          <div class="run-editor" id="run_editor_${i}">
+            <label>Jarak Sasaran (km)</label>
+            <input id="st_targetkm_${i}" type="number" min="0.1" step="0.1" value="${RunTracker.parseTargetKm(s.gameDataRaw)}">
+          </div>
+          <button class="secondary" onclick="testStation(${i})">▶️ Uji Cara Main Stesen Ini</button>
+        </div>
+        <div class="setup-modal-actions">
+          ${removable?`<button type="button" class="station-remove" onclick="removeStation()"${locked?' disabled':''}>🗑 Buang Stesen Ini</button>`:''}
+          <button type="button" class="step-next" onclick="closeSetupModal()">Selesai</button>
+        </div>
       </div>
-      <button class="secondary" onclick="testStation(${i})">▶️ Uji Cara Main Stesen Ini</button>
     </div>`;
     renderWorksheetEditor(i,worksheetQuestionsFromRaw(s.gameDataRaw));
     toggleWorksheetEditor(i);
@@ -345,6 +425,7 @@ function buildCannonsUI(existing){
     toggleWorksheetEditor(cid);
   });
   updateCannonButtons();
+  renderSetupCards();
 }
 function cannonBlockHtml(cid, cannon){
   const password=isValidStationPassword(cannon.password)?cannon.password:generateStationPassword();
@@ -490,7 +571,8 @@ function collectStations(){
   for(let i=1;i<=stationCount;i++){
     const gameType=document.getElementById('st_gametype_'+i).value;
     out[i]={id:i,
-      name:document.getElementById('st_name_'+i).value,
+      // Stations are simply numbered; the name is what every game screen shows.
+      name:'Stesen '+i,
       location:document.getElementById('st_loc_'+i).value,
       password:document.getElementById('st_pass_'+i).value.trim(),
       timeLimitMin:stationTimeLimitMin(document.getElementById('st_time_'+i).value),
@@ -632,7 +714,6 @@ function pushConfig(){
     isHuntDraft=false;
     stations=st; groups=gr; cannonConfig=cn; cannons=cnList; stationCount=N; sessionInfo={status:'setup'};
     cacheConfig();
-    renderGroupLoginOptions();
     markSetupStepSaved('setup');
     document.getElementById('pushStatus').innerHTML='<div class="msg ok">✅ Config di-push. Stesen dan meriam berjaya disimpan. Teruskan ke Langkah 3.</div>';
   }).catch(error=>{

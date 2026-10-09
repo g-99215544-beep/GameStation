@@ -56,7 +56,6 @@ function applyConfigCache(cfg){
   };
   cannons=(cfg&&cfg.cannons)||{};
   stationCount=StationLayout.clampStationCount((cfg&&cfg.stationCount) || Object.keys(stations).length);
-  renderGroupLoginOptions();
   buildStationsUI(stations);
   const enabledBox=document.getElementById('cannonEnabled');
   if(enabledBox) enabledBox.checked=cannonConfig.enabled;

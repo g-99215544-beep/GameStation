@@ -34,7 +34,6 @@ function huntPath(sub=''){
 }
 function huntRef(sub=''){ return db.ref(huntPath(sub)); }
 function rootRef(sub=''){ return db.ref(sub ? `${ROOT_PATH}/${sub}` : ROOT_PATH); }
-let groupDraft = [];
 let sifirQInterval = null;
 let stationCount = 3;
 const GAME_SFX_MUTED_KEY='gamestation_sfx_muted';

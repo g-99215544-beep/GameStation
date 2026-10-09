@@ -127,3 +127,54 @@ test('the journey map retries a video whose initial preload failed', async ({ pa
   });
   expect(calls).toEqual(['load', 'play']);
 });
+
+// The islands live only in the map video, so a video that cannot load or play
+// left pupils with a blank blue screen and a lone ship. The poster frame is the
+// fallback; these tests simulate both ways the video has been seen to fail.
+async function openJourneyMap(page) {
+  await page.evaluate(() => {
+    currentGroupId = '1';
+    progress = { currentIndex: 0, status: 'idle', completedStations: {}, keys: [], totalScore: 0 };
+    show('view-clue');
+    showJourneyMap();
+  });
+  await expect(page.locator('#journeyMap')).toBeVisible();
+}
+
+test('the journey map still shows the islands when its video cannot load', async ({ page }) => {
+  await page.route(/map%20idle%20pingpong\.mp4/, route => route.abort());
+  await boot(page);
+  await openJourneyMap(page);
+  const background = await page.evaluate(async () => {
+    const canvas = document.getElementById('journeyMapCanvas');
+    const match = /url\("?([^")]+)"?\)/.exec(getComputedStyle(canvas).backgroundImage);
+    if (!match) return { url: null };
+    const image = new Image();
+    image.src = match[1];
+    await image.decode().catch(() => {});
+    return { url: match[1], width: image.naturalWidth, height: image.naturalHeight };
+  });
+  expect(background.url).toContain('assets/map/map-poster.jpg');
+  // Same 9:16 frame as the video, so MAP_ISLANDS lines up with either.
+  expect(background.width).toBe(540);
+  expect(background.height).toBe(960);
+  await expect(page.locator('#journeyMapVideo')).toHaveAttribute('poster', 'assets/map/map-poster.jpg');
+});
+
+test('a map video blocked from autoplaying starts on the next tap', async ({ page }) => {
+  await boot(page);
+  await page.evaluate(() => {
+    const video = document.getElementById('journeyMapVideo');
+    window.__playCalls = 0;
+    Object.defineProperty(video, 'paused', { configurable: true, get: () => window.__playCalls < 2 });
+    // First call is the autoplay attempt (rejected, e.g. iOS Low Power Mode);
+    // the second must come from the pupil's own tap.
+    video.play = () => (++window.__playCalls === 1
+      ? Promise.reject(new DOMException('blocked', 'NotAllowedError'))
+      : Promise.resolve());
+  });
+  await openJourneyMap(page);
+  expect(await page.evaluate(() => window.__playCalls)).toBe(1);
+  await page.locator('#journeyMapCanvas').dispatchEvent('pointerdown');
+  expect(await page.evaluate(() => window.__playCalls)).toBe(2);
+});

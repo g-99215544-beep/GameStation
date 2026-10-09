@@ -13,7 +13,6 @@
 <script src="tangram/shapes.js"></script>
 <script src="tangram/ui.js"></script>
 <script src="run/tracker.js"></script>
-<script src="groups/roster.js"></script>
 <script src="stations/layout.js"></script>
 <script src="map/rivals.js"></script>
 <script src="sifir/engine.js"></script>
@@ -49,7 +48,7 @@
 <section class="journey-map" id="journeyMap" hidden aria-label="Peta perjalanan stesen">
   <div class="journey-map-canvas" id="journeyMapCanvas">
     <!-- Ping-pong (forward + reversed) is baked into the file so the browser only ever decodes forward. -->
-    <video class="journey-map-video" id="journeyMapVideo" muted playsinline loop preload="auto" aria-hidden="true">
+    <video class="journey-map-video" id="journeyMapVideo" muted playsinline loop preload="auto" poster="assets/map/map-poster.jpg" aria-hidden="true">
       <source src="map idle pingpong.mp4" type="video/mp4">
     </video>
     <div id="journeyRivalShips" aria-label="Kapal kumpulan lain"></div>
@@ -121,12 +120,10 @@
   <div class="view" id="view-login">
     <div class="card login-card">
       <h2>Log Masuk Kumpulan</h2>
-      <p class="login-intro">Pilih kumpulan anda dan masukkan password untuk bermula.</p>
-      <label>Kumpulan</label>
-      <select id="groupLoginSelect"></select>
-      <label>Password Kumpulan</label>
-      <input id="groupLoginPass" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="Masukkan 4 digit password" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)">
-      <button class="big" onclick="loginAsGroup()">Masuk sebagai Kumpulan</button>
+      <p class="login-intro">Masukkan kod 4 digit kumpulan anda untuk bermula.</p>
+      <label for="groupLoginPass">Kod Kumpulan</label>
+      <input id="groupLoginPass" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="Masukkan 4 digit kod" oninput="this.value=this.value.replace(/\D/g,'').slice(0,4)" onkeydown="if(event.key==='Enter') loginAsGroup()">
+      <button class="big" onclick="loginAsGroup()">Masuk</button>
       <div id="groupLoginMsg"></div>
     </div>
   </div>
@@ -164,7 +161,7 @@
       <div class="admin-nav" hidden>
         <label for="adminTabSelect">Langkah setup</label>
         <select id="adminTabSelect" onchange="selectAdminTab(this.value)">
-          <option value="groups">Langkah 1: Pengurusan Ahli &amp; Kumpulan</option>
+          <option value="groups">Langkah 1: Kumpulan</option>
           <option value="setup">Langkah 2: Pengurusan Stesen</option>
           <option value="passwords">Langkah 3: Password Kumpulan</option>
           <option value="qr">Langkah 4: QR Tersembunyi</option>
@@ -186,23 +183,9 @@
           <h3>Setup Treasure Hunt</h3>
           <label for="huntName">Nama Treasure Hunt</label>
           <input id="huntName" placeholder="Contoh: Tahun 5" autocomplete="off">
-          <h4>Kumpulan &amp; Ahli</h4>
-          <p class="admin-panel-intro">Tetapkan bilangan kumpulan dan ahli, kemudian tampal senarai nama untuk mengagihkan murid. Anda boleh pindah, tambah, atau padam ahli dan kumpulan.</p>
           <div id="groupManagerLock"></div>
-          <div class="group-setup">
-            <label>Bilangan Kumpulan</label>
-            <input id="group_num_groups" type="number" min="1" value="8">
-            <label>Bilangan Ahli / Kumpulan</label>
-            <input id="group_members_per" type="number" min="1" value="5">
-            <label>Senarai Nama (satu baris satu nama)</label>
-            <textarea id="group_names" rows="6" placeholder="Ali&#10;Siti&#10;Abu"></textarea>
-            <button class="secondary" onclick="groupAgih()">Agih ke Kumpulan</button>
-            <div id="groupAgihMsg"></div>
-          </div>
-          <div id="groupCards"></div>
-          <div class="feature-actions">
-            <button onclick="groupAddGroup()">&#65291; Tambah Kumpulan</button>
-          </div>
+          <label for="group_num_groups">Bilangan Kumpulan</label>
+          <input id="group_num_groups" type="number" min="1" max="30" step="1" inputmode="numeric" value="8">
           <div id="groupSaveMsg"></div>
           <div class="step-actions">
             <div class="step-actions-right">
@@ -216,39 +199,38 @@
       <section class="admin-panel" id="admin-panel-setup">
         <div class="card">
           <div class="setup-steps" aria-label="Progress setup">
-            <div class="setup-step" data-step="1"><span class="step-number">1</span>Ahli &amp; Kumpulan</div>
+            <div class="setup-step" data-step="1"><span class="step-number">1</span>Kumpulan</div>
             <div class="setup-step" data-step="2"><span class="step-number">2</span>Stesen</div>
             <div class="setup-step" data-step="3"><span class="step-number">3</span>Password</div>
             <div class="setup-step" data-step="4"><span class="step-number">4</span>QR</div>
           </div>
           <h3>Pengurusan Stesen (<span id="stationCountLabel">3</span>)</h3>
-          <p class="admin-panel-intro">Tetapkan bilangan stesen (3–6) dan lengkapkan setiap stesen. Tekan ＋ Stesen / − Stesen untuk melaraskan bilangan.</p>
+          <p class="admin-panel-intro">Tekan kad stesen untuk menetapkannya. Tekan ＋ untuk tambah stesen (maksimum 6).</p>
           <div id="stationSetupLock"></div>
-          <div class="feature-actions">
-            <button id="btnAddStation" class="secondary" onclick="addStation()">＋ Stesen</button>
-            <button id="btnRemoveStation" onclick="removeStation()">− Stesen</button>
-          </div>
+          <div class="setup-cards" id="stationCards"></div>
           <div id="stationsArea"></div>
-          <div class="card cannon-setup" id="cannonSetup">
-            <h3>⚔️ Meriam (Pilihan)</h3>
-            <p class="admin-panel-intro">Meriam membolehkan kumpulan menembak kumpulan lain. Setiap tugasan meriam memberi satu peluru kepada setiap kumpulan, sekali sahaja, melalui QR atau password.</p>
-            <label class="cannon-toggle"><input type="checkbox" id="cannonEnabled" onchange="toggleCannonSetup()"> Aktifkan meriam untuk hunt ini</label>
-            <div id="cannonBody" hidden>
-              <div class="cannon-settings">
-                <label for="cannonDamage">Damage setiap tembakan (%)</label>
-                <input id="cannonDamage" type="number" min="1" max="50" step="1" value="10">
-                <label for="cannonStartingAmmo">Peluru permulaan setiap kumpulan</label>
-                <input id="cannonStartingAmmo" type="number" min="0" max="99" step="1" value="0" inputmode="numeric">
-                <p class="cannon-floor-note">HP minimum kekal <b>50%</b> — kumpulan tidak boleh dihapuskan sepenuhnya.</p>
+          <div class="setup-modal" id="cannonModal" hidden role="dialog" aria-modal="true" aria-labelledby="cannonModalTitle">
+            <div class="setup-modal-box">
+              <div class="setup-modal-head"><h3 id="cannonModalTitle">⚔️ Meriam (Pilihan)</h3><button type="button" class="setup-modal-close" onclick="closeSetupModal()" aria-label="Tutup">✕</button></div>
+              <div class="cannon-setup" id="cannonSetup">
+                <p class="admin-panel-intro">Meriam membolehkan kumpulan menembak kumpulan lain. Setiap tugasan meriam memberi satu peluru kepada setiap kumpulan, sekali sahaja, melalui QR atau password.</p>
+                <label class="cannon-toggle"><input type="checkbox" id="cannonEnabled" onchange="toggleCannonSetup()"> Aktifkan meriam untuk hunt ini</label>
+                <div id="cannonBody" hidden>
+                  <div class="cannon-settings">
+                    <label for="cannonDamage">Damage setiap tembakan (%)</label>
+                    <input id="cannonDamage" type="number" min="1" max="50" step="1" value="10">
+                    <label for="cannonStartingAmmo">Peluru permulaan setiap kumpulan</label>
+                    <input id="cannonStartingAmmo" type="number" min="0" max="99" step="1" value="0" inputmode="numeric">
+                    <p class="cannon-floor-note">HP minimum kekal <b>50%</b> — kumpulan tidak boleh dihapuskan sepenuhnya.</p>
+                  </div>
+                  <div id="cannonsArea"></div>
+                  <div class="feature-actions">
+                    <button type="button" class="secondary" id="btnAddCannon" onclick="addCannon()">＋ Tambah Meriam</button>
+                  </div>
+                </div>
               </div>
-              <div id="cannonsArea"></div>
-              <div class="feature-actions">
-                <button type="button" class="secondary" id="btnAddCannon" onclick="addCannon()">＋ Tambah Meriam</button>
-              </div>
+              <div class="setup-modal-actions"><button type="button" class="step-next" onclick="closeSetupModal()">Selesai</button></div>
             </div>
-          </div>
-          <div class="feature-actions">
-            <button onclick="testStation(1)">Uji Stesen 1</button>
           </div>
           <div id="pushStatus"></div>
           <div class="step-actions">

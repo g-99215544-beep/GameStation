@@ -71,7 +71,6 @@ test('a first login holds the group on a progress screen until the download fini
   });
   await page.evaluate(async () => { await loadConfigCache(); });
 
-  await page.selectOption('#groupLoginSelect', '1');
   await page.fill('#groupLoginPass', '1001');
   await page.click('#view-login button.big');
 
@@ -171,7 +170,6 @@ test('logging in a second time downloads nothing and shows no progress bar', asy
 test('a returning student is not made to download again', async ({ page }) => {
   await openApp(page);
   await page.evaluate(async () => { await loadConfigCache(); });
-  await page.selectOption('#groupLoginSelect', '1');
   await page.fill('#groupLoginPass', '1001');
   await page.click('#view-login button.big');
   await expect(page.locator('#view-preload')).not.toHaveClass(/active/, { timeout: 20000 });
