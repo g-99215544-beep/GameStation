@@ -1,101 +1,27 @@
-// ---------- ADMIN: GROUP & MEMBER MANAGER ----------
+// ---------- ADMIN: GROUPS (Langkah 1) ----------
+// Step 1 only asks how many groups there are. Groups are numbered 1..N and
+// each gets a unique four-digit login code, which is all a pupil needs.
+const MAX_GROUPS = 30;
+function groupSetupLocked(){ return !!(sessionInfo && sessionInfo.status==='active'); }
 function renderGroupManager(){
-  const ids = Object.keys(groups||{}).sort((a,b)=>Number(a)-Number(b));
-  groupDraft = ids.map(gid=>Array.isArray(groups[gid].members)?groups[gid].members.slice():[]);
-  const locked = !!(sessionInfo && sessionInfo.status==='active');
-  const lock = document.getElementById('groupManagerLock');
-  if(lock) lock.innerHTML = locked
-    ? '<div class="msg">🔒 Sesi sedang aktif — pengurusan kumpulan dikunci. Tekan Tamat sebelum mengubah kumpulan.</div>' : '';
+  const count = Object.keys(groups||{}).length;
   const ng = document.getElementById('group_num_groups');
-  if(ng && ids.length) ng.value = ids.length;
-  renderGroupCards();
-  document.querySelectorAll('#admin-panel-groups .group-setup input, #admin-panel-groups .group-setup textarea, #admin-panel-groups .group-setup button, #admin-panel-groups .feature-actions button')
-    .forEach(el=>{ el.disabled = locked; });
+  if(ng) ng.value = count || 8;
+  syncGroupManagerLock(true);
 }
-function renderGroupCards(){
-  const wrap = document.getElementById('groupCards');
-  if(!wrap) return;
-  const locked = !!(sessionInfo && sessionInfo.status==='active');
-  const dis = locked ? ' disabled' : '';
-  if(!groupDraft.length){
-    wrap.innerHTML = '<div class="empty-state">Tiada kumpulan lagi. Tetapkan bilangan dan tekan “Agih ke Kumpulan”, atau tekan “＋ Tambah Kumpulan”.</div>';
-    return;
-  }
-  wrap.innerHTML = groupDraft.map((members,gIdx)=>{
-    const rows = members.map((name,mIdx)=>{
-      const opts = groupDraft.map((_,j)=> j===gIdx ? '' : `<option value="${j}">Kumpulan ${j+1}</option>`).join('');
-      const move = groupDraft.length>1
-        ? `<select id="group_move_${gIdx}_${mIdx}"${dis}>${opts}</select><button onclick="groupMoveMember(${gIdx},${mIdx})"${dis}>Pindah</button>` : '';
-      return `<li><span class="member-name">${escapeHtml(name)}</span>${move}<button onclick="groupRemoveMember(${gIdx},${mIdx})"${dis}>Buang</button></li>`;
-    }).join('');
-    return `<div class="group-card">
-      <div class="group-card-head"><h4>Kumpulan ${gIdx+1} <span class="member-count">(${members.length})</span></h4>
-      <button onclick="groupRemoveGroup(${gIdx})"${dis}>Padam Kumpulan</button></div>
-      <ul class="member-list">${rows || '<li class="empty-state">Tiada ahli</li>'}</ul>
-      <div class="member-add"><input id="group_add_${gIdx}" placeholder="Nama ahli baharu"${dis}><button onclick="groupAddMember(${gIdx})"${dis}>＋ Tambah Ahli</button></div>
-    </div>`;
-  }).join('');
-}
-function syncGroupManagerLock(){
+function syncGroupManagerLock(force){
   const panel = document.getElementById('admin-panel-groups');
-  if(!panel || !panel.classList.contains('active')) return; // only act when the tab is open
-  const locked = !!(sessionInfo && sessionInfo.status==='active');
+  if(!panel || (!force && !panel.classList.contains('active'))) return;
+  const locked = groupSetupLocked();
   const lock = document.getElementById('groupManagerLock');
   if(lock) lock.innerHTML = locked
-    ? '<div class="msg">🔒 Sesi sedang aktif — pengurusan kumpulan dikunci. Tekan Tamat sebelum mengubah kumpulan.</div>' : '';
-  panel.querySelectorAll('.group-setup input, .group-setup textarea, .group-setup button, .feature-actions button, #groupCards select, #groupCards button, #groupCards input')
-    .forEach(el=>{ el.disabled = locked; });
+    ? '<div class="msg">🔒 Sesi sedang aktif — bilangan kumpulan dikunci. Tekan Tamat sebelum mengubahnya.</div>' : '';
+  const ng = document.getElementById('group_num_groups');
+  if(ng) ng.disabled = locked;
 }
-function groupAgih(){
-  const ng = parseInt(document.getElementById('group_num_groups').value,10);
-  const mp = parseInt(document.getElementById('group_members_per').value,10);
-  const msg = document.getElementById('groupAgihMsg');
-  if(!(ng>=1) || !(mp>=1)){
-    if(msg) msg.innerHTML='<div class="msg err">Masukkan bilangan kumpulan dan ahli yang sah (≥ 1).</div>';
-    return;
-  }
-  const names = GroupRoster.normalizeNames(document.getElementById('group_names').value);
-  const res = GroupRoster.distributeNames(names, ng, mp);
-  groupDraft = res.groups;
-  markSetupStepDirty('groups');
-  renderGroupCards();
-  if(msg) msg.innerHTML = res.overflow.length
-    ? `<div class="msg">⚠️ ${res.overflow.length} nama berlebihan tidak diagihkan: ${res.overflow.map(escapeHtml).join(', ')}. Tambah kumpulan/ahli untuk memuatkannya.</div>`
-    : `<div class="msg ok">✅ ${names.length} nama diagihkan ke ${ng} kumpulan.</div>`;
-}
-function groupMoveMember(fromIdx, memberIdx){
-  const sel = document.getElementById(`group_move_${fromIdx}_${memberIdx}`);
-  if(!sel) return;
-  const toIdx = parseInt(sel.value,10);
-  if(isNaN(toIdx)) return;
-  groupDraft = GroupRoster.moveMember(groupDraft, fromIdx, memberIdx, toIdx);
-  markSetupStepDirty('groups');
-  renderGroupCards();
-}
-function groupRemoveMember(gIdx, mIdx){
-  groupDraft = GroupRoster.removeMember(groupDraft, gIdx, mIdx);
-  markSetupStepDirty('groups');
-  renderGroupCards();
-}
-function groupAddMember(gIdx){
-  const input = document.getElementById('group_add_'+gIdx);
-  if(!input) return;
-  groupDraft = GroupRoster.addMember(groupDraft, gIdx, input.value);
-  markSetupStepDirty('groups');
-  renderGroupCards();
-}
-function groupAddGroup(){
-  groupDraft = GroupRoster.addGroup(groupDraft);
-  markSetupStepDirty('groups');
-  renderGroupCards();
-}
-function groupRemoveGroup(gIdx){
-  if(groupDraft.length<=1){ alert('Mesti ada sekurang-kurangnya satu kumpulan.'); return; }
-  const count = (groupDraft[gIdx]||[]).length;
-  if(!confirm(`Padam Kumpulan ${gIdx+1}${count?` dan ${count} ahlinya`:''}?`)) return;
-  groupDraft = GroupRoster.removeGroup(groupDraft, gIdx);
-  markSetupStepDirty('groups');
-  renderGroupCards();
+function readGroupCount(){
+  const value = Number(document.getElementById('group_num_groups')?.value);
+  return Number.isInteger(value) && value>=1 && value<=MAX_GROUPS ? value : null;
 }
 function buildGroupsFromDraft(draftMembers, existingGroups){
   const N = currentStationCount();
@@ -122,11 +48,18 @@ function saveGroupManager(){
     if(msg) msg.innerHTML='<div class="msg err">Tidak boleh simpan semasa sesi aktif. Tekan Tamat dahulu.</div>';
     return;
   }
-  if(!groupDraft.length){
-    if(msg) msg.innerHTML='<div class="msg err">Mesti ada sekurang-kurangnya satu kumpulan.</div>';
+  const count = readGroupCount();
+  if(!count){
+    if(msg) msg.innerHTML=`<div class="msg err">Masukkan bilangan kumpulan antara 1 dan ${MAX_GROUPS}.</div>`;
     return;
   }
-  const gr = buildGroupsFromDraft(groupDraft, groups);
+  // Members are no longer managed here, but a hunt edited from the old UI
+  // keeps whatever roster it already had for the groups that remain.
+  const draft = Array.from({length:count},(_,i)=>{
+    const existing = groups && groups[i+1];
+    return existing && Array.isArray(existing.members) ? existing.members.slice() : [];
+  });
+  const gr = buildGroupsFromDraft(draft, groups);
   const prog = {};
   Object.keys(gr).forEach(gid=>{ prog[gid]=freshGroupProgress(); });
   const name=String(document.getElementById('huntName')?.value||'').trim();
@@ -149,7 +82,6 @@ function saveGroupManager(){
       isHuntDraft=false;
       groups=gr;
       sessionInfo={status:'setup'};
-      renderGroupLoginOptions();
       markSetupStepSaved('groups');
       if(msg) msg.innerHTML=`<div class="msg ok">${Object.keys(gr).length} kumpulan disimpan. Anda boleh teruskan ke Langkah 2.</div>`;
     }).catch(err=>{
@@ -165,25 +97,15 @@ function saveGroupManager(){
   ]).then(()=>{
     groups = gr;
     sessionInfo = {status:'setup'};
-    renderGroupLoginOptions();
     markSetupStepSaved('groups');
     if(msg) msg.innerHTML=`<div class="msg ok">✅ ${Object.keys(gr).length} kumpulan disimpan. Progress direset.</div>`;
   }).catch(err=>{
     if(msg) msg.innerHTML=`<div class="msg err">❌ Gagal menyimpan kumpulan: ${escapeHtml(err && err.message ? err.message : err)}. Cuba lagi.</div>`;
   });
 }
-function renderGroupLoginOptions(){
-  const sel = document.getElementById('groupLoginSelect');
-  if(!sel) return;
-  const ids = Object.keys(groups||{}).sort((a,b)=>Number(a)-Number(b));
-  const list = ids.length ? ids : Array.from({length:NUM_GROUPS},(_,i)=>String(i+1));
-  sel.innerHTML = list.map(id=>`<option value="${id}">Kumpulan ${id}</option>`).join('');
-}
-
 function initApp(){
   initConnectivity();
   bindSetupDirtyTracking();
-  renderGroupLoginOptions();
   const demoType=directGameDemoType();
   if(demoType){ startDirectGameDemo(demoType); return; }
   watchHunts();
@@ -396,17 +318,31 @@ function loginAsAdmin(){
     document.getElementById('adminLoginMsg').innerHTML='<div class="msg err">PIN salah</div>';
   }
 }
+// A pupil types only their code; it identifies the group, since every code in
+// a hunt is unique (enforced wherever codes are generated or saved).
+function groupIdForLoginCode(code){
+  const matches = Object.keys(groups||{}).filter(gid=>
+    groups[gid] && numericLoginPassword(groups[gid].loginPassword)===code);
+  return matches.length===1 ? matches[0] : matches.length ? 'duplicate' : null;
+}
 function loginAsGroup(){
-  const gid = document.getElementById('groupLoginSelect').value;
   const inputPass = document.getElementById('groupLoginPass').value.trim();
-  const g = groups[gid];
   const msg = document.getElementById('groupLoginMsg');
-  if(!g || !g.loginPassword){
-    msg.innerHTML='<div class="msg err">Config kumpulan belum di-push oleh admin.</div>';
+  if(!groups || !Object.keys(groups).length){
+    msg.innerHTML='<div class="msg err">Treasure Hunt belum disediakan oleh guru.</div>';
     return;
   }
-  if(inputPass !== numericLoginPassword(g.loginPassword)){
-    msg.innerHTML='<div class="msg err">❌ Password kumpulan salah.</div>';
+  if(!/^\d{4}$/.test(inputPass)){
+    msg.innerHTML='<div class="msg err">Masukkan kod 4 digit.</div>';
+    return;
+  }
+  const gid = groupIdForLoginCode(inputPass);
+  if(gid==='duplicate'){
+    msg.innerHTML='<div class="msg err">Kod ini dikongsi lebih daripada satu kumpulan. Minta guru jana semula kod.</div>';
+    return;
+  }
+  if(!gid){
+    msg.innerHTML='<div class="msg err">❌ Kod kumpulan salah.</div>';
     return;
   }
   msg.innerHTML='';

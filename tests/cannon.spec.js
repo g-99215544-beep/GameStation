@@ -69,6 +69,14 @@ async function openHuntSetup(page) {
   await page.getByRole('button', { name: 'Masuk Admin' }).click();
   await page.locator('.group-card', { hasText: 'Ujian Meriam' }).getByRole('button', { name: 'Edit' }).click();
   await page.locator('#adminTabSelect').selectOption('setup');
+  // The cannon settings live in a pop-up behind the Meriam card.
+  await page.locator('#cannonCard').click();
+}
+
+// The save button sits on the page behind the pop-up, as it does for a teacher.
+async function saveStationsAndCannons(page) {
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Simpan Stesen & Meriam' }).click();
 }
 
 // Logs in as admin and opens the Smart Board straight from the hunt list, via
@@ -98,7 +106,7 @@ test('admin can enable cannons, add one, and save it to config', async ({ page }
   await page.locator('#st_gametype_c1').selectOption('lembaran_kerja');
   await page.locator('#worksheet_editor_c1 .worksheet-answer').first().fill('42');
 
-  await page.getByRole('button', { name: 'Simpan Treasure Hunt' }).first().click();
+  await saveStationsAndCannons(page);
   // #pushStatus is duplicated (a second, display:none copy lives in the legacy
   // admin view), so scope to the panel actually in use to avoid a strict-mode
   // violation.
@@ -127,7 +135,7 @@ test('a cannon password that collides with a station is rejected by name', async
     expect(dialog.message()).toContain('Meriam c1');
     dialog.dismiss();
   });
-  await page.getByRole('button', { name: 'Simpan Treasure Hunt' }).first().click();
+  await saveStationsAndCannons(page);
 });
 
 test('the seventh cannon is refused', async ({ page }) => {
@@ -246,9 +254,8 @@ test('finishing a station never writes hp, ammo, claimed or incoming', async ({ 
 // Logs a student in as the given group id via the login view. Seeded groups
 // use login password `1000 + <group id>` (see seedHunt above).
 async function loginAsGroup(page, groupId) {
-  await page.locator('#groupLoginSelect').selectOption(String(groupId));
   await page.locator('#groupLoginPass').fill(String(1000 + Number(groupId)));
-  await page.getByRole('button', { name: 'Masuk sebagai Kumpulan' }).click();
+  await page.locator('#view-login button.big').click();
 }
 
 test('the ship carries an HP bar sized to the group HP', async ({ page }) => {
@@ -1183,7 +1190,7 @@ test('an oversized cannon worksheet is refused before anything is written', asyn
   const dialogMessage = new Promise(resolve => {
     page.once('dialog', dialog => { resolve(dialog.message()); dialog.dismiss(); });
   });
-  await page.getByRole('button', { name: 'Simpan Treasure Hunt' }).first().click();
+  await saveStationsAndCannons(page);
   const message = await dialogMessage;
   expect(message).toContain('Meriam c1');
   expect(message).toContain('terlalu besar');

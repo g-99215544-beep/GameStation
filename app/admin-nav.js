@@ -119,7 +119,7 @@ function renderHuntList(){
   }).join('');
 }
 function beginNewHunt(){
-  currentHuntId=null; currentHuntCreatedAt=null; isHuntDraft=true; stations={}; groups={}; stationCount=3; groupDraft=[]; sessionInfo={status:'setup'};
+  currentHuntId=null; currentHuntCreatedAt=null; isHuntDraft=true; stations={}; groups={}; stationCount=3; sessionInfo={status:'setup'};
   cannonConfig={enabled:false,damagePercent:10,startingAmmo:0}; cannons={};
   resetSetupFlow(false);
   const name=document.getElementById('huntName'); if(name) name.value='';

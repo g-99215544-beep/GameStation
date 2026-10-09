@@ -50,6 +50,7 @@ test('admin can attach and paste a separate image for each worksheet question', 
     });
     show('view-admin');
     selectAdminTab('setup');
+    openStationModal(1);
   });
 
   const editor = page.locator('#worksheet_editor_1');

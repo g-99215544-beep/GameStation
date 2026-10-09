@@ -46,7 +46,7 @@ async function boot(page) {
   await page.addInitScript(installFakeFirebase, SEED);
   await page.goto(server.origin + '/index.html');
   await page.locator('#dailyIntro').evaluate(element => { element.hidden = true; });
-  await expect(page.locator('#groupLoginSelect')).toContainText('Kumpulan 1');
+  await expect.poll(() => page.evaluate(() => Object.keys(groups))).toContain('1');
 }
 
 test('persistent login expires after two hours, including an open tab', async ({ page }) => {

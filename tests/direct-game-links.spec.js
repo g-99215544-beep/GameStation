@@ -87,6 +87,8 @@ test('admin can select the Sudoku stages that a station requires', async ({ page
       3: { id: 3, name: 'Tangram', password: '34567', gameType: 'tangram', gameDataRaw: '{}' }
     });
   });
+  // Each station's form lives in its own pop-up, opened from its card.
+  await page.locator('#stationCards .setup-card[data-station="1"]').click();
   const stages=page.locator('#sudoku_stage_editor_1 input[type="checkbox"]');
   await expect(stages).toHaveCount(3);
   expect(await stages.evaluateAll(inputs=>inputs.map(input=>input.checked))).toEqual([true,true,true]);
@@ -95,11 +97,15 @@ test('admin can select the Sudoku stages that a station requires', async ({ page
   const saved=await page.evaluate(() => JSON.parse(stationGameDataRaw(1,'sudoku')));
   expect(saved.sudokuStages).toEqual([1,2]);
 
+  await page.keyboard.press('Escape');
+  await page.locator('#stationCards .setup-card[data-station="2"]').click();
   await expect(page.locator('#sifir_target_editor_2')).toBeVisible();
   await page.locator('#st_sifir_target_2').fill('3');
   const sifirSaved=await page.evaluate(() => JSON.parse(stationGameDataRaw(2,'sifir')));
   expect(sifirSaved.sifirTarget).toBe(3);
 
+  await page.keyboard.press('Escape');
+  await page.locator('#stationCards .setup-card[data-station="3"]').click();
   const tangramStages=page.locator('#tangram_stage_editor_3 input[type="checkbox"]');
   await expect(tangramStages).toHaveCount(3);
   await tangramStages.nth(1).uncheck();

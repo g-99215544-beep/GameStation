@@ -180,7 +180,7 @@ function testStation(i){
   const gameType=document.getElementById('st_gametype_'+i).value;
   const st = {
     id:i,
-    name:document.getElementById('st_name_'+i).value || ('Stesen '+i),
+    name:'Stesen '+i,
     location:document.getElementById('st_loc_'+i).value,
     password:document.getElementById('st_pass_'+i).value,
     timeLimitMin:stationTimeLimitMin(document.getElementById('st_time_'+i).value),

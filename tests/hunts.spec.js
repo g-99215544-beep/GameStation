@@ -54,5 +54,5 @@ test('admin lists named hunts and only allows one active hunt', async ({ page })
     currentHuntId='tahun5';
     await loadConfigCache();
   });
-  await expect(page.locator('#groupLoginSelect')).toContainText('Kumpulan 1');
+  await expect.poll(() => page.evaluate(() => Object.keys(groups))).toContain('1');
 });

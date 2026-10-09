@@ -62,27 +62,53 @@ test('admin tabs put groups first and stations second', async ({ page }) => {
   expect(values.slice(0, 5)).toEqual(['groups', 'setup', 'passwords', 'qr', 'session']);
 });
 
-test('station setup defaults to 3 blocks and +/- respects 3..6 bounds', async ({ page }) => {
+test('step 2 shows only station cards; + adds up to 6 and a pop-up removes the last', async ({ page }) => {
   await seedPage(page, seedWith(3, {}));
   await openAdmin(page, 'setup');
-  await expect(page.locator('#stationsArea .station-block')).toHaveCount(3);
+  const cards = page.locator('#stationCards .setup-card[data-station]');
+  await expect(cards).toHaveCount(3);
+  await expect(cards.nth(0)).toContainText('Stesen 1');
+  // Forms are hidden until a card is tapped.
+  await expect(page.locator('#st_loc_1')).toBeHidden();
   await page.click('#btnAddStation');
-  await expect(page.locator('#stationsArea .station-block')).toHaveCount(4);
+  // Adding opens the new station's pop-up straight away.
+  await expect(page.locator('#station_modal_4')).toBeVisible();
+  await page.click('#station_modal_4 .step-next');
+  await expect(page.locator('#station_modal_4')).toBeHidden();
   await page.click('#btnAddStation');
+  await page.click('#station_modal_5 .step-next');
   await page.click('#btnAddStation');
-  await expect(page.locator('#stationsArea .station-block')).toHaveCount(6);
-  await expect(page.locator('#btnAddStation')).toBeDisabled();
-  await page.click('#btnRemoveStation');
-  await page.click('#btnRemoveStation');
-  await page.click('#btnRemoveStation');
-  await expect(page.locator('#stationsArea .station-block')).toHaveCount(3);
-  await expect(page.locator('#btnRemoveStation')).toBeDisabled();
+  await page.click('#station_modal_6 .step-next');
+  await expect(cards).toHaveCount(6);
+  await expect(page.locator('#btnAddStation')).toHaveCount(0);
+  for (const n of [6, 5, 4]) {
+    await cards.nth(n - 1).click();
+    await page.click(`#station_modal_${n} .station-remove`);
+  }
+  await expect(cards).toHaveCount(3);
+  // Stations 1-3 can never be removed.
+  await cards.nth(2).click();
+  await expect(page.locator('#station_modal_3 .station-remove')).toHaveCount(0);
 });
 
-test('an existing 6-station config renders six blocks', async ({ page }) => {
+test('a station pop-up has no name field and saves as "Stesen N"', async ({ page }) => {
+  await seedPage(page, seedWith(3, {}));
+  await openAdmin(page, 'setup');
+  await page.locator('#stationCards .setup-card[data-station="2"]').click();
+  await expect(page.locator('#station_modal_2')).toBeVisible();
+  await expect(page.locator('#station_modal_2')).not.toContainText('Nama Stesen');
+  await page.fill('#st_loc_2', 'Bawah pokok');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#station_modal_2')).toBeHidden();
+  const collected = await page.evaluate(() => collectStations());
+  expect(collected['2'].name).toBe('Stesen 2');
+  expect(collected['2'].location).toBe('Bawah pokok');
+});
+
+test('an existing 6-station config renders six cards', async ({ page }) => {
   await seedPage(page, seedWith(6, {}));
   await openAdmin(page, 'setup');
-  await expect(page.locator('#stationsArea .station-block')).toHaveCount(6);
+  await expect(page.locator('#stationCards .setup-card[data-station]')).toHaveCount(6);
 });
 
 test('saving fewer stations regenerates group orders and preserves roster', async ({ page }) => {
@@ -92,9 +118,7 @@ test('saving fewer stations regenerates group orders and preserves roster', asyn
   };
   await seedPage(page, seedWith(6, groups));
   await openAdmin(page, 'setup');
-  await page.click('#btnRemoveStation');
-  await page.click('#btnRemoveStation');
-  await page.click('#btnRemoveStation');
+  await page.evaluate(() => { removeStation(); removeStation(); removeStation(); });
   await page.evaluate(async () => { pushConfig(); await new Promise(resolve => setTimeout(resolve, 0)); });
   const saved = await page.evaluate(() => db.ref('gamestation2026/config/groups').once('value').then(snapshot => snapshot.val()));
   expect(saved['1'].order).toHaveLength(3);

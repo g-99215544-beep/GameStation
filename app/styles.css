@@ -334,7 +334,7 @@
   .setup-step{border-top:4px solid #dfe3ea;padding:9px 8px 0;color:#8a909b;font-size:12px;font-weight:800;}
   .setup-step.active{border-color:var(--gold);color:var(--navy);}
   .setup-step.done{border-color:var(--green);color:var(--green);}
-  .cannon-setup{margin-top:18px;border:2px dashed var(--gold);}
+  .cannon-setup{margin-top:10px;}
   .cannon-toggle{display:flex;align-items:center;gap:8px;font-weight:700;}
   .cannon-settings{display:grid;grid-template-columns:minmax(0,1fr) minmax(100px,160px);gap:8px 14px;align-items:end;margin:12px 0;}
   .cannon-settings label,.cannon-settings input{margin:0;}
@@ -353,6 +353,28 @@
   .session-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:16px;}
   .session-controls button{margin:0;}
   .session-help{color:#777;font-size:13px;line-height:1.5;margin:16px 0 0;}
+  /* Langkah 2: one small card per station; each opens its form in a pop-up. */
+  .setup-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-top:14px;}
+  .setup-cards .setup-card{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;min-height:104px;margin:0;padding:14px;border:2px solid #e3d5ae;border-radius:12px;background:#fffaf0;color:var(--navy);text-align:left;font-weight:600;}
+  .setup-cards .setup-card:hover,.setup-cards .setup-card:focus-visible{border-color:var(--gold);background:#fff3cf;color:var(--navy);outline:none;}
+  .setup-cards .setup-card.is-ready{border-color:#9fd3b8;background:#f1fbf5;}
+  .setup-card-title{font-size:18px;font-weight:800;}
+  .setup-card-sub{font-size:13px;color:#6b6b6b;min-height:1em;}
+  .setup-card-status{font-size:13px;}
+  .setup-cards .setup-card-add{align-items:center;font-size:40px;font-weight:400;border-style:dashed;background:#fff;color:#b08a2e;}
+  .setup-cards .setup-card-add:disabled{opacity:.45;cursor:not-allowed;}
+  .setup-cards .setup-card-cannon{background:#fff6f5;border-color:#efc2bd;}
+  .setup-modal{position:fixed;inset:0;z-index:900;display:flex;align-items:flex-start;justify-content:center;padding:24px 12px;background:rgba(18,56,91,.55);overflow-y:auto;}
+  .setup-modal[hidden]{display:none;}
+  .setup-modal-box{width:100%;max-width:560px;background:#fff;border-radius:14px;padding:18px 20px;box-shadow:0 10px 40px rgba(0,0,0,.3);}
+  .setup-modal-head{display:flex;justify-content:space-between;align-items:center;gap:12px;}
+  .setup-modal-head h3{margin:0;}
+  .setup-modal-close{margin:0;padding:6px 12px;background:transparent;color:var(--navy);font-size:18px;}
+  .setup-modal .station-block{border:0;padding:0;margin:0;background:transparent;}
+  .setup-modal-actions{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:18px;padding-top:14px;border-top:1px solid #eee;}
+  .setup-modal-actions button{margin:0;}
+  .setup-modal-actions .station-remove{margin-right:auto;background:var(--red);}
+  body.setup-modal-open{overflow:hidden;}
   .admin-panel .station-block{background:#fcfcfb;}
   .admin-panel .station-block + .station-block{margin-top:12px;}
   .admin-panel .station-block h3{font-size:16px;margin:0 0 10px;}
@@ -395,18 +417,9 @@
   .sifir-target-editor{display:none;margin-top:12px;padding:12px 14px;background:#fff8df;border:2px solid var(--gold);border-radius:10px;}
   .sifir-target-editor p{margin:0 0 8px;font-size:14px;color:#65513a;}
   .sifir-target-editor input{max-width:110px;}
-  .group-setup{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;}
-  .group-setup textarea{width:100%;font-family:inherit;}
   .group-card{border:2px solid var(--gold);border-radius:10px;padding:12px;margin:10px 0;background:#fff8df;}
   .group-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;}
   .group-card-head h4{margin:0;color:var(--navy);}
-  .group-card .member-count{color:#888;font-weight:400;font-size:13px;}
-  .member-list{list-style:none;margin:8px 0;padding:0;}
-  .member-list li{display:flex;gap:6px;align-items:center;padding:4px 0;border-top:1px solid #ead7aa;}
-  .member-list li:first-child{border-top:0;}
-  .member-list .member-name{flex:1;color:var(--navy);}
-  .member-add{display:flex;gap:6px;margin-top:6px;}
-  .member-add input{flex:1;}
   .password-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px;}.password-actions button{margin:0;}
   .password-edit{display:flex;gap:8px;align-items:center;}.password-edit input{width:128px;min-width:0;margin:0;font-variant-numeric:tabular-nums;font-weight:800;letter-spacing:.08em;}.password-edit button{margin:0;padding:8px 10px;font-size:12px;white-space:nowrap;}
   .password-note{margin:0 0 12px;color:#75582b;font-size:13px;font-weight:700;}

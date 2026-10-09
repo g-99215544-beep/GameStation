@@ -49,60 +49,46 @@ async function openGroupTab(page) {
   });
 }
 
-test('group tab renders existing groups and members', async ({ page }) => {
+test('step 1 asks only for the hunt name and the number of groups', async ({ page }) => {
   await seedPage(page, baseSeed());
   await openGroupTab(page);
-  await expect(page.locator('#groupCards .group-card')).toHaveCount(2);
-  await expect(page.locator('#groupCards .group-card').first()).toContainText('Ali');
-  await expect(page.locator('#groupCards .group-card').first()).toContainText('Siti');
+  await expect(page.locator('#group_num_groups')).toHaveValue('2');
+  await expect(page.locator('#admin-panel-groups textarea')).toHaveCount(0);
+  await expect(page.locator('#admin-panel-groups')).not.toContainText('Agih');
+  await expect(page.locator('#admin-panel-groups')).not.toContainText('Ahli');
 });
 
-test('Agih distributes pasted names sequentially', async ({ page }) => {
+test('saving 9 groups creates groups 1-9 with unique 4-digit codes and fresh progress', async ({ page }) => {
   await seedPage(page, baseSeed());
   await openGroupTab(page);
-  await page.fill('#group_num_groups', '2');
-  await page.fill('#group_members_per', '2');
-  await page.fill('#group_names', 'A\nB\nC\nD');
-  await page.click('text=Agih ke Kumpulan');
-  await expect(page.locator('#groupCards .group-card')).toHaveCount(2);
-  await expect(page.locator('#groupCards .group-card').nth(0)).toContainText('A');
-  await expect(page.locator('#groupCards .group-card').nth(0)).toContainText('B');
-  await expect(page.locator('#groupCards .group-card').nth(1)).toContainText('C');
-  await expect(page.locator('#groupCards .group-card').nth(1)).toContainText('D');
-});
-
-test('moving a member relocates it to the target group', async ({ page }) => {
-  await seedPage(page, baseSeed());
-  await openGroupTab(page);
-  // Move member 0 of group 0 (Ali) to group 1 (index 1)
-  await page.selectOption('#group_move_0_0', '1');
-  await page.click('#groupCards .group-card:nth-child(1) button:has-text("Pindah")');
-  await expect(page.locator('#groupCards .group-card').nth(1)).toContainText('Ali');
-  await expect(page.locator('#groupCards .group-card').nth(0)).not.toContainText('Ali');
-});
-
-test('deleting a group removes it and re-keys', async ({ page }) => {
-  await seedPage(page, baseSeed());
-  await openGroupTab(page);
-  page.on('dialog', d => d.accept());
-  await page.click('#groupCards .group-card:nth-child(1) button:has-text("Padam Kumpulan")');
-  await expect(page.locator('#groupCards .group-card')).toHaveCount(1);
-  await expect(page.locator('#groupCards .group-card').nth(0)).toContainText('Kumpulan 1');
-  await expect(page.locator('#groupCards .group-card').nth(0)).toContainText('Abu');
-});
-
-test('Simpan writes members to config/groups and resets progress', async ({ page }) => {
-  await seedPage(page, baseSeed());
-  await openGroupTab(page);
+  await page.fill('#group_num_groups', '9');
   await page.evaluate(() => saveGroupManager());
   const saved = await page.evaluate(() =>
     db.ref('gamestation2026/config/groups').once('value').then(s => s.val()));
-  expect(saved['1'].members).toEqual(['Ali', 'Siti']);
-  expect(saved['1'].loginPassword).toBe('1001');       // preserved by index
-  expect(saved['2'].members).toEqual(['Abu']);
+  expect(Object.keys(saved).sort((a, b) => a - b)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+  const codes = Object.values(saved).map(g => g.loginPassword);
+  codes.forEach(code => expect(code).toMatch(/^\d{4}$/));
+  expect(new Set(codes).size).toBe(9);
+  expect(saved['1'].loginPassword).toBe('1001');       // existing codes kept
+  expect(saved['2'].loginPassword).toBe('1002');
+  expect(saved['1'].members).toEqual(['Ali', 'Siti']); // an old roster is not thrown away
   const prog = await page.evaluate(() =>
     db.ref('gamestation2026/progress').once('value').then(s => s.val()));
-  expect(prog['1']).toMatchObject({ currentIndex: 0, status: 'idle', totalScore: 0 });
+  expect(Object.keys(prog)).toHaveLength(9);
+  expect(prog['9']).toMatchObject({ currentIndex: 0, status: 'idle', totalScore: 0 });
+});
+
+test('an out-of-range group count is refused without writing', async ({ page }) => {
+  await seedPage(page, baseSeed());
+  await openGroupTab(page);
+  for (const value of ['0', '31', '']) {
+    await page.fill('#group_num_groups', value);
+    await page.evaluate(() => saveGroupManager());
+    await expect(page.locator('#groupSaveMsg .msg.err')).toBeVisible();
+  }
+  const saved = await page.evaluate(() =>
+    db.ref('gamestation2026/config/groups').once('value').then(s => s.val()));
+  expect(Object.keys(saved)).toEqual(['1', '2']);
 });
 
 test('pushConfig preserves an existing roster (does not regenerate groups)', async ({ page }) => {
@@ -120,4 +106,48 @@ test('pushConfig preserves an existing roster (does not regenerate groups)', asy
     db.ref('gamestation2026/config/groups').once('value').then(s => s.val()));
   expect(Object.keys(saved)).toEqual(['1', '2']);          // still 2 groups, not 14
   expect(saved['1'].members).toEqual(['Ali', 'Siti']);     // roster preserved
+});
+
+async function openLogin(page, seed) {
+  await seedPage(page, seed);
+  await page.goto(pathToFileURL(path.join(__dirname, '..', 'index.html')).href);
+  await expect(page.locator('#view-login')).toHaveClass(/active/);
+  await page.evaluate(async () => { await loadConfigCache(); });
+}
+
+test('the login screen asks only for a code and works out the group from it', async ({ page }) => {
+  await openLogin(page, baseSeed());
+  await expect(page.locator('#view-login select')).toHaveCount(0);
+  await page.fill('#groupLoginPass', '1002');
+  await page.click('#view-login button.big');
+  await expect.poll(() => page.evaluate(() => currentGroupId)).toBe('2');
+  await expect(page.locator('#topTitle')).toHaveText('Kumpulan 2');
+});
+
+test('a wrong code is rejected and logs no one in', async ({ page }) => {
+  await openLogin(page, baseSeed());
+  await page.fill('#groupLoginPass', '9999');
+  await page.click('#view-login button.big');
+  await expect(page.locator('#groupLoginMsg')).toContainText('Kod kumpulan salah');
+  expect(await page.evaluate(() => currentGroupId)).toBeFalsy();
+});
+
+test('a code shared by two groups (old data) is refused instead of guessing', async ({ page }) => {
+  const seed = baseSeed();
+  seed.gamestation2026.config.groups['2'].loginPassword = '1001';
+  await openLogin(page, seed);
+  await page.fill('#groupLoginPass', '1001');
+  await page.click('#view-login button.big');
+  await expect(page.locator('#groupLoginMsg')).toContainText('lebih daripada satu kumpulan');
+  expect(await page.evaluate(() => currentGroupId)).toBeFalsy();
+});
+
+test('step 3 refuses to save two groups with the same code', async ({ page }) => {
+  await seedPage(page, baseSeed());
+  await openGroupTab(page);
+  await page.evaluate(() => selectAdminTab('passwords'));
+  await page.fill('#login_password_2', '1001');
+  const message = new Promise(resolve => page.once('dialog', dialog => { resolve(dialog.message()); dialog.dismiss(); }));
+  await page.evaluate(() => saveLoginPasswords());
+  expect(await message).toContain('unik');
 });
