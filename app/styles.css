@@ -21,7 +21,9 @@
   /* Journey map: a looping video map with the transparent pirate-ship sprite. */
   .journey-map{position:fixed;inset:0;z-index:80;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#063a66;}
   .journey-map[hidden]{display:none;}
-  .journey-map-canvas{position:relative;width:min(100vw,calc(100vh * 9 / 16));height:min(100vh,calc(100vw * 16 / 9));overflow:hidden;background:#087dbd;}
+  /* The islands exist only in the map art. The poster frame sits behind the
+     video so they stay visible when the video cannot load or play. */
+  .journey-map-canvas{position:relative;width:min(100vw,calc(100vh * 9 / 16));height:min(100vh,calc(100vw * 16 / 9));overflow:hidden;background:#087dbd url('../assets/map/map-poster.jpg') center/cover no-repeat;}
   .journey-map-video{display:block;width:100%;height:100%;object-fit:cover;}
   /* Decorative and aria-hidden — never a pointer target. Without this it sat
      above rival ships (z-index 2 vs 1) and silently ate taps aimed at any

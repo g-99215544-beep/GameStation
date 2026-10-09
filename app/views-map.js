@@ -360,7 +360,21 @@ function playJourneyMapPingPong(){
   // eager preload already failed. Reset the media state so opening the map
   // retries through the current worker instead of keeping the old error.
   if(video.error) video.load();
-  if(video.paused) video.play().catch(()=>{});
+  if(video.paused) video.play().catch(retryJourneyMapVideoOnTap);
+}
+// Autoplay can be refused even for a muted video (iOS Low Power Mode, Android
+// data saver). The poster keeps the islands visible meanwhile; the pupil's
+// next tap on the map is a user gesture, which lets play() through.
+function retryJourneyMapVideoOnTap(){
+  const canvas=document.getElementById('journeyMapCanvas');
+  if(!canvas || canvas.dataset.videoRetryArmed) return;
+  canvas.dataset.videoRetryArmed='1';
+  canvas.addEventListener('pointerdown',()=>{
+    delete canvas.dataset.videoRetryArmed;
+    const map=document.getElementById('journeyMap');
+    const video=document.getElementById('journeyMapVideo');
+    if(map && !map.hidden && video && video.paused) video.play().catch(()=>{});
+  },{once:true});
 }
 function pauseJourneyMapPingPong(){
   const video=document.getElementById('journeyMapVideo');
