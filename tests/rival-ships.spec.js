@@ -692,5 +692,5 @@ for (const island of [0, 1, 2, 3, 4, 5, 6]) {
 test('the service worker shell version was bumped for this release', async () => {
   const fs = require('node:fs');
   const sw = fs.readFileSync(path.join(__dirname, '..', 'sw.js'), 'utf8');
-  expect(sw).toContain("const CACHE_NAME = 'gs-shell-v23';");
+  expect(sw).toContain("const CACHE_NAME = 'gs-shell-v24';");
 });
