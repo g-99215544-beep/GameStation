@@ -43,7 +43,8 @@
      instead by never substantially overlapping a button's hit box in the first
      place (see BERTHS in map/rivals.js), not by outranking it here. */
   #journeyRivalShips .journey-rival{position:absolute;z-index:1;width:25%;margin:0;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none;text-shadow:none;transform:translate(-50%,-88%);cursor:pointer;opacity:1;transition:none;touch-action:manipulation;}
-  #journeyRivalShips .journey-rival:hover,#journeyRivalShips .journey-rival:focus-visible{background:transparent;outline:2px solid #fff3a5;outline-offset:2px;}
+  #journeyRivalShips .journey-rival:not(:disabled):hover,#journeyRivalShips .journey-rival:not(:disabled):focus-visible{background:transparent;outline:2px solid #fff3a5;outline-offset:2px;}
+  #journeyRivalShips .journey-rival:disabled{cursor:default;}
   /* A full-canvas overlay (not a plain child of #journeyRivalShips) so its
      z-index actually applies (z-index is a no-op on a static, non-positioned
      element) and, crucially, so a plate is painted in ITS OWN stacking

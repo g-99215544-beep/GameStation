@@ -72,24 +72,16 @@ let journeyToken=0;
 let journeyShipPosition=0;
 let journeyMoving=false;
 
-// Every group's progress, live for as long as the map is on screen. The cannon
-// panel used to own this listener, but the map needs the same data to draw
-// rival ships and the panel can only ever be opened from the map — so the map
-// owns it and the panel just reads what is already here.
+// Every group's progress, live for as long as the map is on screen. The map
+// owns this listener; the cannon panel (only ever opened from the map) reads it.
 let allProgress={};
 let rivalProgressRef=null;
-// Real Firebase delivers .on('value') asynchronously, but showJourneyMap()
-// calls attachMapProgressListener() and then renderRivalShips() back to back,
-// synchronously. Without this flag that second call draws rivals from
-// whatever `allProgress` was left holding (stale from a previous attachment,
-// or {} on a fresh load) and records those stale islands into
-// rivalPositions; when the real snapshot then lands, RivalShips.diff reads
-// the difference as movement and sails ships that never actually moved.
-// false until the first snapshot for *this* attachment has actually arrived.
+// false until the first snapshot for *this* attachment arrives. .on('value')
+// fires asynchronously, so anything drawn before then comes from an older
+// attachment and RivalShips.diff would read the difference as movement.
 let rivalProgressReady=false;
-// Last rendered gid -> island. Cleared on detach, which is what stops several
-// ships lurching across the map at once when a phone comes back online: with
-// no previous position, a ship simply appears where it belongs.
+// Last rendered gid -> island. Empty after every (re)attach, so ships appear in
+// place instead of sailing in from wherever they were last seen.
 let rivalPositions={};
 
 function attachMapProgressListener(){
@@ -104,11 +96,21 @@ function attachMapProgressListener(){
     if(panel && !panel.hidden) renderCannonPanel();
   });
 }
+// Called on going offline as well as on leaving the map. A listener kept
+// through an outage still holds the pre-outage snapshot; on reconnect that
+// would be drawn first and the fresh snapshot read as movement. A brand-new
+// listener has nothing cached to fire, so it waits for the server.
 function detachMapProgressListener(){
   if(rivalProgressRef){ rivalProgressRef.off('value'); rivalProgressRef=null; }
   rivalProgressReady=false;
   rivalPositions={};
   rivalVoyageTokens={};
+  rivalVoyageTargets={};
+}
+// Only a snapshot from the current, connected listener is trusted — for
+// drawing rivals and for firing at them.
+function mapProgressIsLive(){
+  return rivalProgressReady && !isOffline();
 }
 
 function buildRivalShip(rival){
@@ -120,12 +122,9 @@ function buildRivalShip(rival){
   node.addEventListener('click',()=>openCannonPanel(rival.gid));
   return node;
 }
-// The name + HP plate lives in its own element in the #journeyRivalPlates
-// overlay (index.html), a sibling of #journeyRivalShips rather than a child
-// of the ship button — see the CSS comment on #journeyRivalPlates for why
-// nesting it inside .journey-rival trapped it under the pupil's own ship no
-// matter how it was positioned. Purely decorative: the ship button's own
-// aria-label already carries the group's name and HP for assistive tech.
+// The plate lives in the #journeyRivalPlates overlay rather than inside the
+// ship button so it can sit above the pupil's own ship (see the CSS comment on
+// #journeyRivalPlates). Decorative: the button's aria-label says the same.
 function buildRivalPlate(rival){
   const node=document.createElement('div');
   node.className='journey-rival-plate';
@@ -139,62 +138,48 @@ function placeRivalShip(node,point){
   node.style.left=point.x+'%';
   node.style.top=point.y+'%';
 }
-// A plate has no berth of its own — it just rides along with whichever ship
-// it names, at the same x. The lift pulls its y up above the ship sprite
-// before .journey-rival-plate's own translate(-50%,-100%) (CSS) grows it
-// further upward from there: a CSS percentage transform alone cannot do this
-// because it is relative to the tiny plate's OWN height, not the much taller
-// ship's.
-//
-// One lift per BERTHS slot, not a single shared constant: BERTHS packs all
-// three rivals within 10 horizontal points of each other, so when a rival
-// shares the pupil's own island — the common case, not an edge case, given
-// 14 groups on 3-6 islands — a single lift put plates close enough in height
-// that two of them (berths dx:-10 and dx:0, only 10 points apart) overlapped
-// horizontally by close to a quarter of their width, muddling both names.
-// Staggering the lift by slot spreads the three plates across three
-// different heights, each confirmed clear of the other two by a real gap
-// (not just touching), so they cannot collide however close their ships'
-// x positions are.
-//
-// Values tuned by rendering the worst case (pupil + all three rivals on one
-// island) and reading the screenshot, not by arithmetic — arithmetic alone
-// is what produced this module's first attempt (10/17/24), which looked
-// staggered but was never actually checked against what else occupies that
-// same vertical corridor: #journeyIslandButtons. Island buttons are a full
-// 24%-wide, ~78px-tall hit target (app/styles.css), so the gap between one
-// island's button and the next is much narrower than it looks, and a rival
-// plate lifted too far up (or, for the berth directly below the pupil,
-// lifted too little) lands its centre point inside a NEIGHBOURING island's
-// button instead of its own name — invisible to a screenshot (the text still
-// reads fine in isolation) but caught by "a rival ship never covers the
-// pupil's own ship" (tests/rival-ships.spec.js), which resolves each plate's
-// own centre point via elementFromPoint. 15/9/16 is the smallest-drift
-// combination found clear of every island button in that worst case while
-// still keeping each plate legibly separate from the other two and from the
-// pupil's own #journeyShipHp badge.
+// Where (map %) each berth slot's plate sits relative to its ship. Lifts are
+// staggered per slot so three plates on one island sit at three heights and
+// cannot overlap each other. Lifting further would clear the pupil's own
+// #journeyShipHp badge more easily, but lands a plate beside the NEXT island,
+// reading as that group being further ahead than it is — so the low slot-1
+// plate is nudged sideways off the badge instead. Tuned by eye;
+// tests/rival-ships.spec.js checks the overlaps on every island.
 const RIVAL_PLATE_LIFTS=[15,9,16];
+const RIVAL_PLATE_NUDGES=[0,4,0];
 function placeRivalPlate(node,point,slot){
-  const lift=RIVAL_PLATE_LIFTS[slot]==null ? RIVAL_PLATE_LIFTS[0] : RIVAL_PLATE_LIFTS[slot];
-  node.style.left=point.x+'%';
-  node.style.top=(point.y-lift)+'%';
+  const known=RIVAL_PLATE_LIFTS[slot]!=null;
+  node.style.left=(point.x+(known ? RIVAL_PLATE_NUDGES[slot] : 0))+'%';
+  node.style.top=(point.y-(known ? RIVAL_PLATE_LIFTS[slot] : RIVAL_PLATE_LIFTS[0]))+'%';
 }
 function paintRivalShip(node,plateNode,rival){
   const hp=CannonEngine.readHp(allProgress[rival.gid]);
+  // With cannons off for the hunt, HP never changes and a tap opens nothing,
+  // so neither the bar nor a "tap to fire" affordance is offered. The same goes
+  // for the tap once the pupil's own chest is open (cannonEnabled() is false).
+  const battle=Boolean(cannonConfig && cannonConfig.enabled);
+  const tappable=cannonEnabled();
   node.classList.toggle('is-won',rival.finished);
+  node.disabled=!tappable;
   plateNode.querySelector('.journey-rival-name').textContent=rival.name;
-  plateNode.querySelector('.journey-rival-hp').hidden=rival.finished;
+  plateNode.querySelector('.journey-rival-hp').hidden=rival.finished || !battle;
   plateNode.querySelector('.journey-rival-trophy').hidden=!rival.finished;
   plateNode.querySelector('.journey-rival-hp-fill').style.width=hp+'%';
-  node.setAttribute('aria-label',rival.finished
-    ? `${rival.name} sudah buka peti`
-    : `${rival.name}, HP ${hp} peratus. Buka panel meriam.`);
+  let label;
+  if(rival.finished) label=`${rival.name} sudah buka peti`;
+  else if(!battle) label=rival.position>0 ? `${rival.name}, di Pulau ${rival.position}` : `${rival.name}, di garisan mula`;
+  else label=`${rival.name}, HP ${hp} peratus.${tappable?' Buka panel meriam.':''}`;
+  node.setAttribute('aria-label',label);
 }
 
 const RIVAL_VOYAGE_MS=2700;
 // One token per group: a rival whose position changes again mid-voyage cancels
 // the first voyage instead of leaving two loops fighting over one element.
 let rivalVoyageTokens={};
+// gid -> the point an in-flight voyage is heading for. A re-render must not
+// snap a sailing ship to its berth; it only needs a new voyage if that
+// destination point itself changed (a new island, or a reassigned berth).
+let rivalVoyageTargets={};
 
 function rivalWantsInstantMove(){
   return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -213,41 +198,41 @@ function setRivalShipFrame(node,frame){
   const row=Math.floor(current/SHIP_SPRITE.cols);
   sprite.style.backgroundPosition=`${col/(SHIP_SPRITE.cols-1)*100}% ${row/(SHIP_SPRITE.rows-1)*100}%`;
 }
-// The DOM already holds the truth of where a ship is actually drawn, which
-// `move.from` combined with the rival's *current* slot does not: berths are
-// reassigned per island whenever the set of rivals there changes, so that
-// combination can name a point the ship was never sitting at. Reading the
-// rendered style also means a rival whose island changes again mid-voyage
-// sails on from wherever it actually got to, not from its last island.
+// Sail from where the ship is actually drawn, not from its old island's berth:
+// berths are reassigned as rivals come and go, and a ship re-routed
+// mid-voyage should carry on from wherever it got to.
 function readRivalShipPoint(node){
   const x=parseFloat(node.style.left);
   const y=parseFloat(node.style.top);
   return Number.isFinite(x) && Number.isFinite(y) ? {x,y} : null;
 }
+function samePoint(a,b){
+  return Math.abs(a.x-b.x)<.01 && Math.abs(a.y-b.y)<.01;
+}
 // Rival voyages are deliberately silent: only the pupil's own ship plays the
 // sailing audio, or three ships moving at once would be a wall of noise.
-function sailRivalShip(node,plateNode,rival,move){
-  const from=readRivalShipPoint(node) || RivalShips.pointAt(move.from,rival.slot,MAP_STOPS);
+function sailRivalShip(node,plateNode,rival,fromIsland){
+  const from=readRivalShipPoint(node) || RivalShips.pointAt(fromIsland,rival.slot,MAP_STOPS);
   const to={x:rival.x,y:rival.y};
-  const token=(rivalVoyageTokens[rival.gid]||0)+1;
-  rivalVoyageTokens[rival.gid]=token;
+  const {gid,slot}=rival;
+  const token=(rivalVoyageTokens[gid]||0)+1;
+  rivalVoyageTokens[gid]=token;
+  rivalVoyageTargets[gid]=to;
   setRivalShipDirection(node,from,to);
   animateShipAlong({
     from, to,
     duration:rivalWantsInstantMove() ? 0 : RIVAL_VOYAGE_MS,
-    isCancelled:()=>rivalVoyageTokens[rival.gid]!==token || !node.isConnected,
-    // The plate has to move in lockstep, frame by frame, or it would either
-    // snap to the destination immediately (if placed once up front) or keep
-    // naming a spot the ship already sailed away from (if left alone) —
-    // either way the name would stop pointing at its own ship mid-voyage.
-    place:point=>{ placeRivalShip(node,point); placeRivalPlate(plateNode,point,rival.slot); },
-    setFrame:frame=>setRivalShipFrame(node,frame)
+    isCancelled:()=>rivalVoyageTokens[gid]!==token || !node.isConnected,
+    // Ship and plate move together frame by frame, so the name keeps
+    // pointing at its own ship mid-voyage.
+    place:point=>{ placeRivalShip(node,point); placeRivalPlate(plateNode,point,slot); },
+    setFrame:frame=>setRivalShipFrame(node,frame),
+    onDone:()=>{ if(rivalVoyageTokens[gid]===token) delete rivalVoyageTargets[gid]; }
   });
 }
 
 // Elements are reused by group id rather than rebuilt, so a ship that is
-// mid-voyage keeps sailing instead of snapping back when an unrelated group's
-// HP changes and re-renders the map.
+// mid-voyage keeps sailing when an unrelated group's HP re-renders the map.
 function renderRivalShips(){
   const holder=document.getElementById('journeyRivalShips');
   const plateHolder=document.getElementById('journeyRivalPlates');
@@ -255,16 +240,21 @@ function renderRivalShips(){
   // A missing module, a dead connection, or no confirmed-fresh snapshot yet
   // means no trustworthy positions. The pupil's own voyage is untouched — it
   // has never needed the network.
-  if(typeof RivalShips==='undefined' || isOffline() || !rivalProgressReady || !groups || currentGroupId==null){
+  if(typeof RivalShips==='undefined' || !mapProgressIsLive() || !groups || currentGroupId==null){
     holder.innerHTML='';
     plateHolder.innerHTML='';
     rivalPositions={};
+    rivalVoyageTargets={};
     return;
   }
   const ranked=RivalShips.rank(allProgress,groups,currentStationCount());
   const placed=RivalShips.layout(RivalShips.selectNearest(ranked,currentGroupId),MAP_STOPS);
   const keep=new Set(placed.map(rival=>rival.gid));
-  Array.from(holder.children).forEach(node=>{ if(!keep.has(node.dataset.gid)) node.remove(); });
+  Array.from(holder.children).forEach(node=>{
+    if(keep.has(node.dataset.gid)) return;
+    delete rivalVoyageTargets[node.dataset.gid];
+    node.remove();
+  });
   Array.from(plateHolder.children).forEach(node=>{ if(!keep.has(node.dataset.gid)) node.remove(); });
   const moves=RivalShips.diff(rivalPositions,placed);
   placed.forEach(rival=>{
@@ -274,7 +264,11 @@ function renderRivalShips(){
     if(!plateNode){ plateNode=buildRivalPlate(rival); plateHolder.appendChild(plateNode); }
     paintRivalShip(node,plateNode,rival);
     const move=moves.find(entry=>entry.gid===rival.gid);
-    if(move) sailRivalShip(node,plateNode,rival,move);
+    const sailingTo=rivalVoyageTargets[rival.gid];
+    if(move) sailRivalShip(node,plateNode,rival,move.from);
+    // Mid-voyage: leave it sailing, unless its berth at the destination was
+    // reassigned, in which case re-route it there from where it has got to.
+    else if(sailingTo){ if(!samePoint(sailingTo,rival)) sailRivalShip(node,plateNode,rival,rival.position); }
     else { placeRivalShip(node,rival); placeRivalPlate(plateNode,rival,rival.slot); }
   });
   rivalPositions=RivalShips.positions(placed);
@@ -376,6 +370,9 @@ function hideJourneyMap(){
   journeyToken++;
   journeyMoving=false;
   detachMapProgressListener();
+  // Kept through an outage (the offline panel still shows last-known HP), but
+  // not across map visits, where it could be many minutes out of date.
+  allProgress={};
   const rivalHolder=document.getElementById('journeyRivalShips');
   if(rivalHolder) rivalHolder.innerHTML='';
   const rivalPlateHolder=document.getElementById('journeyRivalPlates');

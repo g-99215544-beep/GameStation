@@ -36,7 +36,8 @@ function updateConnectivityBadge(){
   // targets and enable firing.
   const map=document.getElementById('journeyMap');
   if(map && !map.hidden){
-    attachMapProgressListener();
+    if(isOffline()) detachMapProgressListener();
+    else attachMapProgressListener();
     renderRivalShips();
   }
   const cannonPanel=document.getElementById('cannonPanel');
